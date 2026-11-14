@@ -135,3 +135,22 @@ export function parseCoordinates(
   }
   return { ra, dec };
 }
+
+/**
+ * Apply a fetch result only when it belongs to the entry's current request.
+ * A spectrum removed and re-added while loading gets a new requestId, so the
+ * superseded request can never overwrite the newer one. Returns the same
+ * array when nothing changes.
+ */
+export function applyIfCurrent<T extends { key: string; requestId: number }>(
+  entries: T[],
+  key: string,
+  requestId: number,
+  patch: Partial<T>,
+): T[] {
+  const index = entries.findIndex((e) => e.key === key && e.requestId === requestId);
+  if (index === -1) return entries;
+  const next = [...entries];
+  next[index] = { ...entries[index], ...patch };
+  return next;
+}

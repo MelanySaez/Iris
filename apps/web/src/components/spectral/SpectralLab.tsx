@@ -4,6 +4,7 @@ import { api, ApiError, CURATED_CATALOG_FALLBACK } from '../../api';
 import {
   MAX_SPECTRA,
   SERIES_COLORS,
+  applyIfCurrent,
   computeDomain,
   lineSegments,
   linearScale,
@@ -17,6 +18,8 @@ import type { CatalogObject, CubeSpectrumResponse } from '../../types';
 
 interface SpectrumEntry {
   key: string;
+  /** Identifies the fetch that owns this entry; a re-add gets a new one. */
+  requestId: number;
   label: string;
   ra: number;
   dec: number;
@@ -41,6 +44,7 @@ export function SpectralLab() {
   const [raText, setRaText] = useState('');
   const [decText, setDecText] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
+  const requestCounter = useRef(0);
 
   useEffect(() => {
     let active = true;
@@ -70,22 +74,24 @@ export function SpectralLab() {
         return;
       }
       setFormError(null);
+      requestCounter.current += 1;
+      const requestId = requestCounter.current;
       setEntries((prev) => [
         ...prev,
-        { key, label, ra, dec, slot, visible: true, status: 'loading' },
+        { key, requestId, label, ra, dec, slot, visible: true, status: 'loading' },
       ]);
       api
         .getSpectrum(ra, dec)
         .then((data) => {
           setEntries((prev) =>
-            prev.map((e) => (e.key === key ? { ...e, status: 'ready', data } : e)),
+            applyIfCurrent(prev, key, requestId, { status: 'ready', data }),
           );
         })
         .catch((err: unknown) => {
           const message =
             err instanceof ApiError ? (err.detail ?? err.message) : String(err);
           setEntries((prev) =>
-            prev.map((e) => (e.key === key ? { ...e, status: 'error', error: message } : e)),
+            applyIfCurrent(prev, key, requestId, { status: 'error', error: message }),
           );
         });
     },

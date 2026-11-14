@@ -8,6 +8,7 @@ import {
   lineSegments,
   linearScale,
   nearestChannel,
+  applyIfCurrent,
   nextColorSlot,
   niceTicks,
   parseCoordinates,
@@ -180,5 +181,28 @@ describe('api.getSpectrum', () => {
     const error = await api.getSpectrum(1, 2).catch((e: unknown) => e);
     expect(error).toBeInstanceOf(ApiError);
     expect((error as ApiError).detail).toBe('No All-Sky Cube tile covers this position.');
+  });
+});
+
+describe('applyIfCurrent', () => {
+  type Entry = { key: string; requestId: number; status: string };
+  const loading: Entry[] = [
+    { key: 'a', requestId: 2, status: 'loading' },
+    { key: 'b', requestId: 1, status: 'ready' },
+  ];
+
+  it('applies the result of the request that is still current', () => {
+    const next = applyIfCurrent(loading, 'a', 2, { status: 'ready' });
+    expect(next[0]).toEqual({ key: 'a', requestId: 2, status: 'ready' });
+    expect(next[1]).toBe(loading[1]);
+  });
+
+  it('drops a stale result after the spectrum was removed and re-added', () => {
+    // Request 1 for "a" was superseded by request 2 when the user re-added it.
+    expect(applyIfCurrent(loading, 'a', 1, { status: 'error' })).toBe(loading);
+  });
+
+  it('drops a result for a spectrum that was removed', () => {
+    expect(applyIfCurrent(loading, 'gone', 3, { status: 'ready' })).toBe(loading);
   });
 });

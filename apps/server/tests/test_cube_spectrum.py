@@ -87,6 +87,8 @@ class RangeServer:
         self.honour_ranges = honour_ranges
         self.status = status
         self.requests = 0
+        self.coalesce = False
+        self.omit_content_range = False
 
     def __call__(self, request: httpx.Request) -> httpx.Response:
         self.requests += 1
@@ -97,14 +99,16 @@ class RangeServer:
         spec = request.headers["range"].removeprefix("bytes=")
         ranges = [tuple(int(v) for v in part.split("-")) for part in spec.split(",")]
         total = len(self.blob)
-        if len(ranges) == 1:
-            a, b = ranges[0]
-            b = min(b, total - 1)
-            return httpx.Response(
-                206,
-                content=self.blob[a : b + 1],
-                headers={"content-range": f"bytes {a}-{b}/{total}"},
+        if len(ranges) == 1 or self.coalesce:
+            # One part; a coalescing server merges every range into one span.
+            a = min(r[0] for r in ranges)
+            b = min(max(r[1] for r in ranges), total - 1)
+            headers = (
+                {}
+                if self.omit_content_range
+                else {"content-range": f"bytes {a}-{b}/{total}"}
             )
+            return httpx.Response(206, content=self.blob[a : b + 1], headers=headers)
         boundary = "TESTBOUNDARY"
         body = b""
         for a, b in ranges:
@@ -339,3 +343,33 @@ def test_unsupported_plane_type_is_502(cube_server):
     )
     assert resp.status_code == 502
     assert "Unreadable All-Sky Cube tile" in resp.json()["detail"]
+
+
+# --- Single-part range responses (coalescing servers or proxies) ---
+
+
+def test_coalesced_range_response_is_sliced_per_offset(cube_server):
+    """A server may answer many ranges with one 206 span; values must still line up."""
+    cube_server.coalesce = True
+    resp = TestClient(app).get("/api/spectrum", params={"ra": RA, "dec": DEC})
+    assert resp.status_code == 200
+    points = resp.json()["points"]
+    assert [p["value"] for p in points[:3]] == pytest.approx([10.0, 11.5, 13.0])
+    assert points[101]["value"] == pytest.approx(10.0 + 101 * 1.5)
+    assert points[50]["value"] is None
+    assert points[3]["flags"] == 1 << 21
+    assert points[0]["nhits"] == 7
+
+
+def test_single_part_response_without_content_range_is_502(cube_server):
+    # Layout discovery succeeds first; only the multi-offset pixel read lacks the header.
+    TestClient(app).get("/api/spectrum", params={"ra": RA, "dec": DEC + 0.01})
+    for f in cube.CUBE_SPECTRUM_CACHE_DIR.glob("*.json"):
+        f.unlink()
+    cube_server.coalesce = True
+    cube_server.omit_content_range = True
+    resp = TestClient(app, raise_server_exceptions=False).get(
+        "/api/spectrum", params={"ra": RA, "dec": DEC}
+    )
+    assert resp.status_code == 502
+    assert "Content-Range" in resp.json()["detail"]
