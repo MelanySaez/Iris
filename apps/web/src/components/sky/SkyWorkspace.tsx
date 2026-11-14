@@ -1081,17 +1081,6 @@ export function SkyWorkspace({
               </svg>
             );
           })()}
-          {selectedRegion && !regionConfirmed && (
-            <div className="region-confirm-bar float" role="group" aria-label="Confirm selected region">
-              <span>
-                {formatRa(selectedRegion.ra_deg)} {formatDec(selectedRegion.dec_deg)} · {selectedRegion.size_arcmin.toFixed(1)}′
-              </span>
-              <span className="region-confirm-hint">Drag to move, corners to resize</span>
-              <button type="button" className="region-confirm-btn" onClick={handleConfirmRegion}>
-                Confirm region
-              </button>
-            </div>
-          )}
           {/* Selection Drag Box */}
           {selectionBox && (
             <div
@@ -1222,6 +1211,19 @@ export function SkyWorkspace({
 
           {activeJob && <button type="button" className="plate-open-quiet float" onClick={() => onOpenPlate(activeJob.id)}>Open spectral plate →</button>}
 
+          {/* Bottom-centre stack: the region bar always sits right above the dock, whatever its height */}
+          <div className="sky-bottom-stack">
+            {selectedRegion && !regionConfirmed && (
+              <div className="region-confirm-bar float" role="group" aria-label="Confirm selected region">
+                <span className="num">
+                  {formatRa(selectedRegion.ra_deg)} {formatDec(selectedRegion.dec_deg)} · {selectedRegion.size_arcmin.toFixed(1)}′
+                </span>
+                <span className="region-confirm-hint">Drag to move, corners to resize</span>
+                <button type="button" className="region-confirm-btn" onClick={handleConfirmRegion}>
+                  Confirm region
+                </button>
+              </div>
+            )}
           {/* Bottom-Center Channel Dock */}
           <div className="sky-channel-dock float" aria-label="Channel slider dock">
             <RgbControls
@@ -1285,6 +1287,7 @@ export function SkyWorkspace({
               <span className="slider-edge num">5.00 µm</span>
             </div>
             </RgbControls>
+          </div>
           </div>
         </div>
       </main>
