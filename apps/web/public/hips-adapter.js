@@ -8,7 +8,9 @@ const TILE_CACHE = 'spherex-dr1-tiles-v1';
 const META_CACHE = 'spherex-dr1-meta-v1';
 const PROPERTIES_KEY = 'https://spherex-virtual-hips.invalid/properties';
 
-async function persistProperties(text) {
+let persisting = Promise.resolve();
+
+async function writeProperties(text) {
   if (typeof caches === 'undefined') return;
   try {
     const cache = await caches.open(META_CACHE);
@@ -18,11 +20,19 @@ async function persistProperties(text) {
   }
 }
 
+/** Writes run one after another, so the stored copy is always the latest sync. */
+function persistProperties(text) {
+  persisting = persisting.catch(() => {}).then(() => writeProperties(text));
+  return persisting;
+}
+
 async function loadProperties() {
   if (propertiesText || typeof caches === 'undefined') return propertiesText;
   try {
     const hit = await (await caches.open(META_CACHE)).match(PROPERTIES_KEY);
-    if (hit) propertiesText = await hit.text();
+    const stored = hit ? await hit.text() : '';
+    // A SYNC_PROPERTIES may have arrived while we were reading: keep the fresher copy.
+    if (!propertiesText) propertiesText = stored;
   } catch {
     // Treat an unreadable cache like a never-synced worker (503 below).
   }

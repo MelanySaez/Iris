@@ -152,3 +152,78 @@ it('still reports 503 when properties were never synced', async () => {
   const response = await request(listeners.get('fetch'), 46, 'properties');
   expect(response.status).toBe(503);
 });
+
+function controllableCaches() {
+  const entries = new Map();
+  const gates = { match: null, put: [] };
+  const cache = {
+    match: async (key) => {
+      const snapshot = entries.get(String(key))?.clone(); // value at request time
+      if (gates.match) await gates.match;
+      return snapshot;
+    },
+    put: async (key, response) => {
+      const text = await response.clone().text();
+      const gate = gates.put.shift();
+      if (gate) await gate(text);
+      entries.set(String(key), new Response(text));
+    },
+    keys: async () => [...entries.keys()],
+    delete: async (key) => entries.delete(String(key)),
+  };
+  return { caches: { open: async () => cache }, entries, gates };
+}
+
+function bootWorker(caches) {
+  const listeners = new Map();
+  const worker = { addEventListener: (type, cb) => listeners.set(type, cb), location: { origin: 'https://app.example.test' }, clients: { matchAll: async () => [] } };
+  runInNewContext(adapterSource, { self: worker, URL, Response, Headers, AbortController, caches, fetch });
+  return listeners;
+}
+
+function sync(listeners, properties) {
+  let persisted;
+  listeners.get('message')({
+    data: { type: 'SYNC_PROPERTIES', properties },
+    ports: [],
+    waitUntil: (promise) => { persisted = promise; },
+  });
+  return persisted;
+}
+
+const props = (release) => `dataproduct_type=image\nhips_release=${release}\nhips_service_url=x\n`;
+
+it('a fresh sync is not overwritten by a slower read of the stored copy', async () => {
+  const store = controllableCaches();
+  await sync(bootWorker(store.caches), props('old'));
+
+  const restarted = bootWorker(store.caches);
+  let release;
+  store.gates.match = new Promise((resolve) => { release = resolve; });
+  const pending = request(restarted.get('fetch'), 46, 'properties'); // starts reading the stored copy
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  await sync(restarted, props('fresh')); // the reloaded page syncs meanwhile
+  store.gates.match = null;
+  release();
+
+  expect(await (await pending).text()).toContain('hips_release=fresh');
+  const later = await request(restarted.get('fetch'), 46, 'properties');
+  expect(await later.text()).toContain('hips_release=fresh');
+});
+
+it('stores the newest properties when two syncs persist out of order', async () => {
+  const store = controllableCaches();
+  let releaseOld;
+  // The first write stalls until released; the second would otherwise finish first.
+  store.gates.put.push(() => new Promise((resolve) => { releaseOld = resolve; }));
+  const worker = bootWorker(store.caches);
+  const first = sync(worker, props('older'));
+  const second = sync(worker, props('newer'));
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  releaseOld();
+  await Promise.all([first, second]);
+
+  const restarted = bootWorker(store.caches);
+  const response = await request(restarted.get('fetch'), 46, 'properties');
+  expect(await response.text()).toContain('hips_release=newer');
+});
