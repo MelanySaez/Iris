@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Aladin, { type AladinCatalog, type AladinLayer, type AladinSource, type AladinViewer } from 'aladin-lite';
 import { api, CURATED_CATALOG_FALLBACK } from '../../api';
 import {
@@ -43,7 +43,7 @@ import {
   resizeRegion,
   validateCoordinates,
 } from '../../region';
-import type { CatalogObject, JobCreateRequest, JobSnapshot, RegionRequest } from '../../types';
+import type { CatalogObject, JobCreateRequest, JobSnapshot, JobView, RegionRequest } from '../../types';
 
 interface SkyWorkspaceProps {
   activeJob: JobSnapshot | null;
@@ -582,6 +582,12 @@ export function SkyWorkspace({
     onStatus: setTileStatus,
   });
 
+  // How the map shows colour right now; sent with each job so Records can show it.
+  const jobView = useMemo<JobView>(
+    () => (rgbMode && rgb ? { mode: 'rgb', rgb: [rgb.r, rgb.g, rgb.b] } : { mode: 'single' }),
+    [rgbMode, rgb],
+  );
+
   // Remember how the map looked when a selection was made, so Records can restore it.
   const rememberSelectionView = useCallback(
     (region: RegionRequest, center: [number, number], fovDeg: number) => {
@@ -637,11 +643,12 @@ export function SkyWorkspace({
         channels: [currentChannel],
         products: ['image'],
         mode: 'latest',
+        view: jobView,
       }).catch(() => {
         // Job creation errors surface through the app-level banner.
       });
     },
-    [currentChannel, onStartJob, rememberSelectionView],
+    [currentChannel, onStartJob, rememberSelectionView, jobView],
   );
 
   const handleFormSubmit = (e: React.FormEvent) => {
@@ -782,6 +789,7 @@ export function SkyWorkspace({
       channels: [currentChannel],
       products: ['image'],
       mode: 'latest',
+      view: jobView,
     }).catch(() => {
       // Job creation errors surface through the app-level banner.
     });

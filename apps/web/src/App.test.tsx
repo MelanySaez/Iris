@@ -48,6 +48,8 @@ const recorded: SelectionSummary = {
   error_kind: null,
   error_trace: null,
   job_events: null,
+  view_mode: null,
+  rgb_channels: null,
   hits: 1,
   created_at: '2026-11-14T12:00:00Z',
   last_seen_at: '2026-11-14T12:00:00Z',
@@ -87,5 +89,21 @@ describe('App workspace switch', () => {
         restoreRequest: { id: 1, region: { ra_deg: 210.80227, dec_deg: 54.34895, size_arcmin: 6 } },
       }),
     );
+  });
+
+  it('shows the view mode each selection was made in', async () => {
+    vi.mocked(api.listSelections).mockResolvedValueOnce({
+      items: [
+        { ...recorded, id: 'rgb', job_id: 'job-rgb', view_mode: 'rgb', rgb_channels: [16, 32, 46] },
+        { ...recorded, id: 'old', job_id: 'job-old' },
+      ],
+      next_before: null,
+    });
+    window.location.hash = '#/records';
+    render(<App />);
+
+    expect(await screen.findByRole('columnheader', { name: 'View' })).toBeTruthy();
+    expect(screen.getByText('RGB · 16/32/46').getAttribute('title')).toBe('Recorded by the backend');
+    expect(screen.getByTitle('Selected before view modes were recorded').textContent).toBe('—');
   });
 });

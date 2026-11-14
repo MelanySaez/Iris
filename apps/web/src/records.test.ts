@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { canOpenInPlate, describeSelectionRegion, failureDetails, removeSelection, selectionError } from './records';
+import {
+  canOpenInPlate,
+  describeSelectionRegion,
+  describeSelectionView,
+  failureDetails,
+  removeSelection,
+  selectionError,
+} from './records';
+import type { SelectionView } from './selectionView';
 import type { SelectionSummary } from './types';
 
 function selection(overrides: Partial<SelectionSummary> = {}): SelectionSummary {
@@ -23,6 +31,8 @@ function selection(overrides: Partial<SelectionSummary> = {}): SelectionSummary 
     failed_stage: null,
     error_kind: null,
     error_trace: null,
+    view_mode: null,
+    rgb_channels: null,
     job_events: null,
     hits: 1,
     created_at: '2026-11-14T10:00:00Z',
@@ -94,5 +104,51 @@ describe('records helpers', () => {
       trace: null,
       timeline: [],
     });
+  });
+});
+
+describe('describeSelectionView', () => {
+  const cached = (overrides: Partial<SelectionView> = {}): SelectionView => ({
+    region: { ra_deg: 270.69303, dec_deg: 61.87652, size_arcmin: 4 },
+    center: [270.69303, 61.87652],
+    fov_deg: 0.13,
+    projection: 'SIN',
+    channel: 44,
+    rgb: null,
+    ...overrides,
+  });
+
+  it('prefers the view cached in this browser', () => {
+    const record = selection({ view_mode: 'single', rgb_channels: null });
+    expect(describeSelectionView(record, cached({ rgb: { r: 16, g: 32, b: 46 } }))).toEqual({
+      label: 'RGB · 16/32/46',
+      source: 'cache',
+    });
+  });
+
+  it('shows a single-channel view from the cache without repeating the channel', () => {
+    expect(describeSelectionView(selection(), cached())).toEqual({ label: 'Single', source: 'cache' });
+  });
+
+  it('falls back to the database when nothing is cached', () => {
+    const record = selection({ view_mode: 'rgb', rgb_channels: [10, 20, 30] });
+    expect(describeSelectionView(record, null)).toEqual({ label: 'RGB · 10/20/30', source: 'database' });
+  });
+
+  it('shows a single-channel view from the database without repeating the channel', () => {
+    const record = selection({ channels: [44], view_mode: 'single' });
+    expect(describeSelectionView(record, null)).toEqual({ label: 'Single', source: 'database' });
+  });
+
+  it('ignores a cached view made for another channel of the same region', () => {
+    const record = selection({ channels: [12], view_mode: 'single' });
+    expect(describeSelectionView(record, cached({ channel: 44 }))).toEqual({
+      label: 'Single',
+      source: 'database',
+    });
+  });
+
+  it('reports no view when neither source has one', () => {
+    expect(describeSelectionView(selection(), null)).toBeNull();
   });
 });
