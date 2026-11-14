@@ -27,6 +27,11 @@ HIPS_PROPERTIES_URL = (
     "https://irsa.ipac.caltech.edu/data/hips/SPHEREx/spherex_allsky_cube/properties"
 )
 TAP_SYNC_URL = "https://irsa.ipac.caltech.edu/TAP/sync"
+CUBE_BASE_URL = "https://irsa.ipac.caltech.edu/data/hips/SPHEREx/spherex_allsky_cube"
+CUBE_ORDER = 5  # order of the published fits-cube tiles (custom_tile_format_order)
+CUBE_FETCH_TIMEOUT = 30.0
+CUBE_CACHE_DIR = CACHE_DIR / "cube"
+CUBE_SPECTRUM_CACHE_DIR = CUBE_CACHE_DIR / "spectra"
 
 # Caps and constraints
 MIN_REGION_SIZE_ARCMIN = 1.0
@@ -61,5 +66,7 @@ for directory in (
     CUTOUT_CACHE_DIR,
     DERIVED_CACHE_DIR,
     JOBS_CACHE_DIR,
+    CUBE_CACHE_DIR,
+    CUBE_SPECTRUM_CACHE_DIR,
 ):
     directory.mkdir(parents=True, exist_ok=True)
