@@ -2165,8 +2165,7 @@ button:disabled {
 .region-confirm-btn { padding: 6px 12px; border: 1px solid #9db2ff; background: #9db2ff; color: #09111b; font-weight: 700; cursor: pointer; }
 @media (max-width: 640px) { .region-confirm-hint { display: none; } }
 
-/* ==========================================================================
-   Spectral Lab
+/* ===================================================================   Spectral Lab
    ========================================================================== */
 
 .spectral-layer.layer-active {
@@ -2658,4 +2657,241 @@ button:disabled {
   .dock-rgb-selects {
     grid-template-columns: 1fr;
   }
+=======
+.persistent-region button { width: 36px; height: 36px; border: 2px solid #fff; border-radius: 50%; background: #09111b; color: #fff; font-size: 23px; font-weight: 700; }
+
+/* ==========================================================================
+   Records workspace (saved selections)
+   ========================================================================== */
+.records-layer {
+  background: var(--sky-bg);
+  color: var(--sky-ink);
+  overflow-y: auto;
+}
+
+.records-workspace {
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 24px 16px 48px;
+  box-sizing: border-box;
+}
+
+.records-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.records-header h2 {
+  margin: 0;
+  font-size: 1.25rem;
+}
+
+.records-sub,
+.records-empty {
+  margin: 4px 0 0;
+  color: var(--sky-muted);
+}
+
+.records-error {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--sky-danger);
+  border-radius: 6px;
+  color: var(--sky-danger);
+}
+
+.records-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.records-table th,
+.records-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--sky-line);
+  text-align: left;
+  vertical-align: middle;
+}
+
+.records-table th {
+  color: var(--sky-faint);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.records-table tbody tr:hover {
+  background: var(--sky-hover);
+}
+
+.records-mono {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.records-status.status-ready {
+  color: var(--sky-accent-strong);
+}
+
+.records-status.status-failed {
+  color: var(--sky-danger);
+}
+
+.records-actions {
+  white-space: nowrap;
+}
+
+.records-actions-inner {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.records-btn {
+  padding: 5px 10px;
+  border: 1px solid var(--sky-line-strong);
+  border-radius: 6px;
+  background: var(--sky-raised);
+  color: var(--sky-ink);
+  font: inherit;
+  cursor: pointer;
+}
+
+.records-btn:hover:not(:disabled) {
+  border-color: var(--sky-accent);
+}
+
+.records-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.records-btn.danger:hover:not(:disabled) {
+  border-color: var(--sky-danger);
+  color: var(--sky-danger);
+}
+
+.records-more {
+  margin-top: 16px;
+}
+
+@media (max-width: 760px) {
+  .records-table thead {
+    display: none;
+  }
+
+  .records-table tr {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 4px 12px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--sky-line);
+  }
+
+  .records-table td {
+    padding: 0;
+    border: 0;
+  }
+
+  .records-actions {
+    grid-column: 1 / -1;
+  }
+
+  .records-actions-inner {
+    justify-content: flex-start;
+  }
+}
+
+.records-status-error {
+  margin: 4px 0 0;
+  max-width: 36ch;
+  color: var(--sky-muted);
+  font-size: 0.8rem;
+  line-height: 1.3;
+}
+
+.records-status-error summary {
+  width: fit-content;
+  color: var(--sky-accent);
+  cursor: pointer;
+}
+
+.records-status-error summary:hover {
+  color: var(--sky-accent-strong);
+}
+
+.records-status-error summary:focus-visible {
+  outline: 2px solid var(--sky-accent);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+.records-status-error .when-open,
+.records-status-error[open] .when-closed {
+  display: none;
+}
+
+.records-status-error[open] .when-open {
+  display: inline;
+}
+
+.records-failure {
+  margin-top: 4px;
+}
+
+.records-failure-meta {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px 8px;
+  margin: 0 0 4px;
+}
+
+.records-failure-meta dt {
+  color: var(--sky-faint);
+}
+
+.records-failure-meta dd {
+  margin: 0;
+  color: var(--sky-ink);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.records-failure-message {
+  margin: 0;
+  max-height: 12em;
+  overflow-y: auto;
+  overflow-wrap: anywhere;
+}
+
+.records-failure-timeline {
+  margin: 6px 0 0;
+  padding-left: 1.2em;
+}
+
+.records-failure-trace {
+  margin-top: 6px;
+}
+
+.records-failure-trace summary {
+  width: fit-content;
+  color: var(--sky-accent);
+  cursor: pointer;
+}
+
+.records-failure-trace pre {
+  margin: 4px 0 0;
+  max-height: 16em;
+  max-width: 60ch;
+  overflow: auto;
+  padding: 8px;
+  border: 1px solid var(--sky-line);
+  border-radius: 4px;
+  background: var(--sky-bg);
+  color: var(--sky-ink);
+  font-size: 0.75rem;
+  white-space: pre;
 }

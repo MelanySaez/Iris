@@ -3,6 +3,9 @@ from logging.config import fileConfig
 from alembic import context
 from sqlalchemy import engine_from_config, pool
 
+from app.selections.db import DATABASE_URL_ENV, get_database_url
+from app.selections.orm import Base
+
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
 config = context.config
@@ -10,13 +13,16 @@ config = context.config
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    # Keep loggers created before migrations run (e.g. when tests migrate).
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
-# add your model's MetaData object here
-# for 'autogenerate' support
-# from myapp import mymodel
-# target_metadata = mymodel.Base.metadata
-target_metadata = None
+# The database URL comes from the environment, never from alembic.ini.
+_database_url = get_database_url()
+if _database_url is None:
+    raise RuntimeError(f"{DATABASE_URL_ENV} must be set to run migrations.")
+config.set_main_option("sqlalchemy.url", _database_url.replace("%", "%%"))
+
+target_metadata = Base.metadata
 
 # other values from the config, defined by the needs of env.py,
 # can be acquired:

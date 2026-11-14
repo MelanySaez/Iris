@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 
 export type AppRoute =
   | { type: 'sky' }
+  | { type: 'records' }
   | { type: 'plate'; jobId: string }
   | { type: 'spectral' };
 
@@ -9,6 +10,9 @@ export function parseHash(hash: string): AppRoute {
   const clean = hash.replace(/^#\/?/, '');
   if (clean === 'spectral') {
     return { type: 'spectral' };
+  }
+  if (clean === 'records') {
+    return { type: 'records' };
   }
   if (clean.startsWith('plate/')) {
     const jobId = clean.slice('plate/'.length).trim();
@@ -25,6 +29,9 @@ export function routeToHash(route: AppRoute): string {
   }
   if (route.type === 'spectral') {
     return '#/spectral';
+  }
+  if (route.type === 'records') {
+    return '#/records';
   }
   return '#/sky';
 }

@@ -40,6 +40,10 @@ from app.models import (
     ResolveResponse,
 )
 from app.render import compute_cutout_percentiles, render_frame_product
+from app.selections.api import configure_selections
+from app.selections.api import router as selections_router
+from app.selections.db import get_database_url
+from app.tracing import request_id_var
 
 app = FastAPI(title="Planet X v3 Spectral Service", version="0.2.0")
 
@@ -51,12 +55,19 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+configure_selections(get_database_url(), job_manager)
+app.include_router(selections_router)
+
 
 @app.middleware("http")
 async def trace_request(request: Request, call_next):
     request_id = uuid.uuid4().hex[:12]
+    token = request_id_var.set(request_id)
     started = time.monotonic()
-    response = await call_next(request)
+    try:
+        response = await call_next(request)
+    finally:
+        request_id_var.reset(token)
     response.headers["X-Request-ID"] = request_id
     logging.getLogger("uvicorn.error").info(
         "request=%s method=%s path=%s status=%s elapsed_ms=%.1f",

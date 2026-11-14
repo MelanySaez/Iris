@@ -172,6 +172,10 @@ class JobSnapshot(BaseModel):
     stage: str
     events: list[dict[str, Any]] = Field(default_factory=list)
     error: str | None = None
+    failed_stage: str | None = None
+    error_kind: str | None = None
+    error_trace: str | None = None
+    request_id: str | None = None
     request: dict[str, Any]
     region: RegionDescriptor
     channels: list[dict[str, Any]]

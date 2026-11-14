@@ -11,6 +11,7 @@ export function TopBar({ currentRoute, activeJobId, onNavigate }: TopBarProps) {
   const isSky = currentRoute.type === 'sky';
   const isPlate = currentRoute.type === 'plate';
   const isSpectral = currentRoute.type === 'spectral';
+  const isRecords = currentRoute.type === 'records';
 
   return (
     <header className="app-topbar">
@@ -56,6 +57,14 @@ export function TopBar({ currentRoute, activeJobId, onNavigate }: TopBarProps) {
           onClick={() => onNavigate('#/spectral')}
         >
           <span className="switch-label-long">Spectral </span>Lab
+        </button>
+        <button
+          type="button"
+          className={`switch-btn ${isRecords ? 'active' : ''}`}
+          aria-pressed={isRecords}
+          onClick={() => onNavigate('#/records')}
+        >
+          Records
         </button>
       </nav>
 

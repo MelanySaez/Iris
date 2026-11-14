@@ -18,6 +18,10 @@ pnpm dev
 
 Open the Vite localhost URL. The frontend needs IRSA network access for the official HiPS and localhost/HTTPS for its service worker. Vite proxies `/api` to the FastAPI server on port 8000.
 
+## Saved selections (Records)
+
+Every region selected in Sky creates a job, and the backend saves it as a selection record. Open **Records** in the top bar to list them, reopen a ready one in Plate, or delete it. Records need the backend database; see `apps/server/README.md` (Database). Without `DATABASE_URL`, the Records view shows the backend's 503 message.
+
 ## Try the first real spectral-image slice
 
 1. Select **Open local DR1 sample** in the sidebar. This moves Aladin to the footprint of the one local FITS and starts prefetch before opening the result.

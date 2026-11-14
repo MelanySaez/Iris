@@ -263,3 +263,42 @@ export interface CubeSpectrumResponse {
   notes: string[];
   points: CubeSpectrumPoint[];
 }
+
+export type SelectionCoverage = 'available' | 'none' | 'unknown';
+
+export interface SelectionEvent {
+  stage: string;
+  /** Epoch seconds. */
+  at: number;
+}
+
+export interface SelectionSummary {
+  id: string;
+  job_id: string;
+  region: {
+    ra_deg: number;
+    dec_deg: number;
+    size_arcmin: number;
+    fov_deg: number;
+    coverage: SelectionCoverage;
+    checked_at: string;
+  };
+  channels: number[];
+  products: ProductType[];
+  mode: 'latest' | 'history';
+  stretch: StretchMode;
+  job_status: JobStatus;
+  job_error: string | null;
+  failed_stage: string | null;
+  error_kind: string | null;
+  error_trace: string | null;
+  job_events: SelectionEvent[] | null;
+  hits: number;
+  created_at: string;
+  last_seen_at: string;
+}
+
+export interface SelectionListResponse {
+  items: SelectionSummary[];
+  next_before: string | null;
+}

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import time
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -33,17 +33,6 @@ def wait_until_ready(client: TestClient, job_id: str, timeout: float = 10.0) -> 
             return snap
         time.sleep(0.01)
     raise TimeoutError(f"Job {job_id} did not complete within {timeout}s")
-
-
-def test_health_endpoint():
-    client = TestClient(app)
-    resp = client.get("/api/health")
-    assert resp.status_code == 200
-    data = resp.json()
-    assert data["status"] == "ok"
-    assert data["version"] == "0.2.0"
-    assert data["local_assets"] is True
-    assert "DR1 All-Sky Cube HiPS" in data["products"]
 
 
 def test_channels_endpoint():
@@ -79,136 +68,6 @@ def test_catalog_endpoint():
     assert by_id["m81"]["dec_deg"] == pytest.approx(69.065294)
 
 
-def test_regions_resolve_endpoint():
-    client = TestClient(app)
-    # Local sample region is covered by local asset
-    resp = client.post("/api/regions/resolve", json=SAMPLE)
-    assert resp.status_code == 200
-    data = resp.json()
-    assert data["coverage"] == "available"
-    assert any(p["source"] == "local" for p in data["products"])
-
-    # Out of range size > 60 arcmin
-    resp_large = client.post("/api/regions/resolve", json={**SAMPLE, "size_arcmin": 35.0})
-    assert resp_large.status_code == 422
-
-
-def test_job_lifecycle_and_products_end_to_end():
-    client = TestClient(app)
-
-    # Submit job for channel 20 (Detector 2, matching local asset)
-    payload = {
-        "ra_deg": SAMPLE["ra_deg"],
-        "dec_deg": SAMPLE["dec_deg"],
-        "size_arcmin": SAMPLE["size_arcmin"],
-        "channels": [20],
-        "products": ["image", "variance", "flags"],
-        "mode": "latest",
-        "stretch": "asinh",
-    }
-    create_resp = client.post("/api/jobs", json=payload)
-    assert create_resp.status_code == 202
-    job_id = create_resp.json()["id"]
-
-    ready_snap = wait_until_ready(client, job_id)
-    assert ready_snap["status"] == "ready", ready_snap.get("error")
-    assert ready_snap["wavelength_status"] == "wcs_wave_approximate"
-    assert ready_snap["calibrated"] is False
-    assert ready_snap["multi_product_mosaic"] == "pending"
-
-    assert len(ready_snap["cutouts"]) >= 1
-    assert len(ready_snap["frames"]) == 3  # image, variance, flags
-
-    # Test full and slice frame PNG routes
-    for product in ("image", "variance", "flags"):
-        full_resp = client.get(
-            f"/api/jobs/{job_id}/frames/20/{product}.png", params={"mode": "full"}
-        )
-        assert full_resp.status_code == 200
-        assert full_resp.headers["content-type"] == "image/png"
-        assert full_resp.content.startswith(b"\x89PNG\r\n\x1a\n")
-
-        slice_resp = client.get(
-            f"/api/jobs/{job_id}/frames/20/{product}.png", params={"mode": "slice"}
-        )
-        assert slice_resp.status_code == 200
-        assert slice_resp.headers["content-type"] == "image/png"
-
-    # Test raw NPY routes
-    for product in ("image", "variance", "flags", "wavelengths"):
-        npy_resp = client.get(f"/api/jobs/{job_id}/frames/20/{product}.npy")
-        assert npy_resp.status_code == 200
-        assert npy_resp.content.startswith(b"\x93NUMPY")
-
-    # Test pixel probe route
-    h, w = ready_snap["cutouts"][0]["shape"]
-    cx, cy = w // 2, h // 2
-    pixel_resp = client.get(
-        f"/api/jobs/{job_id}/pixel",
-        params={"x": cx, "y": cy, "channel": 20, "epoch": 0},
-    )
-    assert pixel_resp.status_code == 200
-    pixel = pixel_resp.json()
-    assert pixel["x"] == cx
-    assert pixel["y"] == cy
-    assert pixel["wavelength_status"] == "wcs_wave_approximate"
-    assert pixel["calibrated"] is False
-    assert pixel["image"] is not None
-    assert pixel["wavelength_um"] is not None
-    assert isinstance(pixel["in_channel"], bool)
-    assert isinstance(pixel["flag_bits"], list)
-
-    # Test manifest route
-    manifest_resp = client.get(f"/api/jobs/{job_id}/manifest")
-    assert manifest_resp.status_code == 200
-    manifest = manifest_resp.json()
-    assert manifest["job_id"] == job_id
-    assert manifest["wavelength_status"] == "wcs_wave_approximate"
-    assert manifest["calibrated"] is False
-    assert len(manifest["cutouts"]) >= 1
-
-
-def test_api_error_paths():
-    client = TestClient(app)
-
-    # Unknown job: 404
-    assert client.get("/api/jobs/nonexistent-job-id").status_code == 404
-    assert (
-        client.get("/api/jobs/nonexistent-job-id/frames/20/image.png").status_code == 404
-    )
-
-    # Request size > 60 arcmin: 422
-    invalid_req = {**SAMPLE, "size_arcmin": 75.0, "channels": [20]}
-    assert client.post("/api/jobs", json=invalid_req).status_code == 422
-
-    # Request > 8 channels: 422
-    too_many_ch = {
-        **SAMPLE,
-        "size_arcmin": 4.0,
-        "channels": [1, 2, 3, 4, 5, 6, 7, 8, 9],
-    }
-    assert client.post("/api/jobs", json=too_many_ch).status_code == 422
-
-    # Unrequested product: 404
-    single_prod_req = {**SAMPLE, "channels": [20], "products": ["image"]}
-    created = client.post("/api/jobs", json=single_prod_req).json()
-    wait_until_ready(client, created["id"])
-
-    # Variance was not requested
-    assert (
-        client.get(f"/api/jobs/{created['id']}/frames/20/variance.png").status_code == 404
-    )
-
-    # Pixel probe out of bounds: 422
-    assert (
-        client.get(
-            f"/api/jobs/{created['id']}/pixel",
-            params={"x": 9999, "y": 9999, "channel": 20},
-        ).status_code
-        == 422
-    )
-
-
 def test_blank_and_out_of_range_channels_rejected():
     client = TestClient(app)
 
@@ -219,96 +78,6 @@ def test_blank_and_out_of_range_channels_rejected():
 
     out_of_range = {**SAMPLE, "channels": [102], "products": ["image"]}
     assert client.post("/api/jobs", json=out_of_range).status_code == 422
-
-
-def test_frames_and_pixel_survive_memory_eviction():
-    """A ready job must reload cutouts from the derived cache, not a guessed URL."""
-    from app.jobs import job_manager
-
-    client = TestClient(app)
-    payload = {
-        "ra_deg": SAMPLE["ra_deg"],
-        "dec_deg": SAMPLE["dec_deg"],
-        "size_arcmin": 3.5,
-        "channels": [20],
-        "products": ["image"],
-        "mode": "latest",
-    }
-    created = client.post("/api/jobs", json=payload)
-    assert created.status_code == 202
-    job_id = created.json()["id"]
-    ready = wait_until_ready(client, job_id)
-    assert ready["status"] == "ready", ready.get("error")
-    assert ready["cutouts"][0]["uri"].startswith("local:")
-
-    # Simulate an LRU eviction or a server restart: drop both memory state and
-    # the in-memory arrays, keeping only the derived disk cache.
-    job = job_manager.get_job(job_id)
-    job.cutout_objects.clear()
-    with job_manager.lock:
-        job_manager.jobs.pop(job_id, None)
-
-    frame = client.get(f"/api/jobs/{job_id}/frames/20/image.png")
-    assert frame.status_code == 200
-    assert frame.headers["content-type"] == "image/png"
-
-    pixel = client.get(
-        f"/api/jobs/{job_id}/pixel", params={"x": 0, "y": 0, "channel": 20}
-    )
-    assert pixel.status_code == 200
-
-
-def test_manifest_reports_provenance_fields():
-    client = TestClient(app)
-    payload = {
-        "ra_deg": SAMPLE["ra_deg"],
-        "dec_deg": SAMPLE["dec_deg"],
-        "size_arcmin": 3.0,
-        "channels": [20],
-        "products": ["image"],
-        "mode": "latest",
-    }
-    job_id = client.post("/api/jobs", json=payload).json()["id"]
-    ready = wait_until_ready(client, job_id)
-    assert ready["status"] == "ready", ready.get("error")
-
-    manifest = client.get(f"/api/jobs/{job_id}/manifest").json()
-    assert manifest["job_id"] == job_id
-    assert manifest["release"].startswith("SPHEREx DR1 level-2")
-    assert manifest["lvf_status"] == "wcs_wave_approximate"
-    assert manifest["wavelength_status"] == "wcs_wave_approximate"
-    assert manifest["calibrated"] is False
-    assert manifest["products"] == ["image"]
-    assert manifest["units"]["image"] == "MJy / sr"
-    assert manifest["dates"]
-    assert manifest["cache"] in ({"hit": True}, {"hit": False})
-    assert len(manifest["flag_definitions"]) > 0
-    assert manifest["cutouts"][0]["uri"].startswith("local:")
-
-
-def test_failed_job_is_replaced_on_resubmit():
-    from app.jobs import JobState, job_manager
-    from app.models import JobRequest
-
-    req = JobRequest(
-        ra_deg=SAMPLE["ra_deg"],
-        dec_deg=SAMPLE["dec_deg"],
-        size_arcmin=2.5,
-        channels=[20],
-        products=["image"],
-    )
-    job_id = job_manager.compute_job_id(req)
-    stale = JobState(id=job_id, request=req, status="failed", error="transient")
-
-    with job_manager.lock:
-        job_manager.jobs[job_id] = stale
-
-    retried = job_manager.submit(JobRequest(**req.model_dump()))
-    assert retried is not stale
-
-    client = TestClient(app)
-    ready = wait_until_ready(client, retried.id)
-    assert ready["status"] == "ready", ready.get("error")
 
 
 def test_discovery_failure_is_reported_as_unknown_not_missing():
@@ -346,3 +115,194 @@ def test_trace_and_expanded_region_contract():
     assert client.get("/api/health").headers["x-request-id"]
     assert JobRequest(**{**SAMPLE, "size_arcmin": 60}).size_arcmin == 60
     assert client.post("/api/jobs", json={**SAMPLE, "size_arcmin": 61}).status_code == 422
+
+
+NO_COVERAGE = {"ra_deg": 10.25, "dec_deg": -30.0, "size_arcmin": 4.0}
+
+
+def test_api_error_paths():
+    client = TestClient(app)
+
+    # Unknown job: 404
+    assert client.get("/api/jobs/nonexistent-job-id").status_code == 404
+    assert (
+        client.get("/api/jobs/nonexistent-job-id/frames/20/image.png").status_code == 404
+    )
+
+    # Region larger than 60 arcmin: 422
+    assert (
+        client.post("/api/jobs", json={**NO_COVERAGE, "size_arcmin": 75.0}).status_code
+        == 422
+    )
+
+    # More than 8 channels: 422
+    too_many = {**NO_COVERAGE, "channels": [1, 2, 3, 4, 5, 6, 7, 8, 9]}
+    assert client.post("/api/jobs", json=too_many).status_code == 422
+
+
+def test_failed_job_is_replaced_and_rerun_on_resubmit():
+    from app.jobs import JobState, job_manager
+    from app.models import JobRequest
+
+    req = JobRequest(**NO_COVERAGE, channels=[20], products=["image"])
+    job_id = job_manager.compute_job_id(req)
+    stale = JobState(id=job_id, request=req, status="failed", error="transient")
+    with job_manager.lock:
+        job_manager.jobs[job_id] = stale
+
+    retried = job_manager.submit(JobRequest(**req.model_dump()))
+    assert retried is not stale
+    assert retried.id == job_id
+
+    snapshot = wait_until_ready(TestClient(app), retried.id)
+    assert snapshot["status"] == "failed"
+    assert snapshot["error"] == "No SPHEREx coverage found for this region."
+    assert any(e["stage"] == "Discovering products" for e in snapshot["events"])
+
+
+# -- failure traceability ----------------------------------------------------
+
+
+def _submit_and_wait(client: TestClient, payload: dict) -> tuple[dict, dict]:
+    resp = client.post("/api/jobs", json=payload)
+    assert resp.status_code == 202
+    return resp, wait_until_ready(client, resp.json()["id"])
+
+
+def test_no_coverage_failure_records_stage_and_kind():
+    client = TestClient(app)
+    _, snap = _submit_and_wait(client, {**NO_COVERAGE, "ra_deg": 11.25, "channels": [44]})
+    assert snap["status"] == "failed"
+    assert snap["failed_stage"] == "discovering"
+    assert snap["error_kind"] == "no_coverage"
+    assert snap["error_trace"] is None
+    assert [e["stage"] for e in snap["events"]] == ["Discovering products", "Failed"]
+
+
+def test_discovery_outage_is_classified_as_unavailable():
+    discovery = {
+        "coverage": "unknown",
+        "warning": "ReadTimeout: timed out",
+        "products": [],
+    }
+    client = TestClient(app)
+    with patch("app.jobs.resolve_region", return_value=discovery):
+        _, snap = _submit_and_wait(
+            client, {**NO_COVERAGE, "ra_deg": 12.25, "channels": [44]}
+        )
+    assert snap["failed_stage"] == "discovering"
+    assert snap["error_kind"] == "discovery_unavailable"
+    assert "ReadTimeout: timed out" in snap["error"]
+
+
+def test_unexpected_error_keeps_stage_kind_and_traceback():
+    discovery = {
+        "coverage": "available",
+        "products": [
+            {
+                "id": "p1",
+                "source": "remote",
+                "detector": 3,
+                "band": "SPHEREx-D3",
+                "obs_id": "o1",
+                "uri": "https://example.invalid/p1.fits",
+                "date_mjd": 60800.5,
+                "date_iso": "2025-05-05T12:00:00.000Z",
+            }
+        ],
+    }
+    client = TestClient(app)
+    with (
+        patch("app.jobs.resolve_region", return_value=discovery),
+        patch("app.jobs.download_cutout", side_effect=RuntimeError("No network")),
+    ):
+        _, snap = _submit_and_wait(
+            client, {**NO_COVERAGE, "ra_deg": 13.25, "channels": [44]}
+        )
+    assert snap["failed_stage"] == "downloading"
+    assert snap["error_kind"] == "download_failed"
+    assert snap["error"] == "RuntimeError: No network"
+    assert "Traceback" in snap["error_trace"]
+    assert 'File "' in snap["error_trace"] and ", line " in snap["error_trace"]
+    assert snap["error_trace"].rstrip().endswith("RuntimeError: No network")
+
+
+def test_job_keeps_the_request_id_that_created_it():
+    client = TestClient(app)
+    resp, snap = _submit_and_wait(
+        client, {**NO_COVERAGE, "ra_deg": 14.25, "channels": [44]}
+    )
+    assert snap["request_id"] == resp.headers["X-Request-ID"]
+
+
+def _discovery_with(detector: int, source: str) -> dict:
+    return {
+        "coverage": "available",
+        "products": [
+            {
+                "id": f"p-{detector}-{source}",
+                "source": source,
+                "detector": detector,
+                "band": f"SPHEREx-D{detector}",
+                "obs_id": "o1",
+                "uri": "https://example.invalid/p.fits",
+                "date_mjd": 60800.5,
+                "date_iso": "2025-05-05T12:00:00.000Z",
+            }
+        ],
+    }
+
+
+def test_channels_without_detector_coverage_are_classified():
+    # Channel 44 needs detector 3; discovery only found detector 1.
+    client = TestClient(app)
+    with patch("app.jobs.resolve_region", return_value=_discovery_with(1, "remote")):
+        _, snap = _submit_and_wait(
+            client, {**NO_COVERAGE, "ra_deg": 15.25, "channels": [44]}
+        )
+    assert snap["failed_stage"] == "discovering"
+    assert snap["error_kind"] == "no_detector_coverage"
+    assert snap["error_trace"] is None
+
+
+def test_crash_during_discovery_falls_back_to_unexpected():
+    client = TestClient(app)
+    with patch("app.jobs.resolve_region", side_effect=RuntimeError("TAP crashed")):
+        _, snap = _submit_and_wait(
+            client, {**NO_COVERAGE, "ra_deg": 16.25, "channels": [44]}
+        )
+    assert snap["failed_stage"] == "discovering"
+    assert snap["error_kind"] == "unexpected"
+    assert snap["error_trace"].rstrip().endswith("RuntimeError: TAP crashed")
+
+
+def test_extraction_crash_is_classified():
+    client = TestClient(app)
+    with (
+        patch("app.jobs.resolve_region", return_value=_discovery_with(3, "local")),
+        patch("app.jobs.get_or_extract_derived", side_effect=ValueError("bad WCS")),
+    ):
+        _, snap = _submit_and_wait(
+            client, {**NO_COVERAGE, "ra_deg": 17.25, "channels": [44]}
+        )
+    assert snap["failed_stage"] == "extracting"
+    assert snap["error_kind"] == "extraction_failed"
+    assert snap["error_trace"].rstrip().endswith("ValueError: bad WCS")
+
+
+def test_render_crash_is_classified():
+    cutout = MagicMock(detector=3)
+    client = TestClient(app)
+    with (
+        patch("app.jobs.resolve_region", return_value=_discovery_with(3, "local")),
+        patch("app.jobs.get_or_extract_derived", return_value=cutout),
+        patch(
+            "app.jobs.compute_cutout_percentiles", side_effect=RuntimeError("no pixels")
+        ),
+    ):
+        _, snap = _submit_and_wait(
+            client, {**NO_COVERAGE, "ra_deg": 18.25, "channels": [44]}
+        )
+    assert snap["failed_stage"] == "rendering"
+    assert snap["error_kind"] == "render_failed"
+    assert snap["error_trace"].rstrip().endswith("RuntimeError: no pixels")

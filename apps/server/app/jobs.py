@@ -7,10 +7,11 @@ import json
 import logging
 import threading
 import time
+import traceback
 from collections import OrderedDict
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Protocol
 
 import numpy as np
 from fastapi import HTTPException
@@ -40,8 +41,27 @@ from app.models import (
     JobRequest,
 )
 from app.render import compute_cutout_percentiles
+from app.tracing import request_id_var
 
 logger = logging.getLogger("uvicorn.error")
+
+# error_kind for an unexpected exception, by the stage that was running.
+UNEXPECTED_ERROR_KINDS = {
+    "downloading": "download_failed",
+    "extracting": "extraction_failed",
+    "rendering": "render_failed",
+}
+TRACE_MAX_LINES = 30
+TRACE_MAX_CHARS = 6000
+
+
+def _trimmed_traceback() -> str:
+    """Current exception traceback, keeping the innermost frames and the error."""
+    lines = traceback.format_exc().rstrip().splitlines()
+    if len(lines) > TRACE_MAX_LINES:
+        lines = [lines[0], "  ..."] + lines[-(TRACE_MAX_LINES - 2) :]
+    text = "\n".join(lines)
+    return text if len(text) <= TRACE_MAX_CHARS else "...\n" + text[-TRACE_MAX_CHARS:]
 
 
 @dataclass
@@ -62,6 +82,10 @@ class JobState:
     )
     events: list[dict[str, Any]] = field(default_factory=list)
     cache_hit: bool = False
+    failed_stage: str | None = None
+    error_kind: str | None = None
+    error_trace: str | None = None
+    request_id: str | None = None
 
     def to_snapshot(self) -> dict[str, Any]:
         """Convert current job state to a serializable dictionary matching JobSnapshot."""
@@ -88,6 +112,10 @@ class JobState:
             "stage": self.stage,
             "events": list(self.events),
             "error": self.error,
+            "failed_stage": self.failed_stage,
+            "error_kind": self.error_kind,
+            "error_trace": self.error_trace,
+            "request_id": self.request_id,
             "request": self.request.model_dump(),
             "region": {
                 "ra_deg": self.request.ra_deg,
@@ -106,6 +134,21 @@ class JobState:
         }
 
 
+class JobObserver(Protocol):
+    """Port notified about job lifecycle events (e.g. selection persistence).
+
+    Observers must not influence job processing: any exception they raise is
+    logged and swallowed by the manager.
+    """
+
+    def on_submitted(self, job: JobState, is_new: bool) -> None:
+        """``is_new`` is False for cache hits: the job will not run again."""
+
+    def on_discovered(self, job: JobState, discovery: dict[str, Any]) -> None: ...
+
+    def on_finished(self, job: JobState) -> None: ...
+
+
 class JobManager:
     """Thread-safe manager for job lifecycle, LRU snapshots, and pool workers."""
 
@@ -118,6 +161,24 @@ class JobManager:
         self.download_pool = ThreadPoolExecutor(
             max_workers=MAX_DOWNLOAD_WORKERS, thread_name_prefix="cutout-dl"
         )
+        self.observers: list[JobObserver] = []
+
+    def add_observer(self, observer: JobObserver) -> None:
+        """Register an observer for job lifecycle events."""
+        self.observers.append(observer)
+
+    def remove_observer(self, observer: JobObserver) -> None:
+        """Unregister a previously added observer (no-op when absent)."""
+        if observer in self.observers:
+            self.observers.remove(observer)
+
+    def _notify(self, event: str, *args: Any) -> None:
+        """Deliver an event to every observer; failures never affect the job."""
+        for observer in list(self.observers):
+            try:
+                getattr(observer, event)(*args)
+            except Exception:
+                logger.exception("job observer %s failed on %s", observer, event)
 
     def compute_job_id(self, req: JobRequest) -> str:
         """Deterministic hash for deduplicating identical requests."""
@@ -184,7 +245,19 @@ class JobManager:
             req.products.append("image")
 
     def submit(self, req: JobRequest) -> JobState:
-        """Submit a job or retrieve an active/cached one."""
+        """Submit a job or retrieve an active/cached one, notifying observers.
+
+        Observers hear about the submission before a new job is scheduled, so
+        no lifecycle event can reach them ahead of ``on_submitted``.
+        """
+        job, is_new = self._submit(req)
+        self._notify("on_submitted", job, is_new)
+        if is_new:
+            self.pool.submit(self._run_job, job)
+        return job
+
+    def _submit(self, req: JobRequest) -> tuple[JobState, bool]:
+        """Find an active/cached job or register a new one (not yet scheduled)."""
         self.validate_request(req)
         job_id = self.compute_job_id(req)
 
@@ -196,9 +269,11 @@ class JobManager:
                     # A failed attempt is not a cache entry: let the caller retry.
                     del self.jobs[job_id]
                 else:
-                    logger.info("job=%s cache=memory_hit", job_id)
+                    logger.info(
+                        "job=%s request=%s cache=memory_hit", job_id, request_id_var.get()
+                    )
                     self.jobs.move_to_end(job_id)
-                    return job
+                    return job, False
 
             # Check disk snapshot cache
             snapshot_file = JOBS_CACHE_DIR / f"{job_id}.json"
@@ -209,24 +284,28 @@ class JobManager:
                     if snap_data.get("status") == "ready":
                         job = self._rebuild_job_from_snapshot(snap_data, req)
                         if job.cutouts and len(job.cutout_objects) == len(job.cutouts):
-                            logger.info("job=%s cache=disk_hit", job_id)
+                            logger.info(
+                                "job=%s request=%s cache=disk_hit",
+                                job_id,
+                                request_id_var.get(),
+                            )
                             job.cache_hit = True
                             self._put_lru(job)
-                            return job
+                            return job, False
                 except Exception:
                     pass
 
             # Create new job
-            job = JobState(id=job_id, request=req)
+            job = JobState(id=job_id, request=req, request_id=request_id_var.get())
             self._put_lru(job)
             logger.info(
-                "job=%s stage=queued channels=%s size_arcmin=%s",
+                "job=%s request=%s stage=queued channels=%s size_arcmin=%s",
                 job.id,
+                job.request_id,
                 req.channels,
                 req.size_arcmin,
             )
-            self.pool.submit(self._run_job, job)
-            return job
+            return job, True
 
     def _put_lru(self, job: JobState) -> None:
         """Insert or refresh job in memory LRU cache."""
@@ -318,6 +397,27 @@ class JobManager:
         except Exception as exc:
             logger.warning("Failed to persist job %s snapshot: %s", job.id, exc)
 
+    def _fail(
+        self, job: JobState, kind: str, message: str, trace: str | None = None
+    ) -> None:
+        """Mark the job failed, keeping where (stage), why (kind) and how (trace)."""
+        job.failed_stage = job.status
+        job.error_kind = kind
+        job.error = message
+        job.error_trace = trace
+        job.status = "failed"
+        job.progress = 100
+        job.stage = "Failed"
+        job.events.append({"stage": job.stage, "at": time.time()})
+        logger.info(
+            "job=%s request=%s stage=Failed failed_stage=%s error_kind=%s",
+            job.id,
+            job.request_id,
+            job.failed_stage,
+            kind,
+        )
+        self._save_snapshot_to_disk(job)
+
     def _run_job(self, job: JobState) -> None:
         """Complete workflow for a queued job: discover, download, extract, render."""
         try:
@@ -332,31 +432,20 @@ class JobManager:
             logger.info("job=%s stage=%s progress=%s", job.id, job.stage, job.progress)
 
             discovery = resolve_region(ra, dec, size)
+            self._notify("on_discovered", job, discovery)
             if discovery["coverage"] == "none":
-                job.status = "failed"
-                job.progress = 100
-                job.stage = "Failed"
-                job.events.append({"stage": job.stage, "at": time.time()})
-                logger.info(
-                    "job=%s stage=%s progress=%s", job.id, job.stage, job.progress
+                self._fail(
+                    job, "no_coverage", "No SPHEREx coverage found for this region."
                 )
-                job.error = "No SPHEREx coverage found for this region."
-                self._save_snapshot_to_disk(job)
                 return
             if discovery["coverage"] == "unknown":
-                job.status = "failed"
-                job.progress = 100
-                job.stage = "Failed"
-                job.events.append({"stage": job.stage, "at": time.time()})
-                logger.info(
-                    "job=%s stage=%s progress=%s", job.id, job.stage, job.progress
-                )
-                job.error = (
+                self._fail(
+                    job,
+                    "discovery_unavailable",
                     "Coverage could not be determined: IRSA TAP discovery failed. "
                     "Retry the request. "
-                    f"Discovery error: {discovery.get('warning') or 'unknown'}"
+                    f"Discovery error: {discovery.get('warning') or 'unknown'}",
                 )
-                self._save_snapshot_to_disk(job)
                 return
 
             # Group discovered products by detector
@@ -393,18 +482,12 @@ class JobManager:
                         selected_targets.append((sorted_prods[-1], 1))
 
             if not selected_targets:
-                job.status = "failed"
-                job.progress = 100
-                job.stage = "Failed"
-                job.events.append({"stage": job.stage, "at": time.time()})
-                logger.info(
-                    "job=%s stage=%s progress=%s", job.id, job.stage, job.progress
-                )
-                job.error = (
+                self._fail(
+                    job,
+                    "no_detector_coverage",
                     f"None of the requested channels {req.channels} have "
-                    "available detector coverage."
+                    "available detector coverage.",
                 )
-                self._save_snapshot_to_disk(job)
                 return
 
             # Enforce max cutout downloads cap
@@ -556,14 +639,21 @@ class JobManager:
             self._save_snapshot_to_disk(job)
 
         except Exception as exc:
-            logger.exception("Error processing job %s: %s", job.id, exc)
-            job.status = "failed"
-            job.progress = 100
-            job.stage = "Failed"
-            job.events.append({"stage": job.stage, "at": time.time()})
-            logger.info("job=%s stage=%s progress=%s", job.id, job.stage, job.progress)
-            job.error = f"{type(exc).__name__}: {exc}"
-            self._save_snapshot_to_disk(job)
+            logger.exception(
+                "Error processing job %s (request=%s, stage=%s): %s",
+                job.id,
+                job.request_id,
+                job.status,
+                exc,
+            )
+            self._fail(
+                job,
+                UNEXPECTED_ERROR_KINDS.get(job.status, "unexpected"),
+                f"{type(exc).__name__}: {exc}",
+                trace=_trimmed_traceback(),
+            )
+        finally:
+            self._notify("on_finished", job)
 
 
 job_manager = JobManager()
