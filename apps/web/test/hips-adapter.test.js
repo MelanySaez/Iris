@@ -155,11 +155,14 @@ it('still reports 503 when properties were never synced', async () => {
 
 function controllableCaches() {
   const entries = new Map();
-  const gates = { match: null, put: [] };
+  const gates = { match: null, put: [], onMatchWaiting: null };
   const cache = {
     match: async (key) => {
       const snapshot = entries.get(String(key))?.clone(); // value at request time
-      if (gates.match) await gates.match;
+      if (gates.match) {
+        gates.onMatchWaiting?.();
+        await gates.match;
+      }
       return snapshot;
     },
     put: async (key, response) => {
@@ -188,6 +191,7 @@ function sync(listeners, properties) {
     ports: [],
     waitUntil: (promise) => { persisted = promise; },
   });
+  if (!persisted) throw new Error('SYNC_PROPERTIES did not start persisting via waitUntil');
   return persisted;
 }
 
@@ -200,8 +204,9 @@ it('a fresh sync is not overwritten by a slower read of the stored copy', async 
   const restarted = bootWorker(store.caches);
   let release;
   store.gates.match = new Promise((resolve) => { release = resolve; });
+  const readWaiting = new Promise((resolve) => { store.gates.onMatchWaiting = resolve; });
   const pending = request(restarted.get('fetch'), 46, 'properties'); // starts reading the stored copy
-  await new Promise((resolve) => setTimeout(resolve, 0));
+  await readWaiting; // the stored-copy read is now blocked mid-flight
   await sync(restarted, props('fresh')); // the reloaded page syncs meanwhile
   store.gates.match = null;
   release();
@@ -214,12 +219,17 @@ it('a fresh sync is not overwritten by a slower read of the stored copy', async 
 it('stores the newest properties when two syncs persist out of order', async () => {
   const store = controllableCaches();
   let releaseOld;
+  let oldHeld;
+  const firstWriteHeld = new Promise((resolve) => { oldHeld = resolve; });
   // The first write stalls until released; the second would otherwise finish first.
-  store.gates.put.push(() => new Promise((resolve) => { releaseOld = resolve; }));
+  store.gates.put.push(() => new Promise((resolve) => {
+    releaseOld = resolve;
+    oldHeld();
+  }));
   const worker = bootWorker(store.caches);
   const first = sync(worker, props('older'));
   const second = sync(worker, props('newer'));
-  await new Promise((resolve) => setTimeout(resolve, 0));
+  await firstWriteHeld; // the older write is now stalled inside put
   releaseOld();
   await Promise.all([first, second]);
 
