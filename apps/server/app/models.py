@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class HealthResponse(BaseModel):
@@ -104,6 +104,28 @@ class ResolveResponse(BaseModel):
     notes: list[str]
 
 
+class JobView(BaseModel):
+    """How the Sky map showed the region when it was selected (display only).
+
+    ``rgb`` holds the R, G and B channels of the composite and is required
+    exactly when ``mode`` is ``"rgb"``. It never affects which channels the
+    job processes (that is ``JobRequest.channels``).
+    """
+
+    mode: Literal["single", "rgb"]
+    rgb: list[Annotated[int, Field(ge=0, le=101)]] | None = Field(
+        default=None, min_length=3, max_length=3
+    )
+
+    @model_validator(mode="after")
+    def _rgb_matches_mode(self) -> JobView:
+        if (self.mode == "rgb") != (self.rgb is not None):
+            raise ValueError(
+                "rgb channels are required for mode 'rgb' and only allowed there"
+            )
+        return self
+
+
 class JobRequest(BaseModel):
     ra_deg: float
     dec_deg: float = Field(ge=-90.0, le=90.0)
@@ -114,6 +136,8 @@ class JobRequest(BaseModel):
     )
     mode: Literal["latest", "history"] = "latest"
     stretch: Literal["asinh", "linear"] = "asinh"
+    # Display metadata for the selection record; excluded from the job id.
+    view: JobView | None = None
 
 
 class FlagBitDef(BaseModel):

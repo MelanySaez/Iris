@@ -1,6 +1,14 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api, ApiError } from '../../api';
-import { canOpenInPlate, describeSelectionRegion, failureDetails, RECORDS_PAGE_SIZE, removeSelection } from '../../records';
+import {
+  canOpenInPlate,
+  describeSelectionRegion,
+  describeSelectionView,
+  failureDetails,
+  RECORDS_PAGE_SIZE,
+  removeSelection,
+} from '../../records';
+import { loadSelectionView } from '../../selectionView';
 import type { FailureDetails } from '../../records';
 import type { RegionRequest, SelectionSummary } from '../../types';
 
@@ -62,6 +70,23 @@ function FailureReason({ details }: { details: FailureDetails | null }) {
         )}
       </div>
     </details>
+  );
+}
+
+/** View mode the selection was made in: this browser's saved view first, else the recorded one. */
+function ViewModeCell({ selection }: { selection: SelectionSummary }) {
+  const view = describeSelectionView(selection, loadSelectionView(selection.region));
+  if (!view) {
+    return (
+      <span className="records-muted" title="Selected before view modes were recorded">
+        —
+      </span>
+    );
+  }
+  return (
+    <span title={view.source === 'cache' ? 'Saved view in this browser' : 'Recorded by the backend'}>
+      {view.label}
+    </span>
   );
 }
 
@@ -134,6 +159,7 @@ export function RecordsWorkspace({ onOpenPlate, onShowInSky }: RecordsWorkspaceP
               <th scope="col">Last seen</th>
               <th scope="col">Region</th>
               <th scope="col">Channels</th>
+              <th scope="col">View</th>
               <th scope="col">Products</th>
               <th scope="col">Coverage</th>
               <th scope="col">Status</th>
@@ -149,6 +175,9 @@ export function RecordsWorkspace({ onOpenPlate, onShowInSky }: RecordsWorkspaceP
                 <td>{formatTimestamp(selection.last_seen_at)}</td>
                 <td className="records-mono">{describeSelectionRegion(selection)}</td>
                 <td className="records-mono">{selection.channels.join(', ')}</td>
+                <td className="records-mono">
+                  <ViewModeCell selection={selection} />
+                </td>
                 <td>{selection.products.join(', ')}</td>
                 <td>{selection.region.coverage}</td>
                 <td>

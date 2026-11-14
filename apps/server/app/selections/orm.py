@@ -110,6 +110,12 @@ class Selection(Base):
             "AND products <@ ARRAY['image', 'variance', 'flags']::text[]",
             name="selection_products_valid",
         ),
+        CheckConstraint(
+            "(view_mode IS NULL AND rgb_channels IS NULL) "
+            "OR (view_mode = 'single' AND rgb_channels IS NULL) "
+            "OR (view_mode = 'rgb' AND cardinality(rgb_channels) = 3)",
+            name="selection_view_valid",
+        ),
         CheckConstraint("mode IN ('latest', 'history')", name="selection_mode"),
         CheckConstraint("stretch IN ('asinh', 'linear')", name="selection_stretch"),
         Index("selection_last_seen_at", text("last_seen_at DESC")),
@@ -134,6 +140,9 @@ class Selection(Base):
     error_trace: Mapped[str | None] = mapped_column(Text)
     job_events: Mapped[list[dict[str, Any]] | None] = mapped_column(JSONB)
     manifest: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    # How the Sky map showed the region at the latest submission that sent it.
+    view_mode: Mapped[str | None] = mapped_column(Text)
+    rgb_channels: Mapped[list[int] | None] = mapped_column(ARRAY(SmallInteger))
     hits: Mapped[int] = mapped_column(server_default="1")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()

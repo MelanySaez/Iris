@@ -306,3 +306,34 @@ def test_render_crash_is_classified():
     assert snap["failed_stage"] == "rendering"
     assert snap["error_kind"] == "render_failed"
     assert snap["error_trace"].rstrip().endswith("RuntimeError: no pixels")
+
+
+# -- optional view on job requests ---------------------------------------------
+
+
+def test_view_does_not_change_the_job_id():
+    from app.jobs import job_manager
+    from app.models import JobRequest
+
+    base = {"ra_deg": 10.0, "dec_deg": 5.0, "size_arcmin": 6.0, "channels": [44]}
+    single = {"mode": "single"}
+    rgb = {"mode": "rgb", "rgb": [16, 32, 46]}
+    plain = job_manager.compute_job_id(JobRequest(**base))
+    assert job_manager.compute_job_id(JobRequest(**base, view=single)) == plain
+    assert job_manager.compute_job_id(JobRequest(**base, view=rgb)) == plain
+
+
+@pytest.mark.parametrize(
+    "view",
+    [
+        {"mode": "rgb"},
+        {"mode": "rgb", "rgb": [16, 32]},
+        {"mode": "rgb", "rgb": [16, 32, 102]},
+        {"mode": "single", "rgb": [16, 32, 46]},
+        {"mode": "sepia"},
+    ],
+)
+def test_invalid_view_is_rejected(view):
+    payload = {"ra_deg": 10.0, "dec_deg": 5.0, "size_arcmin": 6.0, "channels": [44]}
+    resp = TestClient(app).post("/api/jobs", json={**payload, "view": view})
+    assert resp.status_code == 422

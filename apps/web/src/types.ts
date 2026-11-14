@@ -96,6 +96,9 @@ export interface RegionResolveResponse {
   notes: string[];
 }
 
+/** How the Sky map showed the region when it was selected (display only, not part of the job id). */
+export type JobView = { mode: 'single'; rgb?: null } | { mode: 'rgb'; rgb: [number, number, number] };
+
 export interface JobCreateRequest {
   ra_deg: number;
   dec_deg: number;
@@ -104,6 +107,7 @@ export interface JobCreateRequest {
   products: ProductType[];
   mode?: JobMode;
   stretch?: StretchMode;
+  view?: JobView;
 }
 
 export interface FlagBit {
@@ -293,6 +297,9 @@ export interface SelectionSummary {
   error_kind: string | null;
   error_trace: string | null;
   job_events: SelectionEvent[] | null;
+  /** View recorded by the backend at the latest submission that sent one. */
+  view_mode: 'single' | 'rgb' | null;
+  rgb_channels: number[] | null;
   hits: number;
   created_at: string;
   last_seen_at: string;
