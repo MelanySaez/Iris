@@ -32,6 +32,10 @@ CUBE_ORDER = 5  # order of the published fits-cube tiles (custom_tile_format_ord
 CUBE_FETCH_TIMEOUT = 30.0
 CUBE_CACHE_DIR = CACHE_DIR / "cube"
 CUBE_SPECTRUM_CACHE_DIR = CUBE_CACHE_DIR / "spectra"
+CUBE_CACHE_TTL_SECONDS = 7 * 86400  # re-check tiles weekly, like the HiPS properties
+# Cap on any single range response: a server that ignores or coalesces the
+# pixel ranges must never make us stream the ~320 MB tile.
+MAX_RANGE_RESPONSE_BYTES = 1024 * 1024
 
 # Caps and constraints
 MIN_REGION_SIZE_ARCMIN = 1.0

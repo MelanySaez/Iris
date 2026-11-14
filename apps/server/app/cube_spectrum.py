@@ -19,6 +19,7 @@ import os
 import re
 import tempfile
 import threading
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -35,9 +36,11 @@ from fastapi import HTTPException
 from app.config import (
     CUBE_BASE_URL,
     CUBE_CACHE_DIR,
+    CUBE_CACHE_TTL_SECONDS,
     CUBE_FETCH_TIMEOUT,
     CUBE_ORDER,
     CUBE_SPECTRUM_CACHE_DIR,
+    MAX_RANGE_RESPONSE_BYTES,
 )
 
 logger = logging.getLogger(__name__)
@@ -65,6 +68,7 @@ class CubeLayout:
 
     npix: int
     url: str
+    tile_size: int
     width: int
     height: int
     depth: int
@@ -133,24 +137,70 @@ def _padded(size: int) -> int:
     return ((size + FITS_BLOCK - 1) // FITS_BLOCK) * FITS_BLOCK
 
 
-def _require_partial(resp: httpx.Response) -> None:
-    """Accept only 206 responses so a server ignoring Range never streams the tile."""
-    if resp.status_code == 404:
-        raise HTTPException(
-            status_code=404, detail="No All-Sky Cube tile covers this position."
-        )
-    if resp.status_code != 206:
-        raise HTTPException(
-            status_code=502,
-            detail=f"Cube tile server answered HTTP {resp.status_code} to a range read.",
-        )
+class TileChangedError(Exception):
+    """The tile on IRSA no longer matches the cached layout (it was republished)."""
 
 
-def _get_range(client: httpx.Client, url: str, start: int, end: int) -> bytes:
-    """Fetch ``[start, end)``; refuse servers that ignore the Range header."""
-    resp = client.get(url, headers={"Range": f"bytes={start}-{end - 1}"})
-    _require_partial(resp)
-    return resp.content
+def _too_large() -> HTTPException:
+    return HTTPException(
+        status_code=502,
+        detail=(
+            "Cube tile range response too large; refusing to download the tile "
+            f"(limit {MAX_RANGE_RESPONSE_BYTES} bytes)."
+        ),
+    )
+
+
+def _fetch_partial(
+    client: httpx.Client, url: str, range_value: str
+) -> tuple[httpx.Headers, bytes]:
+    """GET a byte range, streaming so an oversized reply is refused before download.
+
+    Only 206 is accepted: a server that ignores Range (200) or merges the ranges
+    into a span far larger than requested would otherwise stream the ~320 MB tile.
+    """
+    with client.stream("GET", url, headers={"Range": range_value}) as resp:
+        if resp.status_code == 404:
+            raise HTTPException(
+                status_code=404, detail="No All-Sky Cube tile covers this position."
+            )
+        if resp.status_code != 206:
+            raise HTTPException(
+                status_code=502,
+                detail=f"Cube tile server answered HTTP {resp.status_code} to a range.",
+            )
+        declared = resp.headers.get("content-length")
+        if declared and declared.isdigit() and int(declared) > MAX_RANGE_RESPONSE_BYTES:
+            raise _too_large()
+        body = bytearray()
+        for chunk in resp.iter_bytes():
+            body += chunk
+            if len(body) > MAX_RANGE_RESPONSE_BYTES:
+                raise _too_large()
+        return resp.headers, bytes(body)
+
+
+_TOTAL_RE = re.compile(rb"content-range:\s*bytes\s+\d+-\d+/(\d+)", re.I)
+
+
+def _range_total(headers: httpx.Headers, body: bytes) -> int | None:
+    """Total tile size advertised by Content-Range (top-level or per part)."""
+    match = re.search(r"/(\d+)\s*$", headers.get("content-range", ""))
+    if match:
+        return int(match.group(1))
+    part = _TOTAL_RE.search(body)
+    return int(part.group(1)) if part else None
+
+
+def _get_range(client: httpx.Client, url: str, start: int, end: int) -> tuple[bytes, int]:
+    """Fetch ``[start, end)``; return the bytes and the tile's total size."""
+    headers, body = _fetch_partial(client, url, f"bytes={start}-{end - 1}")
+    total = _range_total(headers, body)
+    if total is None:
+        raise HTTPException(
+            status_code=502, detail="Range response without Content-Range."
+        )
+    return body, total
 
 
 def parse_multipart_byteranges(content_type: str, body: bytes) -> dict[int, bytes]:
@@ -175,24 +225,34 @@ def parse_multipart_byteranges(content_type: str, body: bytes) -> dict[int, byte
 
 
 def read_ranges(
-    client: httpx.Client, url: str, offsets: list[int], length: int
+    client: httpx.Client,
+    url: str,
+    offsets: list[int],
+    length: int,
+    expected_total: int | None = None,
 ) -> list[bytes]:
-    """Read ``length`` bytes at each offset with one multipart range request."""
+    """Read ``length`` bytes at each offset with one multipart range request.
+
+    ``expected_total`` is the tile size recorded with the cached layout; a
+    different size means the tile was republished and the offsets are stale.
+    """
     spec = ",".join(f"{o}-{o + length - 1}" for o in offsets)
-    resp = client.get(url, headers={"Range": f"bytes={spec}"})
-    _require_partial(resp)
-    ctype = resp.headers.get("content-type", "")
+    headers, body = _fetch_partial(client, url, f"bytes={spec}")
+    total = _range_total(headers, body)
+    if expected_total is not None and total is not None and total != expected_total:
+        raise TileChangedError(f"tile size {total} != cached {expected_total}")
+    ctype = headers.get("content-type", "")
     if ctype.startswith("multipart/byteranges"):
-        parts = parse_multipart_byteranges(ctype, resp.content)
+        parts = parse_multipart_byteranges(ctype, body)
     else:
         # A single range (or a server that coalesced every range into one).
-        crange = re.search(r"bytes\s+(\d+)-", resp.headers.get("content-range", ""))
+        crange = re.search(r"bytes\s+(\d+)-", headers.get("content-range", ""))
         if not crange:
             raise HTTPException(
                 status_code=502, detail="Range response without Content-Range."
             )
-        base, blob = int(crange.group(1)), resp.content
-        parts = {o: blob[o - base : o - base + length] for o in offsets if o >= base}
+        base = int(crange.group(1))
+        parts = {o: body[o - base : o - base + length] for o in offsets if o >= base}
     try:
         values = [parts[o] for o in offsets]
     except KeyError as exc:
@@ -211,11 +271,12 @@ def discover_layout(client: httpx.Client, npix: int) -> CubeLayout:
     primary: fits.Header | None = None
     headers: dict[str, tuple[fits.Header, int]] = {}
     tables: dict[str, bytes] = {}
+    tile_size = 0
     for _ in range(8):
         buf = b""
         while (end := _header_end(buf)) is None:
             start = offset + len(buf)
-            chunk = _get_range(client, url, start, start + 4 * FITS_BLOCK)
+            chunk, tile_size = _get_range(client, url, start, start + 4 * FITS_BLOCK)
             if not chunk:
                 raise HTTPException(status_code=502, detail="Truncated cube tile header.")
             buf += chunk
@@ -228,9 +289,10 @@ def discover_layout(client: httpx.Client, npix: int) -> CubeLayout:
         else:
             headers[name] = (header, data_offset)
             if header.get("XTENSION", "").strip() == "BINTABLE":
-                tables[name] = buf[:end] + _get_range(
+                table_bytes, tile_size = _get_range(
                     client, url, data_offset, data_offset + _padded(size)
                 )
+                tables[name] = buf[:end] + table_bytes
         if name == "SPECTRAL_CHANNELS":
             break
         offset = data_offset + _padded(size)
@@ -258,12 +320,23 @@ def discover_layout(client: httpx.Client, npix: int) -> CubeLayout:
             for idx, row in enumerate(rows)
         ]
 
+    depth = int(image_header["NAXIS3"])
+    for product in CUBE_PRODUCTS:
+        _dtype_for(int(headers[product][0]["BITPIX"]))  # KeyError → unreadable tile
+        if int(headers[product][0]["NAXIS3"]) != depth:
+            raise ValueError(f"{product} has a different channel count than IMAGE")
+    if len(channels) != depth:
+        raise ValueError(
+            f"SPECTRAL_CHANNELS has {len(channels)} rows but the cube has {depth} planes"
+        )
+
     return CubeLayout(
         npix=npix,
         url=url,
+        tile_size=tile_size,
         width=int(image_header["NAXIS1"]),
         height=int(image_header["NAXIS2"]),
-        depth=int(image_header["NAXIS3"]),
+        depth=depth,
         data_offsets={p: headers[p][1] for p in CUBE_PRODUCTS},
         bitpix={p: int(headers[p][0]["BITPIX"]) for p in CUBE_PRODUCTS},
         unit=str(image_header.get("BUNIT", "MJy/sr")).strip(),
@@ -281,8 +354,10 @@ def _tile_lock(npix: int) -> threading.Lock:
 
 
 def _read_json_cache(path: Path) -> Any | None:
-    """Return a cached JSON document, or None when it is missing or unreadable."""
+    """Return a cached JSON document, or None when missing, expired or unreadable."""
     try:
+        if time.time() - path.stat().st_mtime > CUBE_CACHE_TTL_SECONDS:
+            return None
         return json.loads(path.read_text("utf-8"))
     except FileNotFoundError:
         return None
@@ -312,9 +387,21 @@ def _write_json_cache(path: Path, data: Any) -> None:
         tmp.unlink(missing_ok=True)
 
 
+def _layout_path(npix: int) -> Path:
+    return CUBE_CACHE_DIR / f"layout-{CUBE_ORDER}-{npix}.json"
+
+
+def invalidate_tile(npix: int) -> None:
+    """Drop the cached layout and every cached spectrum of a republished tile."""
+    with _tile_lock(npix):
+        _layout_path(npix).unlink(missing_ok=True)
+        for path in CUBE_SPECTRUM_CACHE_DIR.glob(f"{CUBE_ORDER}-{npix}-*.json"):
+            path.unlink(missing_ok=True)
+
+
 def get_layout(client: httpx.Client, npix: int) -> CubeLayout:
     """Return the cached layout for a tile, discovering it on first use."""
-    path = CUBE_CACHE_DIR / f"layout-{CUBE_ORDER}-{npix}.json"
+    path = _layout_path(npix)
     with _tile_lock(npix):
         cached = _read_json_cache(path)
         if cached is not None:
@@ -353,9 +440,58 @@ def read_pixel_spectrum(
             base + (k * plane + y * layout.width + x) * dtype.itemsize
             for k in range(layout.depth)
         ]
-        raw = read_ranges(client, layout.url, offsets, dtype.itemsize)
+        raw = read_ranges(client, layout.url, offsets, dtype.itemsize, layout.tile_size)
         result[product] = [np.frombuffer(b, dtype=dtype)[0].item() for b in raw]
     return result
+
+
+def pixel_index(position: float, size: int) -> int | None:
+    """0-based pixel containing ``position`` (pixel centres at integers).
+
+    Pixel ``i`` spans ``[i - 0.5, i + 0.5)``; the outer edges ``-0.5`` and
+    ``size - 0.5`` still belong to the first and last pixel. Returns None
+    outside the tile or for a non-finite position.
+    """
+    if not math.isfinite(position) or not -0.5 <= position <= size - 0.5:
+        return None
+    return min(int(math.floor(position + 0.5)), size - 1)
+
+
+def _sample_tile(
+    client: httpx.Client, npix: int, ra_deg: float, dec_deg: float
+) -> tuple[CubeLayout, int, int, list[dict[str, Any]]]:
+    """Locate the pixel, read (or reuse) its 102 values and build the points."""
+    layout = get_layout(client, npix)
+    wcs = celestial_wcs(fits.Header.fromstring(layout.celestial_header))
+    px, py = wcs.world_to_pixel_values(ra_deg, dec_deg)
+    x, y = pixel_index(float(px), layout.width), pixel_index(float(py), layout.height)
+    if x is None or y is None:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Position maps outside tile {npix} ({px:.2f}, {py:.2f}).",
+        )
+
+    cache_path = CUBE_SPECTRUM_CACHE_DIR / f"{CUBE_ORDER}-{npix}-{x}-{y}.json"
+    values = _read_json_cache(cache_path)
+    if not _valid_spectrum_cache(values, layout.depth):
+        values = read_pixel_spectrum(client, layout, x, y)
+        _write_json_cache(cache_path, values)
+
+    points = []
+    for ch, value, nhits, flags in zip(
+        layout.channels, values["IMAGE"], values["NHITS"], values["FLAGS"], strict=True
+    ):
+        finite = value is not None and math.isfinite(value)
+        points.append(
+            {
+                **ch,
+                "value": float(value) if finite else None,
+                "nhits": int(nhits),
+                "flags": int(flags),
+                "available": finite,
+            }
+        )
+    return layout, x, y, points
 
 
 def _make_client() -> httpx.Client:
@@ -373,47 +509,27 @@ def get_cube_spectrum(ra_deg: float, dec_deg: float) -> dict[str, Any]:
 
     try:
         with _make_client() as client:
-            layout = get_layout(client, npix)
-            wcs = celestial_wcs(fits.Header.fromstring(layout.celestial_header))
-            px, py = wcs.world_to_pixel_values(ra_deg, dec_deg)
-            x, y = int(round(float(px))), int(round(float(py)))
-            if not (0 <= x < layout.width and 0 <= y < layout.height):
-                raise HTTPException(
-                    status_code=502,
-                    detail=f"Position maps outside tile {npix} ({x}, {y}).",
+            try:
+                layout, x, y, points = _sample_tile(client, npix, ra_deg, dec_deg)
+            except TileChangedError as exc:
+                # IRSA republished the tile: cached offsets are stale. Rebuild once.
+                logger.warning(
+                    "Cube tile %s changed upstream (%s); rediscovering", npix, exc
                 )
-
-            cache_path = CUBE_SPECTRUM_CACHE_DIR / f"{CUBE_ORDER}-{npix}-{x}-{y}.json"
-            values = _read_json_cache(cache_path)
-            if not _valid_spectrum_cache(values, layout.depth):
-                values = read_pixel_spectrum(client, layout, x, y)
-                _write_json_cache(cache_path, values)
+                invalidate_tile(npix)
+                layout, x, y, points = _sample_tile(client, npix, ra_deg, dec_deg)
     except httpx.HTTPError as exc:
         raise HTTPException(
             status_code=502, detail=f"All-Sky Cube tile request failed: {exc}"
         ) from None
-    except (ValueError, KeyError, TypeError, IndexError) as exc:
-        # Malformed upstream bytes: non-ASCII headers, bad cards, unknown BITPIX.
+    except (ValueError, KeyError, TypeError, IndexError, TileChangedError) as exc:
+        # Malformed upstream bytes: non-ASCII headers, bad cards, unknown BITPIX,
+        # channel tables that disagree with the cube, or a tile still changing.
         logger.warning("Unreadable cube tile %s: %r", npix, exc)
         raise HTTPException(
             status_code=502,
             detail=f"Unreadable All-Sky Cube tile {npix}: {type(exc).__name__}: {exc}",
         ) from None
-
-    points = []
-    for ch, value, nhits, flags in zip(
-        layout.channels, values["IMAGE"], values["NHITS"], values["FLAGS"], strict=True
-    ):
-        finite = value is not None and math.isfinite(value)
-        points.append(
-            {
-                **ch,
-                "value": float(value) if finite else None,
-                "nhits": int(nhits),
-                "flags": int(flags),
-                "available": finite,
-            }
-        )
 
     return {
         "ra_deg": ra_deg,

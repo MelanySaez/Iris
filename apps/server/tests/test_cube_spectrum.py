@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 import json
+import os
 import re
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -23,14 +24,18 @@ SIZE, DEPTH = 6, 102
 PX, PY = 2, 3  # pixel the synthetic WCS maps (RA, DEC) onto (0-based)
 
 
-def build_cube_bytes() -> bytes:
+def build_cube_bytes(
+    base_value: float = 10.0, table_rows: int = DEPTH, extra_cards: int = 0
+) -> bytes:
     """Synthetic cube tile with the same HDU layout as the published fits-cube files."""
     primary = fits.PrimaryHDU()
+    for i in range(extra_cards):  # grows the header, shifting every HDU offset
+        primary.header[f"PAD{i:05d}"] = i
     primary.header["DATE-BEG"] = "2025-10-06T19:27:20.456"
     primary.header["DATE-END"] = "2026-05-07T03:23:19.646"
 
     image = np.zeros((DEPTH, SIZE, SIZE), dtype=np.float32)
-    image[:, PY, PX] = np.arange(DEPTH, dtype=np.float32) * 1.5 + 10.0
+    image[:, PY, PX] = np.arange(DEPTH, dtype=np.float32) * 1.5 + base_value
     image[50, :, :] = np.nan  # blank channel, as in the real cube (D3:17)
     nhits = np.full((DEPTH, SIZE, SIZE), 7, dtype=np.int32)
     nhits[50] = 0
@@ -51,7 +56,7 @@ def build_cube_bytes() -> bytes:
         h["BUNIT"] = unit
         return hdu
 
-    rows = np.arange(DEPTH)
+    rows = np.arange(table_rows)
     channels = fits.BinTableHDU.from_columns(
         [
             fits.Column("DETECTOR", "I", array=rows // 17 + 1),
@@ -59,9 +64,9 @@ def build_cube_bytes() -> bytes:
             fits.Column("WAVELENGTH", "E", array=0.75 + rows * 0.042),
             fits.Column("WL_MIN", "E", array=0.74 + rows * 0.042),
             fits.Column("WL_MAX", "E", array=0.76 + rows * 0.042),
-            fits.Column("R", "E", array=np.full(DEPTH, 40.0)),
-            fits.Column("R_STD", "E", array=np.ones(DEPTH)),
-            fits.Column("BANDWIDTH", "E", array=np.full(DEPTH, 0.02)),
+            fits.Column("R", "E", array=np.full(table_rows, 40.0)),
+            fits.Column("R_STD", "E", array=np.ones(table_rows)),
+            fits.Column("BANDWIDTH", "E", array=np.full(table_rows, 0.02)),
         ],
         name="SPECTRAL_CHANNELS",
     )
@@ -373,3 +378,71 @@ def test_single_part_response_without_content_range_is_502(cube_server):
     )
     assert resp.status_code == 502
     assert "Content-Range" in resp.json()["detail"]
+
+
+# --- Third review: unmapped 500s, stale caches, oversized coalesced spans, edges ---
+
+
+def get(params=None):
+    return TestClient(app, raise_server_exceptions=False).get(
+        "/api/spectrum", params=params or {"ra": RA, "dec": DEC}
+    )
+
+
+def test_channel_table_mismatch_is_502_and_not_cached(cube_server):
+    cube_server.blob = build_cube_bytes(table_rows=DEPTH - 1)
+    resp = get()
+    assert resp.status_code == 502
+    assert "Unreadable All-Sky Cube tile" in resp.json()["detail"]
+    assert not list(cube.CUBE_CACHE_DIR.glob("layout-*.json"))
+
+
+def test_republished_tile_with_new_layout_is_rediscovered(cube_server):
+    assert get().json()["points"][0]["value"] == pytest.approx(10.0)
+    # IRSA republishes the tile: a bigger header shifts every HDU, values change.
+    cube_server.blob = build_cube_bytes(base_value=1000.0, extra_cards=60)
+    for f in cube.CUBE_SPECTRUM_CACHE_DIR.glob("*.json"):
+        f.unlink()
+    resp = get()
+    assert resp.status_code == 200
+    assert resp.json()["points"][0]["value"] == pytest.approx(1000.0)
+
+
+def test_expired_spectrum_cache_is_refetched(cube_server):
+    assert get().json()["points"][0]["value"] == pytest.approx(10.0)
+    cube_server.blob = build_cube_bytes(base_value=20.0)  # same size, new values
+    old = time.time() - cube.CUBE_CACHE_TTL_SECONDS - 60
+    for f in [
+        *cube.CUBE_SPECTRUM_CACHE_DIR.glob("*.json"),
+        *cube.CUBE_CACHE_DIR.glob("*.json"),
+    ]:
+        os.utime(f, (old, old))
+    assert get().json()["points"][0]["value"] == pytest.approx(20.0)
+
+
+def test_oversized_coalesced_span_is_rejected(cube_server, monkeypatch):
+    """A proxy merging the pixel ranges must not make us download the tile."""
+    get({"ra": RA, "dec": DEC + 0.01})  # discover the layout with normal ranges
+    for f in cube.CUBE_SPECTRUM_CACHE_DIR.glob("*.json"):
+        f.unlink()
+    monkeypatch.setattr(cube, "MAX_RANGE_RESPONSE_BYTES", 2048)
+    cube_server.coalesce = True
+    resp = get()
+    assert resp.status_code == 502
+    assert "too large" in resp.json()["detail"]
+
+
+@pytest.mark.parametrize(
+    ("position", "size", "expected"),
+    [
+        (0.0, 512, 0),
+        (-0.5, 512, 0),
+        (511.5, 512, 511),
+        (255.49, 512, 255),
+        (512.0, 512, None),
+        (-0.51, 512, None),
+        (float("nan"), 512, None),
+    ],
+)
+def test_pixel_index_includes_tile_edges(position, size, expected):
+    assert cube.pixel_index(position, size) == expected
