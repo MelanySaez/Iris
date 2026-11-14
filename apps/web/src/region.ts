@@ -1,3 +1,5 @@
+import type { RegionRequest } from './types';
+
 export const MIN_REGION_SIZE_ARCMIN = 1;
 export const MAX_REGION_SIZE_ARCMIN = 60;
 
@@ -91,4 +93,28 @@ export function computeRegionFromPoints(
     clamped_size_arcmin: clampedSize,
     exceeds_limit: exceedsLimit,
   };
+}
+
+/** Signed RA difference `to - from` in degrees, taking the short way round 0/360. */
+function wrappedRaDelta(from: number, to: number): number {
+  return ((to - from + 540) % 360) - 180;
+}
+
+/** Moves a region by the sky offset between two pointer positions; size is unchanged. */
+export function moveRegion<T extends RegionRequest>(
+  region: T,
+  fromWorld: [number, number],
+  toWorld: [number, number],
+): T {
+  const ra = (region.ra_deg + wrappedRaDelta(fromWorld[0], toWorld[0]) + 360) % 360;
+  const dec = Math.min(90, Math.max(-90, region.dec_deg + toWorld[1] - fromWorld[1]));
+  return { ...region, ra_deg: ra, dec_deg: dec };
+}
+
+/** Resizes a region around its centre so the pointer lies on its edge, clamped to the allowed range. */
+export function resizeRegion<T extends RegionRequest>(region: T, pointerWorld: [number, number]): T {
+  const cosDec = Math.cos((region.dec_deg * Math.PI) / 180);
+  const halfRa = Math.abs(wrappedRaDelta(region.ra_deg, pointerWorld[0])) * cosDec;
+  const halfDec = Math.abs(pointerWorld[1] - region.dec_deg);
+  return { ...region, size_arcmin: clampRegionSize(2 * Math.max(halfRa, halfDec) * 60) };
 }

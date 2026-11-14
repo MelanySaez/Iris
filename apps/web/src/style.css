@@ -2073,7 +2073,6 @@ button:disabled {
 .persistent-region polygon { fill: #9db2ff18; stroke: #9db2ff; stroke-width: 1.5; pointer-events: visiblePainted; }
 .persistent-region foreignObject { pointer-events: auto; opacity: 0; }
 .persistent-region:hover foreignObject, .persistent-region:focus-within foreignObject { opacity: 1; }
-.persistent-region button { width: 32px; height: 32px; cursor: pointer; }
 @media (max-width: 1200px) { .sky-data-card { bottom: 100px; } }
 @media (hover: none) { .persistent-region foreignObject { opacity: 1; } }
 
@@ -2081,7 +2080,17 @@ button:disabled {
 .sky-projection select { background: var(--sky-bg); max-width: 140px; }
 .plate-open-quiet { position: absolute; right: 16px; bottom: 18px; z-index: 30; padding: 9px 13px; background: var(--sky-panel); border: 1px solid var(--sky-border); }
 .persistent-region foreignObject { opacity: 1; }
-.persistent-region button { width: 36px; height: 36px; border: 2px solid #fff; border-radius: 50%; background: #09111b; color: #fff; font-size: 23px; font-weight: 700; }
+.persistent-region .region-clear { display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; margin: 2px; padding: 0; border: 2px solid #9db2ff; border-radius: 50%; background: #09111b; color: #fff; cursor: pointer; transition: background 0.15s, border-color 0.15s; }
+.persistent-region .region-clear:hover, .persistent-region .region-clear:focus-visible { background: #9db2ff; color: #09111b; border-color: #fff; }
+.persistent-region .region-clear svg { width: 12px; height: 12px; stroke: currentColor; stroke-width: 2; stroke-linecap: round; fill: none; }
+.persistent-region .region-body { cursor: move; touch-action: none; }
+.persistent-region .region-handle { fill: #09111b; stroke: #9db2ff; stroke-width: 2; pointer-events: all; touch-action: none; }
+.persistent-region .handle-nwse { cursor: nwse-resize; }
+.persistent-region .handle-nesw { cursor: nesw-resize; }
+.region-confirm-bar { position: absolute; left: 50%; bottom: 72px; transform: translateX(-50%); z-index: 32; display: flex; align-items: center; gap: 12px; padding: 8px 12px; background: var(--sky-panel); border: 1px solid var(--sky-border); font-size: 12px; white-space: nowrap; }
+.region-confirm-hint { opacity: 0.7; }
+.region-confirm-btn { padding: 6px 12px; border: 1px solid #9db2ff; background: #9db2ff; color: #09111b; font-weight: 700; cursor: pointer; }
+@media (max-width: 640px) { .region-confirm-hint { display: none; } }
 
 /* ==========================================================================
    Spectral Lab
