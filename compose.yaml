@@ -1,4 +1,4 @@
-# Local development services. Works with `docker compose` and `podman compose`.
+# Local development services. Run with `docker compose` from the repository root.
 services:
   db:
     image: docker.io/library/postgres:17

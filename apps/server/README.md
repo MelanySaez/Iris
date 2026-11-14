@@ -13,10 +13,10 @@ uv run uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 
 Every job submission is saved as a selection record in PostgreSQL (SQLAlchemy + Alembic). Storage is optional: when `DATABASE_URL` is unset or invalid, jobs still work and `/api/selections` answers 503. A driverless `postgresql://` URL is accepted and uses psycopg 3. Saving runs inside `POST /api/jobs`, so an unreachable database can delay a submission by up to 3 seconds (connect timeout).
 
-1. Start PostgreSQL from the repository root (`docker compose` works the same):
+1. Start PostgreSQL with Docker from the repository root:
 
    ```bash
-   podman compose up -d db
+   docker compose up -d db
    ```
 
    Using a native PostgreSQL instead: `createuser -P iris && createdb -O iris iris`.
@@ -34,7 +34,7 @@ Every job submission is saved as a selection record in PostgreSQL (SQLAlchemy + 
 Selection tests run against a disposable database and are skipped otherwise:
 
 ```bash
-createdb -O iris iris_test   # or: podman compose exec db createdb -U iris iris_test
+createdb -O iris iris_test   # or: docker compose exec db createdb -U iris iris_test
 TEST_DATABASE_URL=postgresql+psycopg://iris:iris@127.0.0.1:5432/iris_test uv run pytest -q
 ```
 
