@@ -9,6 +9,30 @@ cd apps/server
 uv run uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
+## Database (selection records)
+
+Every job submission is saved as a selection record in PostgreSQL (SQLAlchemy + Alembic). Storage is optional: when `DATABASE_URL` is unset, jobs still work and `/api/selections` answers 503.
+
+1. Start PostgreSQL from the repository root (`docker compose` works the same):
+
+   ```bash
+   podman compose up -d db
+   ```
+
+   Using a native PostgreSQL instead: `createuser -P iris && createdb -O iris iris`.
+
+2. Point the server at it and apply the migrations:
+
+   ```bash
+   cd apps/server
+   export DATABASE_URL=postgresql+psycopg://iris:iris@127.0.0.1:5432/iris
+   uv run alembic upgrade head
+   ```
+
+3. Start the server in the same shell (it reads `DATABASE_URL`).
+
+After changing the models in `app/selections/orm.py`, create a migration with `uv run alembic revision --autogenerate -m "<message>"` and review it before committing.
+
 To run with a custom local spectral asset:
 ```bash
 SPHEREX_SPECTRAL_FITS=/path/to/level2.fits uv run uvicorn app.main:app --reload
