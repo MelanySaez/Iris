@@ -2925,11 +2925,13 @@ button:disabled {
   z-index: 30;
   display: flex;
   flex-direction: column;
-  align-items: flex-end;
+  /* Stretch so every action (and its hover) is as wide as the longest one. */
+  align-items: stretch;
   gap: 8px;
 }
 
 .selection-action-btn {
+  text-align: right;
   padding: 9px 13px;
   background: var(--sky-panel);
   border: 1px solid var(--sky-border);
