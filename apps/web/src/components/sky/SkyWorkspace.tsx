@@ -20,7 +20,7 @@ import {
 } from '../../hips';
 import { setChannelImageLayer } from '../../aladinView';
 import { useRgbComposite } from '../../hooks/useRgbComposite';
-import { RGB_PRESETS, presetChannels } from '../../rgb';
+import { RgbControls } from './RgbControls';
 import {
   computeRegionFromPoints,
   REGION_EXCEEDS_LIMIT_MESSAGE,
@@ -313,14 +313,6 @@ export function SkyWorkspace({
     channelRef,
     onStatus: setTileStatus,
   });
-
-  const channelLabel = useCallback(
-    (index: number) => {
-      const wavelength = channels.find((c) => c.index === index)?.wavelengthMicrometres;
-      return wavelength === undefined ? `ch ${index}` : `ch ${index} · ${wavelength.toFixed(3)} µm`;
-    },
-    [channels],
-  );
 
   // Go to coordinates
   const handleGoto = useCallback(
@@ -795,70 +787,15 @@ export function SkyWorkspace({
 
           {/* Bottom-Center Channel Dock */}
           <div className="sky-channel-dock float" aria-label="Channel slider dock">
-            <div className="dock-mode-switch" role="group" aria-label="Sky colour mode">
-              <button
-                type="button"
-                className={`dock-mode-btn ${rgbMode ? '' : 'active'}`}
-                aria-pressed={!rgbMode}
-                disabled={!aladinReady}
-                onClick={() => setRgbMode(false)}
-              >
-                Single channel
-              </button>
-              <button
-                type="button"
-                className={`dock-mode-btn ${rgbMode ? 'active' : ''}`}
-                aria-pressed={rgbMode}
-                disabled={!aladinReady}
-                onClick={() => setRgbMode(true)}
-              >
-                RGB composite
-              </button>
-            </div>
-
-            {rgbMode && rgb ? (
-              <div className="dock-rgb" aria-label="RGB band selector">
-                <div className="dock-rgb-presets">
-                  {RGB_PRESETS.map((preset) => (
-                    <button
-                      key={preset.id}
-                      type="button"
-                      className="dock-preset-btn"
-                      title={preset.description}
-                      onClick={() => applyRgb(presetChannels(channels, preset))}
-                    >
-                      {preset.label}
-                    </button>
-                  ))}
-                </div>
-                <div className="dock-rgb-selects">
-                  {(['r', 'g', 'b'] as const).map((band) => (
-                    <label key={band} className={`dock-rgb-select band-${band}`}>
-                      <span>{band.toUpperCase()}</span>
-                      <select
-                        value={rgb[band]}
-                        aria-label={`${band.toUpperCase()} channel`}
-                        onChange={(e) => applyRgb({ ...rgb, [band]: Number(e.target.value) })}
-                      >
-                        {channels.map((c) => (
-                          <option key={c.index} value={c.index}>
-                            {channelLabel(c.index)}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                  ))}
-                </div>
-                {rgbError ? (
-                  <p className="dock-rgb-error" role="alert">{rgbError}</p>
-                ) : (
-                  <p className="dock-rgb-note">
-                    False colour from display tiles: for seeing where bands differ, not for measuring.
-                  </p>
-                )}
-              </div>
-            ) : (
-            <>
+            <RgbControls
+              ready={aladinReady}
+              rgbMode={rgbMode}
+              rgb={rgb}
+              rgbError={rgbError}
+              channels={channels}
+              onModeChange={setRgbMode}
+              onApply={applyRgb}
+            >
             <div className="dock-header">
               <div className="dock-channel-info">
                 <span className="dock-badge num">channel {currentChannel}</span>
@@ -910,8 +847,7 @@ export function SkyWorkspace({
               />
               <span className="slider-edge num">5.00 µm</span>
             </div>
-            </>
-            )}
+            </RgbControls>
           </div>
         </div>
       </main>
