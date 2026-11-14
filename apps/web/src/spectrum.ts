@@ -154,3 +154,22 @@ export function applyIfCurrent<T extends { key: string; requestId: number }>(
   next[index] = { ...entries[index], ...patch };
   return next;
 }
+
+/**
+ * Decide whether a spectrum can join the comparison: rejects duplicates and a
+ * ninth series, otherwise returns the colour slot it will keep.
+ */
+export function planAdd(
+  entries: { key: string; slot: number }[],
+  key: string,
+  label: string,
+): { slot: number } | { error: string } {
+  if (entries.some((e) => e.key === key)) {
+    return { error: `${label} is already in the comparison.` };
+  }
+  const slot = nextColorSlot(entries.map((e) => e.slot));
+  if (slot === null) {
+    return { error: `Compare at most ${MAX_SPECTRA} spectra; remove one first.` };
+  }
+  return { slot };
+}

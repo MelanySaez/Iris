@@ -9,7 +9,7 @@ import {
   lineSegments,
   linearScale,
   nearestChannel,
-  nextColorSlot,
+  planAdd,
   niceTicks,
   parseCoordinates,
   spectrumKey,
@@ -45,6 +45,13 @@ export function SpectralLab() {
   const [decText, setDecText] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
   const requestCounter = useRef(0);
+  // Source of truth for entries between renders: two clicks before React
+  // re-renders must both see the first add (no duplicate key or colour slot).
+  const entriesRef = useRef<SpectrumEntry[]>([]);
+  const updateEntries = useCallback((change: (prev: SpectrumEntry[]) => SpectrumEntry[]) => {
+    entriesRef.current = change(entriesRef.current);
+    setEntries(entriesRef.current);
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -64,38 +71,34 @@ export function SpectralLab() {
   const addSpectrum = useCallback(
     (label: string, ra: number, dec: number) => {
       const key = spectrumKey(ra, dec);
-      if (entries.some((e) => e.key === key)) {
-        setFormError(`${label} is already in the comparison.`);
-        return;
-      }
-      const slot = nextColorSlot(entries.map((e) => e.slot));
-      if (slot === null) {
-        setFormError(`Compare at most ${MAX_SPECTRA} spectra; remove one first.`);
+      const plan = planAdd(entriesRef.current, key, label);
+      if ('error' in plan) {
+        setFormError(plan.error);
         return;
       }
       setFormError(null);
       requestCounter.current += 1;
       const requestId = requestCounter.current;
-      setEntries((prev) => [
+      updateEntries((prev) => [
         ...prev,
-        { key, requestId, label, ra, dec, slot, visible: true, status: 'loading' },
+        { key, requestId, label, ra, dec, slot: plan.slot, visible: true, status: 'loading' },
       ]);
       api
         .getSpectrum(ra, dec)
         .then((data) => {
-          setEntries((prev) =>
+          updateEntries((prev) =>
             applyIfCurrent(prev, key, requestId, { status: 'ready', data }),
           );
         })
         .catch((err: unknown) => {
           const message =
             err instanceof ApiError ? (err.detail ?? err.message) : String(err);
-          setEntries((prev) =>
+          updateEntries((prev) =>
             applyIfCurrent(prev, key, requestId, { status: 'error', error: message }),
           );
         });
     },
-    [entries],
+    [updateEntries],
   );
 
   const handleSubmit = (event: FormEvent) => {
@@ -109,8 +112,8 @@ export function SpectralLab() {
   };
 
   const toggle = (key: string) =>
-    setEntries((prev) => prev.map((e) => (e.key === key ? { ...e, visible: !e.visible } : e)));
-  const remove = (key: string) => setEntries((prev) => prev.filter((e) => e.key !== key));
+    updateEntries((prev) => prev.map((e) => (e.key === key ? { ...e, visible: !e.visible } : e)));
+  const remove = (key: string) => updateEntries((prev) => prev.filter((e) => e.key !== key));
 
   const plotted = entries.filter(
     (e): e is SpectrumEntry & { data: CubeSpectrumResponse } =>

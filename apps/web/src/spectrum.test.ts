@@ -9,6 +9,7 @@ import {
   linearScale,
   nearestChannel,
   applyIfCurrent,
+  planAdd,
   nextColorSlot,
   niceTicks,
   parseCoordinates,
@@ -204,5 +205,26 @@ describe('applyIfCurrent', () => {
 
   it('drops a result for a spectrum that was removed', () => {
     expect(applyIfCurrent(loading, 'gone', 3, { status: 'ready' })).toBe(loading);
+  });
+});
+
+describe('planAdd', () => {
+  const entry = (key: string, slot: number) => ({ key, slot });
+
+  it('assigns the lowest free colour slot to a new position', () => {
+    expect(planAdd([entry('a', 0), entry('b', 2)], 'c', 'C')).toEqual({ slot: 1 });
+  });
+
+  it('rejects a position that is already compared', () => {
+    expect(planAdd([entry('a', 0)], 'a', 'M81')).toEqual({
+      error: 'M81 is already in the comparison.',
+    });
+  });
+
+  it('rejects a ninth spectrum', () => {
+    const full = [0, 1, 2, 3, 4, 5, 6, 7].map((s) => entry(`k${s}`, s));
+    expect(planAdd(full, 'new', 'X')).toEqual({
+      error: 'Compare at most 8 spectra; remove one first.',
+    });
   });
 });

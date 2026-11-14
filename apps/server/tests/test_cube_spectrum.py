@@ -25,7 +25,10 @@ PX, PY = 2, 3  # pixel the synthetic WCS maps (RA, DEC) onto (0-based)
 
 
 def build_cube_bytes(
-    base_value: float = 10.0, table_rows: int = DEPTH, extra_cards: int = 0
+    base_value: float = 10.0,
+    table_rows: int = DEPTH,
+    extra_cards: int = 0,
+    scaled_image: bool = False,
 ) -> bytes:
     """Synthetic cube tile with the same HDU layout as the published fits-cube files."""
     primary = fits.PrimaryHDU()
@@ -70,10 +73,14 @@ def build_cube_bytes(
         ],
         name="SPECTRAL_CHANNELS",
     )
+    image_hdu = cube_hdu(image, "IMAGE", "MJy/sr")
+    if scaled_image:
+        # Stored as int16 with BSCALE/BZERO: raw bytes are not physical values.
+        image_hdu.scale("int16", bscale=0.5, bzero=100.0)
     hdul = fits.HDUList(
         [
             primary,
-            cube_hdu(image, "IMAGE", "MJy/sr"),
+            image_hdu,
             cube_hdu(nhits, "NHITS", "count"),
             cube_hdu(flags, "FLAGS", ""),
             channels,
@@ -460,3 +467,33 @@ def test_unknown_tile_size_is_not_trusted_as_unchanged(cube_server):
     resp = get()
     # Never a 200 built from stale offsets: either correct data or an explicit 502.
     assert resp.status_code == 502
+
+
+def test_cached_spectrum_from_an_older_tile_is_not_served(cube_server):
+    """After the layout expires and the tile was republished, old spectra must go."""
+    assert get().json()["points"][0]["value"] == pytest.approx(10.0)
+    cube_server.blob = build_cube_bytes(base_value=1000.0, extra_cards=60)
+    old = time.time() - cube.CUBE_CACHE_TTL_SECONDS - 60
+    for f in cube.CUBE_CACHE_DIR.glob("layout-*.json"):
+        os.utime(f, (old, old))  # layout expires; the pixel cache is still fresh
+    resp = get()
+    assert resp.status_code == 200
+    assert resp.json()["points"][0]["value"] == pytest.approx(1000.0)
+
+
+def test_scaled_planes_are_rejected_not_misread(cube_server):
+    cube_server.blob = build_cube_bytes(scaled_image=True)
+    resp = get()
+    assert resp.status_code == 502
+    assert "BSCALE" in resp.json()["detail"]
+
+
+def test_well_shaped_cache_with_bad_values_is_refetched(cube_server):
+    assert get().status_code == 200
+    cache_file = spectrum_cache_file(cube.CUBE_SPECTRUM_CACHE_DIR)
+    values = json.loads(cache_file.read_text("utf-8"))
+    values["NHITS"][0] = None  # right shape, wrong element type
+    cache_file.write_text(json.dumps(values), "utf-8")
+    resp = get()
+    assert resp.status_code == 200
+    assert resp.json()["points"][0]["nhits"] == 7

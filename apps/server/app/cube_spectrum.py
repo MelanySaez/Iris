@@ -325,7 +325,16 @@ def discover_layout(client: httpx.Client, npix: int) -> CubeLayout:
 
     depth = int(image_header["NAXIS3"])
     for product in CUBE_PRODUCTS:
-        _dtype_for(int(headers[product][0]["BITPIX"]))  # KeyError → unreadable tile
+        product_header = headers[product][0]
+        _dtype_for(int(product_header["BITPIX"]))  # KeyError → unreadable tile
+        # Values are decoded from raw bytes; a scaled plane would be misread.
+        if (
+            float(product_header.get("BSCALE", 1.0)) != 1.0
+            or float(product_header.get("BZERO", 0.0)) != 0.0
+        ):
+            raise ValueError(
+                f"{product} uses BSCALE/BZERO scaling, which is not supported"
+            )
         if int(headers[product][0]["NAXIS3"]) != depth:
             raise ValueError(f"{product} has a different channel count than IMAGE")
     if len(channels) != depth:
@@ -417,10 +426,28 @@ def get_layout(client: httpx.Client, npix: int) -> CubeLayout:
         return layout
 
 
-def _valid_spectrum_cache(values: Any, depth: int) -> bool:
-    return isinstance(values, dict) and all(
-        isinstance(values.get(p), list) and len(values[p]) == depth for p in CUBE_PRODUCTS
+def _valid_spectrum_cache(values: Any, layout: CubeLayout) -> bool:
+    """A cached pixel is reused only if it came from this exact tile and is well-typed.
+
+    The ``tile_size`` tag ties the spectrum to the layout it was read with, so a
+    layout rebuilt after a republish never serves spectra from the old tile.
+    """
+    if not isinstance(values, dict) or values.get("tile_size") != layout.tile_size:
+        return False
+    for product in CUBE_PRODUCTS:
+        column = values.get(product)
+        if not isinstance(column, list) or len(column) != layout.depth:
+            return False
+    image_ok = all(
+        v is None or (isinstance(v, (int, float)) and not isinstance(v, bool))
+        for v in values["IMAGE"]
     )
+    ints_ok = all(
+        isinstance(v, int) and not isinstance(v, bool)
+        for p in ("NHITS", "FLAGS")
+        for v in values[p]
+    )
+    return image_ok and ints_ok
 
 
 _DTYPES = {-64: ">f8", -32: ">f4", 16: ">i2", 32: ">i4", 64: ">i8"}
@@ -476,8 +503,11 @@ def _sample_tile(
 
     cache_path = CUBE_SPECTRUM_CACHE_DIR / f"{CUBE_ORDER}-{npix}-{x}-{y}.json"
     values = _read_json_cache(cache_path)
-    if not _valid_spectrum_cache(values, layout.depth):
-        values = read_pixel_spectrum(client, layout, x, y)
+    if not _valid_spectrum_cache(values, layout):
+        values = {
+            "tile_size": layout.tile_size,
+            **read_pixel_spectrum(client, layout, x, y),
+        }
         _write_json_cache(cache_path, values)
 
     points = []
