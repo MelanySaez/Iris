@@ -76,9 +76,7 @@ def test_channel_window_is_half_the_local_spacing():
         assert win_min == round(channel["wavelength_um"] - half, 4)
         assert win_max == round(channel["wavelength_um"] + half, 4)
         # The window must be narrower than the full spacing.
-        assert (win_max - win_min) == pytest.approx(
-            channel["bandwidth_um"], abs=1e-4
-        )
+        assert (win_max - win_min) == pytest.approx(channel["bandwidth_um"], abs=1e-4)
 
 
 def test_channel_stale_cache_and_503(tmp_path: Path, properties_text: str):

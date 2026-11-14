@@ -13,7 +13,7 @@ uv run uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 
 Every job submission is saved as a selection record in PostgreSQL (SQLAlchemy + Alembic). Storage is optional: when `DATABASE_URL` is unset or invalid, jobs still work and `/api/selections` answers 503. A driverless `postgresql://` URL is accepted and uses psycopg 3. Saving runs inside `POST /api/jobs`, so an unreachable database can delay a submission by up to 3 seconds (connect timeout).
 
-1. Create the two environment files from their templates. The root `.env` configures the container (`DB_PORT`, 5433 by default so it does not clash with a system PostgreSQL, plus `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`). `apps/server/.env` configures the backend (`DATABASE_URL`, `TEST_DATABASE_URL`, optional `SPHEREX_SPECTRAL_FITS`); keep its credentials and port in sync with the root file:
+1. Create the two environment files from their templates. The root `.env` configures the container (`DB_PORT`, 5433 by default so it does not clash with a system PostgreSQL, plus `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`). `apps/server/.env` configures the backend (`DATABASE_URL`, optional `SPHEREX_SPECTRAL_FITS`); keep its credentials and port in sync with the root file:
 
    ```bash
    # from the repository root
@@ -39,11 +39,10 @@ Every job submission is saved as a selection record in PostgreSQL (SQLAlchemy + 
 
 4. Start the server in the same shell (it reads `DATABASE_URL`).
 
-Selection tests run against a disposable database and are skipped otherwise:
+The project uses a single database. Selection tests use `DATABASE_URL` but never touch its data: each run creates a throwaway schema (`test_<random>`), applies the migrations there and drops it at the end. Without `DATABASE_URL` those tests are skipped.
 
 ```bash
-docker compose exec db createdb -U iris iris_test   # from the repository root (or: podman compose ...)
-uv run pytest -q                                    # in apps/server, uses TEST_DATABASE_URL from .env
+uv run pytest -q   # in apps/server, with .env sourced
 ```
 
 After changing the models in `app/selections/orm.py`, create a migration with `uv run alembic revision --autogenerate -m "<message>"` and review it before committing.

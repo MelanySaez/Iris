@@ -1,8 +1,9 @@
 """Selection records persisted in PostgreSQL.
 
-Requires a disposable database: set ``TEST_DATABASE_URL`` (for example
-``postgresql+psycopg://iris:iris@127.0.0.1:5432/iris_test``). The schema is
-created with the real Alembic migrations; every table is truncated per test.
+Uses the project database from ``DATABASE_URL`` but never its data: each test
+session creates a throwaway schema (``test_<random>``), applies the real
+Alembic migrations inside it, truncates its tables per test and drops it at
+the end. Tests that need PostgreSQL are skipped when ``DATABASE_URL`` is unset.
 """
 
 from __future__ import annotations
@@ -17,20 +18,24 @@ import pytest
 from alembic import command
 from alembic.config import Config
 from fastapi.testclient import TestClient
-from sqlalchemy import text
+from sqlalchemy import make_url, text
 
 from app.jobs import job_manager
 from app.main import app
 from app.selections.api import configure_selections
-from app.selections.db import get_engine
+from app.selections.db import get_database_url, get_engine
 from app.selections.store import normalize_region
 
-TEST_DATABASE_URL = os.environ.get("TEST_DATABASE_URL", "").strip()
+DATABASE_URL = get_database_url()
 SERVER_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-requires_db = pytest.mark.skipif(
-    not TEST_DATABASE_URL, reason="TEST_DATABASE_URL is not set"
-)
+requires_db = pytest.mark.skipif(not DATABASE_URL, reason="DATABASE_URL is not set")
+
+
+def schema_url(url: str, schema: str) -> str:
+    """Same database, with every connection confined to ``schema``."""
+    scoped = make_url(url).update_query_dict({"options": f"-csearch_path={schema}"})
+    return scoped.render_as_string(hide_password=False)
 
 
 @pytest.fixture(autouse=True)
@@ -46,19 +51,28 @@ def mock_external_network():
 
 @pytest.fixture(scope="session")
 def migrated_db():
-    """Apply the Alembic migrations once to the test database."""
+    """Create a throwaway schema, migrate it, and drop it after the session."""
+    schema = f"test_{uuid.uuid4().hex[:12]}"
+    admin = get_engine(DATABASE_URL)
+    with admin.begin() as conn:
+        conn.execute(text(f'CREATE SCHEMA "{schema}"'))
+    url = schema_url(DATABASE_URL, schema)
     previous = os.environ.get("DATABASE_URL")
-    os.environ["DATABASE_URL"] = TEST_DATABASE_URL
+    os.environ["DATABASE_URL"] = url
     try:
         cfg = Config(os.path.join(SERVER_DIR, "alembic.ini"))
         cfg.set_main_option("script_location", os.path.join(SERVER_DIR, "app/alembic"))
         command.upgrade(cfg, "head")
+        yield url
     finally:
         if previous is None:
             os.environ.pop("DATABASE_URL", None)
         else:
             os.environ["DATABASE_URL"] = previous
-    return TEST_DATABASE_URL
+        configure_selections(None, job_manager)
+        get_engine(url).dispose()
+        with admin.begin() as conn:
+            conn.execute(text(f'DROP SCHEMA "{schema}" CASCADE'))
 
 
 @pytest.fixture
@@ -359,3 +373,20 @@ def test_cached_terminal_job_records_its_outcome_on_submit():
         ("submission", "cached-job", "ready"),
         ("outcome", "cached-job", "ready", manifest),
     ]
+
+
+# -- single database: tests never touch the developer's data ------------------
+
+
+@requires_db
+def test_tests_run_inside_a_throwaway_schema(client, migrated_db):
+    with get_engine(migrated_db).connect() as conn:
+        schema = conn.execute(text("SELECT current_schema()")).scalar_one()
+    assert schema.startswith("test_")
+    assert schema != "public"
+
+
+def test_other_tests_do_not_record_selections_by_default():
+    from app.selections.recorder import SelectionRecorder
+
+    assert not any(isinstance(o, SelectionRecorder) for o in job_manager.observers)
