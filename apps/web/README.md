@@ -29,6 +29,17 @@ The per-pixel `WCS-WAVE` value is **visualization-only**, not calibrated CWAVE/C
 
 The mockup supplies layout direction only. Its generated stars, epochs, historical effects and catalog are not used. Arbitrary-region SIA discovery, calibrated per-pixel channel association, multi-FITS mosaics, precomputed object assets and real historical comparison remain pending. Regions outside the local FITS explicitly report unavailable coverage.
 
+## Sky RGB composite
+
+In the Sky channel dock, switch from **Single channel** to **RGB composite** to
+paint three SPHEREx channels red, green and blue and blend them additively over
+the whole sky (Aladin overlay layers). Pick each band from the selectors, or use
+a preset: **Stars** (1.1 / 1.6 / 2.2 µm), **Organic dust** (3.3 µm PAH feature in
+red) or **Full range** (0.9 / 2.6 / 4.6 µm). The three channels must differ and
+the blank channels 50/51 are not offered. This is false colour built from the
+8-bit display tiles: use it to see where bands differ, not to measure.
+**Single channel** removes the colour overlays and restores the slider.
+
 ## Spectral Lab
 
 Open **Spectral Lab** in the top bar (`#/spectral`). Add up to 8 spectra from the

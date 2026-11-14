@@ -7,9 +7,11 @@ declare module 'aladin-lite' {
     pix2world?: (x: number, y: number) => number[] | null;
     gotoRaDec?: (ra: number, dec: number) => void;
     setFoV?: (fov: number) => void;
-    newImageSurvey: (url: string) => Record<string, unknown>;
+    newImageSurvey: (url: string, options?: Record<string, unknown>) => Record<string, unknown>;
     setBaseImageLayer?: (layer: unknown) => void;
     setImageLayer?: (layer: unknown) => void;
+    setOverlayImageLayer?: (layer: unknown, name: string) => unknown;
+    removeImageLayer?: (name: string) => void;
     setProjection?: (projection: string) => void;
     addOverlay?: (overlay: unknown) => void;
   };

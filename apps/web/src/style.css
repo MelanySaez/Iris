@@ -2472,3 +2472,108 @@ button:disabled {
   color: var(--sky-muted);
   font-size: 12px;
 }
+
+/* Sky RGB composite (band selector) */
+.dock-mode-switch {
+  display: flex;
+  gap: 4px;
+  align-self: center;
+  padding: 2px;
+  border: 1px solid var(--sky-line-strong);
+  border-radius: var(--radius-md);
+  background: var(--sky-bg);
+}
+
+.dock-mode-btn {
+  padding: 3px 12px;
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--sky-muted);
+}
+
+.dock-mode-btn.active {
+  background: var(--sky-raised);
+  color: var(--sky-accent);
+}
+
+.dock-rgb {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.dock-rgb-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: center;
+}
+
+.dock-preset-btn {
+  padding: 3px 10px;
+  border: 1px solid var(--sky-line-strong);
+  border-radius: 999px;
+  font-size: 11px;
+  color: var(--sky-ink);
+}
+
+.dock-preset-btn:hover {
+  background: var(--sky-hover);
+}
+
+.dock-rgb-selects {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.dock-rgb-select {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+/* The letter carries identity in text ink; a coloured bar beside it carries the hue. */
+.dock-rgb-select span {
+  padding-left: 6px;
+  border-left: 3px solid var(--band-hue);
+  color: var(--sky-ink);
+}
+
+.dock-rgb-select.band-r { --band-hue: #e66767; }
+.dock-rgb-select.band-g { --band-hue: #0ca30c; }
+.dock-rgb-select.band-b { --band-hue: #3987e5; }
+
+.dock-rgb-select select {
+  min-width: 0;
+  width: 100%;
+  padding: 3px 4px;
+  border: 1px solid var(--sky-line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--sky-bg);
+  color: var(--sky-ink);
+  font-family: var(--mono);
+  font-size: 11px;
+}
+
+.dock-rgb-note,
+.dock-rgb-error {
+  margin: 0;
+  font-size: 11px;
+  text-align: center;
+  color: var(--sky-muted);
+}
+
+.dock-rgb-error {
+  color: var(--sky-danger);
+}
+
+@media (max-width: 520px) {
+  .dock-rgb-selects {
+    grid-template-columns: 1fr;
+  }
+}

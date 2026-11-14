@@ -18,7 +18,8 @@ import {
   SPHEREX_HIPS_ROOT,
   type SpectralChannel,
 } from '../../hips';
-import { setChannelImageLayer } from '../../aladinView';
+import { clearRgbComposite, setChannelImageLayer, showRgbComposite } from '../../aladinView';
+import { RGB_PRESETS, presetChannels, validateRgb, type RgbChannels } from '../../rgb';
 import {
   computeRegionFromPoints,
   REGION_EXCEEDS_LIMIT_MESSAGE,
@@ -110,6 +111,11 @@ export function SkyWorkspace({
   const lastCursorUpdate = useRef(0);
   const channelRef = useRef(DEFAULT_CHANNEL_INDEX);
   const [tileStatus, setTileStatus] = useState('Loading tiles');
+
+  // RGB composite (band selector)
+  const [rgbMode, setRgbMode] = useState(false);
+  const [rgb, setRgb] = useState<RgbChannels | null>(null);
+  const [rgbError, setRgbError] = useState<string | null>(null);
 
   // Catalog & Search
   const [catalog, setCatalog] = useState<CatalogObject[]>(CURATED_CATALOG_FALLBACK);
@@ -300,6 +306,58 @@ export function SkyWorkspace({
       }
     },
     [aladinReady],
+  );
+
+  // RGB composite: three channels painted red/green/blue and blended additively.
+  const applyRgb = useCallback(
+    (next: RgbChannels) => {
+      const problem = validateRgb(next);
+      setRgb(next);
+      setRgbError(problem);
+      if (problem || !viewerRef.current || !aladinReady) return;
+      try {
+        showRgbComposite(viewerRef.current, {
+          r: channelVirtualHipsUrl(next.r, location.origin),
+          g: channelVirtualHipsUrl(next.g, location.origin),
+          b: channelVirtualHipsUrl(next.b, location.origin),
+        });
+        setTileStatus(`RGB composite: R ch ${next.r} · G ch ${next.g} · B ch ${next.b}`);
+      } catch (err) {
+        setRgbError(err instanceof Error ? err.message : String(err));
+      }
+    },
+    [aladinReady],
+  );
+
+  const handleRgbMode = useCallback(
+    (enabled: boolean) => {
+      const viewer = viewerRef.current;
+      if (!viewer || !aladinReady) return;
+      setRgbMode(enabled);
+      if (enabled) {
+        applyRgb(rgb ?? presetChannels(channels, RGB_PRESETS[0]));
+        return;
+      }
+      // Back to the single channel: drop the overlays, restore the grey base layer.
+      setRgbError(null);
+      try {
+        clearRgbComposite(viewer);
+        channelRef.current = currentChannel;
+        setChannelImageLayer(viewer, channelVirtualHipsUrl(currentChannel, location.origin));
+        setTileStatus(`Loading channel ${currentChannel} tiles`);
+      } catch (err) {
+        setTileStatus(`Channel ${currentChannel} could not load: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    },
+    [aladinReady, applyRgb, channels, currentChannel, rgb],
+  );
+
+  const channelLabel = useCallback(
+    (index: number) => {
+      const wavelength = channels.find((c) => c.index === index)?.wavelengthMicrometres;
+      return wavelength === undefined ? `ch ${index}` : `ch ${index} · ${wavelength.toFixed(3)} µm`;
+    },
+    [channels],
   );
 
   // Go to coordinates
@@ -756,9 +814,16 @@ export function SkyWorkspace({
               <span className="card-val num">{formatAngle(currentFov)}</span>
             </div>
             <div className="data-card-row">
-              <span className="card-label">Channel λ</span>
+              <span className="card-label">{rgbMode && rgb ? 'RGB λ' : 'Channel λ'}</span>
               <span className="card-val num highlight-lambda">
-                {formatWavelength(channelWavelength)}
+                {rgbMode && rgb
+                  ? (['r', 'g', 'b'] as const)
+                      .map((band) => {
+                        const um = channels.find((c) => c.index === rgb[band])?.wavelengthMicrometres;
+                        return um === undefined ? `ch ${rgb[band]}` : `${um.toFixed(2)}`;
+                      })
+                      .join(' / ') + ' µm'
+                  : formatWavelength(channelWavelength)}
               </span>
             </div>
             <div className="status-caption">{aladinStatus} · {tileStatus}</div>
@@ -768,6 +833,70 @@ export function SkyWorkspace({
 
           {/* Bottom-Center Channel Dock */}
           <div className="sky-channel-dock float" aria-label="Channel slider dock">
+            <div className="dock-mode-switch" role="group" aria-label="Sky colour mode">
+              <button
+                type="button"
+                className={`dock-mode-btn ${rgbMode ? '' : 'active'}`}
+                aria-pressed={!rgbMode}
+                disabled={!aladinReady}
+                onClick={() => handleRgbMode(false)}
+              >
+                Single channel
+              </button>
+              <button
+                type="button"
+                className={`dock-mode-btn ${rgbMode ? 'active' : ''}`}
+                aria-pressed={rgbMode}
+                disabled={!aladinReady}
+                onClick={() => handleRgbMode(true)}
+              >
+                RGB composite
+              </button>
+            </div>
+
+            {rgbMode && rgb ? (
+              <div className="dock-rgb" aria-label="RGB band selector">
+                <div className="dock-rgb-presets">
+                  {RGB_PRESETS.map((preset) => (
+                    <button
+                      key={preset.id}
+                      type="button"
+                      className="dock-preset-btn"
+                      title={preset.description}
+                      onClick={() => applyRgb(presetChannels(channels, preset))}
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
+                </div>
+                <div className="dock-rgb-selects">
+                  {(['r', 'g', 'b'] as const).map((band) => (
+                    <label key={band} className={`dock-rgb-select band-${band}`}>
+                      <span>{band.toUpperCase()}</span>
+                      <select
+                        value={rgb[band]}
+                        aria-label={`${band.toUpperCase()} channel`}
+                        onChange={(e) => applyRgb({ ...rgb, [band]: Number(e.target.value) })}
+                      >
+                        {channels.map((c) => (
+                          <option key={c.index} value={c.index}>
+                            {channelLabel(c.index)}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  ))}
+                </div>
+                {rgbError ? (
+                  <p className="dock-rgb-error" role="alert">{rgbError}</p>
+                ) : (
+                  <p className="dock-rgb-note">
+                    False colour from display tiles: for seeing where bands differ, not for measuring.
+                  </p>
+                )}
+              </div>
+            ) : (
+            <>
             <div className="dock-header">
               <div className="dock-channel-info">
                 <span className="dock-badge num">channel {currentChannel}</span>
@@ -819,6 +948,8 @@ export function SkyWorkspace({
               />
               <span className="slider-edge num">5.00 µm</span>
             </div>
+            </>
+            )}
           </div>
         </div>
       </main>
