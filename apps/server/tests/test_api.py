@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import time
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -222,3 +222,76 @@ def test_job_keeps_the_request_id_that_created_it():
         client, {**NO_COVERAGE, "ra_deg": 14.25, "channels": [44]}
     )
     assert snap["request_id"] == resp.headers["X-Request-ID"]
+
+
+def _discovery_with(detector: int, source: str) -> dict:
+    return {
+        "coverage": "available",
+        "products": [
+            {
+                "id": f"p-{detector}-{source}",
+                "source": source,
+                "detector": detector,
+                "band": f"SPHEREx-D{detector}",
+                "obs_id": "o1",
+                "uri": "https://example.invalid/p.fits",
+                "date_mjd": 60800.5,
+                "date_iso": "2025-05-05T12:00:00.000Z",
+            }
+        ],
+    }
+
+
+def test_channels_without_detector_coverage_are_classified():
+    # Channel 44 needs detector 3; discovery only found detector 1.
+    client = TestClient(app)
+    with patch("app.jobs.resolve_region", return_value=_discovery_with(1, "remote")):
+        _, snap = _submit_and_wait(
+            client, {**NO_COVERAGE, "ra_deg": 15.25, "channels": [44]}
+        )
+    assert snap["failed_stage"] == "discovering"
+    assert snap["error_kind"] == "no_detector_coverage"
+    assert snap["error_trace"] is None
+
+
+def test_crash_during_discovery_falls_back_to_unexpected():
+    client = TestClient(app)
+    with patch("app.jobs.resolve_region", side_effect=RuntimeError("TAP crashed")):
+        _, snap = _submit_and_wait(
+            client, {**NO_COVERAGE, "ra_deg": 16.25, "channels": [44]}
+        )
+    assert snap["failed_stage"] == "discovering"
+    assert snap["error_kind"] == "unexpected"
+    assert snap["error_trace"].rstrip().endswith("RuntimeError: TAP crashed")
+
+
+def test_extraction_crash_is_classified():
+    client = TestClient(app)
+    with (
+        patch("app.jobs.resolve_region", return_value=_discovery_with(3, "local")),
+        patch("app.jobs.get_or_extract_derived", side_effect=ValueError("bad WCS")),
+    ):
+        _, snap = _submit_and_wait(
+            client, {**NO_COVERAGE, "ra_deg": 17.25, "channels": [44]}
+        )
+    assert snap["failed_stage"] == "extracting"
+    assert snap["error_kind"] == "extraction_failed"
+    assert snap["error_trace"].rstrip().endswith("ValueError: bad WCS")
+
+
+def test_render_crash_is_classified():
+    cutout = MagicMock(detector=3)
+    client = TestClient(app)
+    with (
+        patch("app.jobs.resolve_region", return_value=_discovery_with(3, "local")),
+        patch("app.jobs.get_or_extract_derived", return_value=cutout),
+        patch(
+            "app.jobs.compute_cutout_percentiles", side_effect=RuntimeError("no pixels")
+        ),
+    ):
+        _, snap = _submit_and_wait(
+            client, {**NO_COVERAGE, "ra_deg": 18.25, "channels": [44]}
+        )
+    assert snap["failed_stage"] == "rendering"
+    assert snap["error_kind"] == "render_failed"
+    assert snap["error_trace"].rstrip().endswith("RuntimeError: no pixels")
