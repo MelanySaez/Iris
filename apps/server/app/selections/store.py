@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from dataclasses import dataclass
 from datetime import datetime
 from decimal import ROUND_HALF_EVEN, Decimal
 from typing import Any
@@ -38,6 +39,14 @@ def normalize_region(
     }
 
 
+@dataclass(frozen=True)
+class SubmissionResult:
+    """Outcome of ``record_submission``."""
+
+    inserted: bool  # the row was created by this call
+    stored_status: str  # job_status held by the row after the write
+
+
 class SelectionStore:
     """Persistence operations over the three selection-record tables."""
 
@@ -63,12 +72,13 @@ class SelectionStore:
 
     def record_submission(
         self, job_id: str, req: JobRequest, status: str, *, new_attempt: bool
-    ) -> bool:
+    ) -> SubmissionResult:
         """Insert the selection or, when it already exists, count another hit.
 
         Only a new attempt resets ``job_status`` and clears ``job_error``; a cache
         hit never touches them, so a late duplicate write cannot overwrite a
-        recorded outcome. Returns True when the row was created by this call.
+        recorded outcome. Reports whether the row was created and the status it
+        holds, so callers can repair a row whose outcome write was lost.
         """
         with self._sessions.begin() as session:
             region_id = self._region_id(
@@ -92,9 +102,10 @@ class SelectionStore:
                 changes["job_error"] = None
             stmt = stmt.on_conflict_do_update(
                 index_elements=[Selection.job_id], set_=changes
-            ).returning(literal_column("(xmax = 0)"))
+            ).returning(literal_column("(xmax = 0)"), Selection.job_status)
             # PostgreSQL: xmax = 0 only for a freshly inserted row version.
-            return bool(session.execute(stmt).scalar_one())
+            inserted, stored_status = session.execute(stmt).one()
+            return SubmissionResult(inserted=bool(inserted), stored_status=stored_status)
 
     def record_discovery(self, req: JobRequest, discovery: dict[str, Any]) -> None:
         """Store the region coverage and its discovered products."""

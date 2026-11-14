@@ -343,13 +343,18 @@ def test_submission_is_notified_before_the_job_can_finish():
 
 
 class _FakeStore:
-    def __init__(self, inserted: bool) -> None:
+    def __init__(self, inserted: bool, stored_status: str | None = None) -> None:
         self.inserted = inserted
+        self.stored_status = stored_status
         self.calls: list[tuple] = []
 
     def record_submission(self, job_id, req, status, *, new_attempt):
+        from app.selections.store import SubmissionResult
+
         self.calls.append(("submission", job_id, status, new_attempt))
-        return self.inserted
+        return SubmissionResult(
+            inserted=self.inserted, stored_status=self.stored_status or status
+        )
 
     def record_outcome(self, job_id, status, manifest, error):
         self.calls.append(("outcome", job_id, status, manifest, error))
@@ -392,7 +397,7 @@ def test_repeated_cache_hit_does_not_rebuild_the_outcome():
     from app.models import JobRequest
     from app.selections.recorder import SelectionRecorder
 
-    store = _FakeStore(inserted=False)
+    store = _FakeStore(inserted=False, stored_status="ready")
     job = JobState(id="cached-job", request=JobRequest(**region(20.5)), status="ready")
     p1, p2 = _fake_manifest({"job_id": "cached-job"})
     with p1 as manifest_mock, p2:
@@ -486,10 +491,11 @@ def test_resubmission_clears_the_previous_error(client):
     saved = find_by_job(client, job["id"])
     assert wait_for_outcome(client, saved["id"])["job_error"] is not None
 
-    inserted = get_store().record_submission(
+    result = get_store().record_submission(
         job["id"], JobRequest(**payload), "queued", new_attempt=True
     )
-    assert inserted is False
+    assert result.inserted is False
+    assert result.stored_status == "queued"
     detail = client.get(f"/api/selections/{saved['id']}").json()
     assert detail["job_status"] == "queued"
     assert detail["job_error"] is None
@@ -522,7 +528,62 @@ def test_record_submission_reports_whether_the_row_was_created(client):
 
     req = JobRequest(**region(24.5), channels=[44])
     store = get_store()
-    assert store.record_submission("fresh-row-000000001", req, "ready", new_attempt=False)
-    assert not store.record_submission(
+    first = store.record_submission(
         "fresh-row-000000001", req, "ready", new_attempt=False
     )
+    second = store.record_submission(
+        "fresh-row-000000001", req, "queued", new_attempt=False
+    )
+    assert (first.inserted, first.stored_status) == (True, "ready")
+    assert (second.inserted, second.stored_status) == (False, "ready")
+
+
+def test_cache_hit_heals_a_row_stuck_in_an_intermediate_status():
+    """If the outcome write was lost, a later cache hit stores it."""
+    from app.jobs import JobState
+    from app.models import JobRequest
+    from app.selections.recorder import SelectionRecorder
+
+    store = _FakeStore(inserted=False, stored_status="discovering")
+    job = JobState(
+        id="stuck-job",
+        request=JobRequest(**region(25.5)),
+        status="failed",
+        error="No SPHEREx coverage found for this region.",
+    )
+    SelectionRecorder(store).on_submitted(job, False)
+    assert store.calls == [
+        ("submission", "stuck-job", "failed", False),
+        (
+            "outcome",
+            "stuck-job",
+            "failed",
+            None,
+            "No SPHEREx coverage found for this region.",
+        ),
+    ]
+
+
+@requires_db
+def test_lost_outcome_is_recovered_on_the_next_cache_hit(client):
+    from app.jobs import JobState
+    from app.models import JobRequest
+    from app.selections.api import get_store
+    from app.selections.recorder import SelectionRecorder
+
+    req = JobRequest(**region(26.5), channels=[44])
+    store = get_store()
+    store.record_submission("stuck-row-0000000001", req, "discovering", new_attempt=True)
+
+    job = JobState(
+        id="stuck-row-0000000001",
+        request=req,
+        status="failed",
+        error="Coverage could not be determined: IRSA TAP discovery failed.",
+    )
+    SelectionRecorder(store).on_submitted(job, False)
+
+    saved = find_by_job(client, "stuck-row-0000000001")
+    assert saved["job_status"] == "failed"
+    assert saved["job_error"] == job.error
+    assert saved["hits"] == 2
