@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, ApiError } from './api';
 import { TopBar } from './components/TopBar';
 import { PlateWorkspace } from './components/plate/PlateWorkspace';
+import { RecordsWorkspace } from './components/records/RecordsWorkspace';
 import { SkyWorkspace } from './components/sky/SkyWorkspace';
 import { useJobPoller } from './hooks/useJobPoller';
 import { useRoute } from './router';
@@ -80,6 +81,7 @@ export function App() {
 
   const isSky = route.type === 'sky';
   const isPlate = route.type === 'plate';
+  const isRecords = route.type === 'records';
 
   return (
     <div className="planet-app-shell">
@@ -112,6 +114,12 @@ export function App() {
             onRetryJob={handleRetryJob}
           />
         </div>
+
+        {isRecords && (
+          <div className="workspace-layer records-layer layer-active" aria-hidden={false}>
+            <RecordsWorkspace onOpenPlate={handleOpenPlate} />
+          </div>
+        )}
 
         {/* Plate Workspace - rendered when route is plate and job is loaded */}
         {isPlate && (

@@ -14,7 +14,17 @@ nix develop
 If you use direnv, allow the environment once with `direnv allow`; the
 repository's `.envrc` will automatically load the same flake.
 
-In one terminal, start the backend:
+Selection records need PostgreSQL. Start it and apply the migrations once
+(details in `apps/server/README.md`):
+
+```bash
+podman compose up -d db        # or: docker compose up -d db
+cd apps/server
+export DATABASE_URL=postgresql+psycopg://iris:iris@127.0.0.1:5432/iris
+uv run alembic upgrade head
+```
+
+In one terminal, start the backend (with `DATABASE_URL` exported):
 
 ```bash
 cd apps/server

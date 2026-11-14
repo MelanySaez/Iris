@@ -2082,3 +2082,142 @@ button:disabled {
 .plate-open-quiet { position: absolute; right: 16px; bottom: 18px; z-index: 30; padding: 9px 13px; background: var(--sky-panel); border: 1px solid var(--sky-border); }
 .persistent-region foreignObject { opacity: 1; }
 .persistent-region button { width: 36px; height: 36px; border: 2px solid #fff; border-radius: 50%; background: #09111b; color: #fff; font-size: 23px; font-weight: 700; }
+
+/* ==========================================================================
+   Records workspace (saved selections)
+   ========================================================================== */
+.records-layer {
+  background: var(--sky-bg);
+  color: var(--sky-ink);
+  overflow-y: auto;
+}
+
+.records-workspace {
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 24px 16px 48px;
+  box-sizing: border-box;
+}
+
+.records-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.records-header h2 {
+  margin: 0;
+  font-size: 1.25rem;
+}
+
+.records-sub,
+.records-empty {
+  margin: 4px 0 0;
+  color: var(--sky-muted);
+}
+
+.records-error {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--sky-danger);
+  border-radius: 6px;
+  color: var(--sky-danger);
+}
+
+.records-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.records-table th,
+.records-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--sky-line);
+  text-align: left;
+  vertical-align: middle;
+}
+
+.records-table th {
+  color: var(--sky-faint);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.records-table tbody tr:hover {
+  background: var(--sky-hover);
+}
+
+.records-mono {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.records-status.status-ready {
+  color: var(--sky-accent-strong);
+}
+
+.records-status.status-failed {
+  color: var(--sky-danger);
+}
+
+.records-actions {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.records-btn {
+  padding: 5px 10px;
+  border: 1px solid var(--sky-line-strong);
+  border-radius: 6px;
+  background: var(--sky-raised);
+  color: var(--sky-ink);
+  font: inherit;
+  cursor: pointer;
+}
+
+.records-btn:hover:not(:disabled) {
+  border-color: var(--sky-accent);
+}
+
+.records-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.records-btn.danger:hover:not(:disabled) {
+  border-color: var(--sky-danger);
+  color: var(--sky-danger);
+}
+
+.records-more {
+  margin-top: 16px;
+}
+
+@media (max-width: 760px) {
+  .records-table thead {
+    display: none;
+  }
+
+  .records-table tr {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 4px 12px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--sky-line);
+  }
+
+  .records-table td {
+    padding: 0;
+    border: 0;
+  }
+
+  .records-actions {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+  }
+}

@@ -2,10 +2,14 @@ import { useEffect, useState } from 'react';
 
 export type AppRoute =
   | { type: 'sky' }
+  | { type: 'records' }
   | { type: 'plate'; jobId: string };
 
 export function parseHash(hash: string): AppRoute {
   const clean = hash.replace(/^#\/?/, '');
+  if (clean === 'records') {
+    return { type: 'records' };
+  }
   if (clean.startsWith('plate/')) {
     const jobId = clean.slice('plate/'.length).trim();
     if (jobId) {
@@ -18,6 +22,9 @@ export function parseHash(hash: string): AppRoute {
 export function routeToHash(route: AppRoute): string {
   if (route.type === 'plate') {
     return `#/plate/${encodeURIComponent(route.jobId)}`;
+  }
+  if (route.type === 'records') {
+    return '#/records';
   }
   return '#/sky';
 }

@@ -241,4 +241,59 @@ describe('api client', () => {
       expect(apiErr.detail).toBeUndefined();
     }
   });
+
+  it('lists saved selections with limit and cursor', async () => {
+    const body = { items: [], next_before: null };
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => body });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await api.listSelections({ limit: 20, before: '2026-11-14T10:00:00Z' });
+    expect(result).toEqual(body);
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/selections?limit=20&before=2026-11-14T10%3A00%3A00Z',
+      expect.objectContaining({
+        headers: expect.objectContaining({ Accept: 'application/json' }),
+      }),
+    );
+  });
+
+  it('lists saved selections without query when no params are given', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ items: [], next_before: null }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await api.listSelections();
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/selections');
+  });
+
+  it('deletes a selection with DELETE and accepts an empty 204 body', async () => {
+    const json = vi.fn().mockRejectedValue(new SyntaxError('Unexpected end of JSON input'));
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 204, json });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(api.deleteSelection('abc-123')).resolves.toBeUndefined();
+    expect(json).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/selections/abc-123',
+      expect.objectContaining({ method: 'DELETE' }),
+    );
+  });
+
+  it('surfaces the 503 detail when selection storage is disabled', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 503,
+      statusText: 'Service Unavailable',
+      json: async () => ({ detail: 'Selection records are disabled: set DATABASE_URL on the server.' }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(api.listSelections()).rejects.toMatchObject({
+      status: 503,
+      detail: 'Selection records are disabled: set DATABASE_URL on the server.',
+    });
+  });
 });

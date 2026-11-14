@@ -11,6 +11,7 @@ import type {
   ProductType,
   RegionRequest,
   RegionResolveResponse,
+  SelectionListResponse,
   StretchMode,
 } from './types';
 
@@ -60,6 +61,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
     const message = detail ?? `HTTP ${response.status} ${response.statusText}`.trim();
     throw new ApiError(message, response.status, detail);
+  }
+
+  if (response.status === 204) {
+    return undefined as T;
   }
 
   return (await response.json()) as T;
@@ -139,6 +144,18 @@ export const api = {
 
   async getManifest(jobId: string): Promise<JobManifest> {
     return request<JobManifest>(`/api/jobs/${encodeURIComponent(jobId)}/manifest`);
+  },
+
+  async listSelections(params?: { limit?: number; before?: string }): Promise<SelectionListResponse> {
+    const query = new URLSearchParams();
+    if (params?.limit !== undefined) query.set('limit', String(params.limit));
+    if (params?.before) query.set('before', params.before);
+    const qs = query.toString();
+    return request<SelectionListResponse>(qs ? `/api/selections?${qs}` : '/api/selections');
+  },
+
+  async deleteSelection(id: string): Promise<void> {
+    return request<void>(`/api/selections/${encodeURIComponent(id)}`, { method: 'DELETE' });
   },
 };
 
