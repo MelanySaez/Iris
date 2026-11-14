@@ -1,0 +1,13 @@
+node_modules/
+apps/server/data/.cache/spherex_mosaic/
+apps/server/data/cache/
+apps/server/data/derived/spherex_mosaic/
+
+# IA related
+.atl/
+.codegraph
+.engram/
+.codex/
+.impeccable/
+.aws/
+.agents/

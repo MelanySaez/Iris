@@ -1,0 +1,1119 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0a0d14">
+  <title>Planet X — Sky Viewer</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0a0d14;
+      --surface: #0f131c;
+      --raised: #161b26;
+      --hover: #1a2030;
+      --line: #1f2634;
+      --line-strong: #2c3446;
+      --ink: #e8eaf0;
+      --muted: #9aa1b2;
+      --faint: #7c8497;
+      --accent: #9db2ff;
+      --accent-strong: #c3d0ff;
+      --accent-soft: rgba(157, 178, 255, .13);
+      --warm: #ffb27a;
+      --danger: #ff9a8f;
+      --radius: 8px;
+      --sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body { margin: 0; min-width: 320px; background: var(--bg); color: var(--ink); font: 14px/1.5 var(--sans); -webkit-font-smoothing: antialiased; }
+    button, input { font: inherit; color: inherit; }
+    button { cursor: pointer; }
+    button:disabled { cursor: not-allowed; opacity: .4; }
+    :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .num { font-variant-numeric: tabular-nums; }
+    .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+
+    /* Shell */
+    .app { height: 100vh; height: 100svh; display: grid; grid-template-rows: auto 1fr; }
+    .topbar { height: 56px; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 0 20px; border-bottom: 1px solid var(--line); }
+    .brand { display: flex; align-items: baseline; gap: 10px; white-space: nowrap; }
+    .brand strong { font-size: 15px; font-weight: 600; letter-spacing: -.01em; }
+    .brand span { color: var(--muted); font-size: 13px; }
+    .badge-wrap { position: relative; }
+    .badge { display: inline-flex; align-items: center; gap: 7px; padding: 4px 11px; border: 1px solid var(--line-strong); border-radius: 999px; background: transparent; color: var(--muted); font-size: 12px; }
+    .badge::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--warm); }
+    .badge:hover, .badge[aria-expanded="true"] { color: var(--ink); border-color: var(--faint); }
+    .popover { position: absolute; right: 0; top: calc(100% + 8px); z-index: 10; width: 280px; margin: 0; padding: 12px 14px; background: var(--raised); border: 1px solid var(--line-strong); border-radius: 10px; color: var(--muted); font-size: 13px; box-shadow: 0 12px 32px rgba(0, 0, 0, .45); }
+    .popover[hidden] { display: none; }
+
+    .workspace { display: grid; grid-template-columns: 272px minmax(0, 1fr); min-height: 0; }
+
+    /* Sidebar */
+    .sidebar { min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 24px; padding: 20px 16px; background: var(--surface); border-right: 1px solid var(--line); }
+    .group-title { margin: 0 0 8px; padding: 0 10px; color: var(--faint); font-size: 12px; font-weight: 500; }
+    .search { position: relative; }
+    .search svg { position: absolute; left: 11px; top: 50%; width: 16px; height: 16px; transform: translateY(-50%); fill: none; stroke: var(--faint); stroke-width: 1.8; stroke-linecap: round; pointer-events: none; }
+    .input { width: 100%; height: 38px; padding: 0 12px; background: var(--bg); border: 1px solid var(--line-strong); border-radius: var(--radius); font-size: 13px; }
+    .input::placeholder { color: var(--faint); }
+    .input:focus-visible { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+    .search .input { padding-left: 34px; }
+    .targets { display: flex; flex-direction: column; gap: 2px; margin: 0; padding: 0; list-style: none; }
+    .targets li[hidden] { display: none; }
+    .target { width: 100%; display: flex; flex-direction: column; align-items: flex-start; gap: 1px; padding: 8px 10px; border: 0; border-radius: var(--radius); background: transparent; text-align: left; }
+    .target:hover { background: var(--hover); }
+    .target[aria-pressed="true"] { background: var(--accent-soft); }
+    .target[aria-pressed="true"] .target-name { color: var(--accent-strong); }
+    .target-name { font-size: 14px; }
+    .target-type { color: var(--muted); font-size: 12px; }
+    .empty { margin: 0; padding: 8px 10px; color: var(--muted); font-size: 13px; }
+    .empty[hidden] { display: none; }
+
+    .coords summary { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: var(--radius); color: var(--muted); font-size: 13px; cursor: pointer; list-style: none; }
+    .coords summary::-webkit-details-marker { display: none; }
+    .coords summary::before { content: ""; width: 6px; height: 6px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: rotate(-45deg); transition: transform .15s ease; }
+    .coords[open] summary::before { transform: rotate(45deg); }
+    .coords summary:hover { color: var(--ink); }
+    .coord-form { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 8px; margin-top: 10px; padding: 0 10px; }
+    .coord-form label { display: block; margin-bottom: 4px; color: var(--muted); font-size: 12px; }
+    .coord-form .btn { grid-column: 1 / -1; }
+    .error { grid-column: 1 / -1; margin: 0; color: var(--danger); font-size: 12px; }
+    .error:empty { display: none; }
+
+    .shortcuts { margin: auto 0 0; padding: 0 10px; color: var(--faint); font-size: 12px; line-height: 2; }
+    kbd { display: inline-block; min-width: 20px; padding: 0 5px; border: 1px solid var(--line-strong); border-bottom-width: 2px; border-radius: 5px; color: var(--muted); font: 11px/16px var(--sans); text-align: center; }
+
+    .btn { height: 34px; padding: 0 14px; border: 1px solid var(--line-strong); border-radius: var(--radius); background: var(--raised); font-size: 13px; white-space: nowrap; }
+    .btn:hover:not(:disabled) { background: var(--hover); border-color: var(--faint); }
+    .btn-primary { background: var(--accent); border-color: var(--accent); color: #0a0d14; font-weight: 500; }
+    .btn-primary:hover:not(:disabled) { background: var(--accent-strong); border-color: var(--accent-strong); }
+
+    /* Stage */
+    .stage { min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 14px; padding: 16px; }
+    .map { position: relative; flex: 1; min-height: 320px; overflow: hidden; border-radius: 12px; background: #05070c; }
+    #sky { position: absolute; inset: 0; display: block; width: 100%; height: 100%; touch-action: none; }
+    .float { background: rgba(12, 15, 23, .8); border: 1px solid rgba(255, 255, 255, .06); border-radius: 10px; -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); }
+    .map-tools { position: absolute; top: 12px; right: 12px; display: flex; gap: 8px; }
+    .tool-group { display: flex; gap: 2px; padding: 3px; }
+    .icon-btn { width: 32px; height: 32px; display: grid; place-items: center; border: 0; border-radius: 7px; background: transparent; color: var(--muted); }
+    .icon-btn:hover:not(:disabled) { color: var(--ink); background: rgba(255, 255, 255, .06); }
+    .icon-btn[aria-pressed="true"] { color: var(--accent-strong); background: var(--accent-soft); }
+    .icon-btn svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+
+    .info { position: absolute; left: 12px; bottom: 12px; width: min(260px, calc(100% - 24px)); padding: 12px 14px; pointer-events: none; }
+    .info h2 { margin: 0; font-size: 15px; font-weight: 600; line-height: 1.3; }
+    .info p { margin: 2px 0 0; color: var(--muted); font-size: 12.5px; }
+    .info dl { margin: 10px 0 0; font-size: 12.5px; }
+    .info dl[hidden], .info .row[hidden] { display: none; }
+    .info .row { display: flex; justify-content: space-between; gap: 14px; padding: 2px 0; }
+    .info dt { color: var(--faint); }
+    .info dd { margin: 0; text-align: right; }
+
+    .readout { position: absolute; right: 12px; bottom: 12px; display: flex; align-items: center; gap: 14px; padding: 7px 11px; color: var(--muted); font-size: 12px; pointer-events: none; }
+    .readout[hidden], .readout > [hidden] { display: none; }
+    .scale { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+    .scale-bar { height: 4px; border: 1px solid var(--muted); border-top: 0; }
+
+    .hint { position: absolute; left: 50%; top: 14px; transform: translateX(-50%); max-width: calc(100% - 200px); padding: 7px 13px; color: var(--ink); font-size: 12.5px; text-align: center; pointer-events: none; transition: opacity .35s ease; }
+    .hint.gone { opacity: 0; }
+
+    /* Analysis panel */
+    .panel { display: flex; flex-direction: column; gap: 10px; }
+    .tabs, .segmented { display: inline-flex; gap: 2px; padding: 3px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
+    .tabs { align-self: flex-start; }
+    .tab, .seg { height: 30px; padding: 0 14px; border: 0; border-radius: 7px; background: transparent; color: var(--muted); font-size: 13px; }
+    .tab:hover, .seg:hover { color: var(--ink); }
+    .tab[aria-selected="true"] { background: var(--raised); color: var(--ink); box-shadow: 0 1px 2px rgba(0, 0, 0, .35); }
+    .seg { min-width: 32px; height: 28px; padding: 0 8px; }
+    .seg[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent-strong); }
+    .panel-body { display: flex; align-items: center; justify-content: space-between; gap: 12px 24px; min-height: 40px; }
+    .panel-desc { margin: 0; max-width: 60ch; color: var(--muted); font-size: 13px; }
+    .tools { display: flex; align-items: center; justify-content: flex-end; gap: 10px; flex-wrap: wrap; }
+    .range { display: flex; align-items: center; gap: 10px; color: var(--faint); font-size: 12px; }
+    .range input { width: 200px; accent-color: var(--accent); }
+    .tools output { min-width: 112px; font-size: 13px; text-align: right; }
+    .pair { color: var(--muted); font-size: 13px; }
+    .pair b { color: var(--ink); font-weight: 500; }
+
+    @media (max-width: 860px) {
+      .app { height: auto; min-height: 100svh; }
+      .workspace { grid-template-columns: 1fr; }
+      .sidebar { order: 2; overflow: visible; border-right: 0; border-top: 1px solid var(--line); }
+      .stage { order: 1; padding: 12px; }
+      .map { flex: none; height: 62svh; min-height: 340px; }
+      .shortcuts { display: none; }
+    }
+    @media (max-width: 560px) {
+      .topbar { padding: 0 14px; }
+      .brand span { display: none; }
+      .hint { top: 56px; max-width: calc(100% - 24px); width: max-content; }
+      .readout { display: none; }
+      .info { right: 12px; width: auto; }
+      .tabs { align-self: stretch; }
+      .tab { flex: 1; padding: 0 6px; }
+      .panel-body { flex-direction: column; align-items: flex-start; }
+      .tools { justify-content: flex-start; }
+      .range input { width: 150px; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { transition-duration: .01ms !important; animation-duration: .01ms !important; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand"><strong>Planet X</strong><span>Infrared sky viewer</span></div>
+      <div class="badge-wrap">
+        <button class="badge" id="dataBadge" type="button" aria-expanded="false" aria-controls="dataNote">Simulated data</button>
+        <p class="popover" id="dataNote" hidden>Imagery, epochs and spectral channels are generated for this prototype. Object names and coordinates are real; nothing shown here is a measurement.</p>
+      </div>
+    </header>
+
+    <div class="workspace">
+      <aside class="sidebar" aria-label="Find objects">
+        <section>
+          <form class="search" id="searchForm" role="search">
+            <label class="sr-only" for="search">Search objects</label>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4 4"/></svg>
+            <input class="input" id="search" type="search" placeholder="Search objects" autocomplete="off">
+          </form>
+        </section>
+
+        <section aria-labelledby="objectsTitle">
+          <h2 class="group-title" id="objectsTitle">Objects</h2>
+          <ul class="targets" id="targetList"></ul>
+          <p class="empty" id="emptyList" hidden>No objects match your search.</p>
+        </section>
+
+        <details class="coords" id="coordsPanel">
+          <summary>Go to coordinates</summary>
+          <form class="coord-form" id="coordForm" novalidate>
+            <div><label for="raInput">RA (degrees)</label><input class="input num" id="raInput" inputmode="decimal" autocomplete="off"></div>
+            <div><label for="decInput">Dec (degrees)</label><input class="input num" id="decInput" inputmode="decimal" autocomplete="off"></div>
+            <p class="error" id="coordError" role="alert"></p>
+            <button class="btn btn-primary" type="submit">Go</button>
+          </form>
+        </details>
+
+        <p class="shortcuts"><kbd>+</kbd> <kbd>−</kbd> zoom · <kbd>0</kbd> all sky<br><kbd>R</kbd> select region · <kbd>Esc</kbd> clear</p>
+      </aside>
+
+      <main class="stage">
+        <h1 class="sr-only">Planet X sky viewer</h1>
+        <section class="map" id="map" aria-label="Sky map">
+          <canvas id="sky" tabindex="0" role="application" aria-roledescription="sky map" aria-label="Sky map" aria-describedby="mapHelp"></canvas>
+          <p class="sr-only" id="mapHelp">Plus and minus zoom, arrow keys pan, R switches to region selection; in region mode, arrow keys move the cursor and Enter places a region.</p>
+
+          <div class="map-tools">
+            <div class="tool-group float" role="group" aria-label="Pointer tool">
+              <button class="icon-btn" id="toolPan" type="button" aria-pressed="true" aria-label="Pan" title="Pan">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v18M3 12h18M12 3 9.5 5.5M12 3l2.5 2.5M12 21l-2.5-2.5M12 21l2.5-2.5M3 12l2.5-2.5M3 12l2.5 2.5M21 12l-2.5-2.5M21 12l-2.5 2.5"/></svg>
+              </button>
+              <button class="icon-btn" id="toolRegion" type="button" aria-pressed="false" aria-label="Select region" title="Select region (R)">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4.5" y="4.5" width="15" height="15" rx="1.5" stroke-dasharray="3 2.6"/></svg>
+              </button>
+            </div>
+            <div class="tool-group float" role="group" aria-label="Zoom">
+              <button class="icon-btn" id="zoomIn" type="button" aria-label="Zoom in" title="Zoom in (+)">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 6v12M6 12h12"/></svg>
+              </button>
+              <button class="icon-btn" id="zoomOut" type="button" aria-label="Zoom out" title="Zoom out (−)">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 12h12"/></svg>
+              </button>
+              <button class="icon-btn" id="allSky" type="button" aria-label="Show all sky" title="All sky (0)">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="12" rx="8.5" ry="5.5"/><path d="M12 6.5v11M3.5 12h17"/></svg>
+              </button>
+            </div>
+          </div>
+
+          <p class="hint float" id="hint"></p>
+
+          <div class="info float" aria-live="polite">
+            <h2 id="infoName">All sky</h2>
+            <p id="infoType">Click anywhere on the map to zoom in</p>
+            <dl id="infoRows" hidden>
+              <div class="row"><dt>RA</dt><dd class="num" id="infoRa"></dd></div>
+              <div class="row"><dt>Dec</dt><dd class="num" id="infoDec"></dd></div>
+              <div class="row"><dt>Field</dt><dd class="num" id="infoFov"></dd></div>
+              <div class="row" id="rowRegion" hidden><dt>Region</dt><dd class="num" id="infoRegion"></dd></div>
+            </dl>
+          </div>
+
+          <div class="readout float num" id="readout" hidden>
+            <span id="cursorCoords" hidden></span>
+            <span class="scale" id="scale" hidden><span class="scale-bar" id="scaleBar"></span><span id="scaleLabel"></span></span>
+          </div>
+        </section>
+
+        <section class="panel" aria-label="Analysis">
+          <div class="tabs" role="tablist" aria-label="Analysis mode">
+            <button class="tab" id="tab-spectral" type="button" role="tab" aria-controls="panelBody" data-mode="spectral">Spectral</button>
+            <button class="tab" id="tab-time" type="button" role="tab" aria-controls="panelBody" data-mode="time">Time</button>
+            <button class="tab" id="tab-difference" type="button" role="tab" aria-controls="panelBody" data-mode="difference">Compare</button>
+            <button class="tab" id="tab-object" type="button" role="tab" aria-controls="panelBody" data-mode="object">Object</button>
+          </div>
+          <div class="panel-body" id="panelBody" role="tabpanel">
+            <p class="panel-desc" id="panelDesc"></p>
+            <div class="tools" id="tools"></div>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <script>
+    (() => {
+      'use strict';
+
+      const TARGETS = [
+        { id: 'wise', name: 'WISE 0855−0714', type: 'Brown dwarf', ra: 133.7951, dec: -7.2451, motion: 'proper', pm: .035, pa: 256, note: 'One of the coldest known brown dwarfs, about 7.4 light-years away.' },
+        { id: 'barnard', name: "Barnard's Star", type: 'Red dwarf', ra: 269.4521, dec: 4.6934, motion: 'proper', pm: .05, pa: 356, note: 'The star with the largest known proper motion, about 6 light-years away.' },
+        { id: 'indi', name: 'Epsilon Indi Ba/Bb', type: 'Brown dwarf pair', ra: 330.8471, dec: -56.7892, motion: 'proper', pm: .03, pa: 123, note: 'Two brown dwarfs orbiting the star Epsilon Indi, about 12 light-years away.' },
+        { id: 'rw', name: 'RW Aurigae', type: 'Variable star', ra: 77.8981, dec: 30.3974, motion: 'variable', phase: .2, note: 'A young T Tauri star whose brightness dips irregularly.' },
+        { id: 'rdra', name: 'R Draconis', type: 'Variable star', ra: 248.1676, dec: 66.755, motion: 'variable', phase: .6, note: 'A Mira variable that brightens and fades over roughly 245 days.' }
+      ];
+      const EPOCHS = 6;
+      const REF_EPOCH = 2;
+      const CHANNELS = 102;
+      const ALL_SKY = 360;
+      const MIN_FOV = .05;
+      const MAX_FOV = 60;
+      const DEG = Math.PI / 180;
+      const ACCENT = '#9db2ff';
+      const WARM = '#ffb27a';
+      const NICE = [1, 2, 5, 10, 15, 30].map((s) => s / 3600)
+        .concat([1, 2, 5, 10, 15, 30].map((m) => m / 60), [1, 2, 5, 10, 15, 30, 45]);
+
+      const state = {
+        target: null, ra: 133.7951, dec: -7.2451, fov: ALL_SKY,
+        mode: 'spectral', channel: 62, epoch: REF_EPOCH, swap: false,
+        tool: 'pan', roi: null, playing: false, cursor: { x: .5, y: .5 }
+      };
+
+      const $ = (id) => document.getElementById(id);
+      const canvas = $('sky');
+      const ctx = canvas.getContext('2d');
+      const touchOnly = window.matchMedia('(hover: none)').matches;
+      let W = 1, H = 1, DPR = 1;
+      let pointer = null;
+      let playTimer = null;
+      let keyboardCursor = false;
+      let hits = [];
+      let builtMode = null;
+
+      /* ---------- helpers ---------- */
+      const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+      const wrapRa = (ra) => ((ra % 360) + 360) % 360;
+      const pad = (n, len = 2) => String(n).padStart(len, '0');
+      const esc = (s) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+      const currentTarget = () => TARGETS.find((t) => t.id === state.target) || null;
+      const isAllSky = () => state.fov === ALL_SKY;
+
+      function hash(a, b, c) {
+        let h = Math.imul(a | 0, 0x27d4eb2d) ^ Math.imul(b | 0, 0x165667b1) ^ Math.imul(c | 0, 0x9e3779b1);
+        h = Math.imul(h ^ (h >>> 15), 0x85ebca6b);
+        h = Math.imul(h ^ (h >>> 13), 0xc2b2ae35);
+        h ^= h >>> 16;
+        return (h >>> 0) / 4294967296;
+      }
+      function fmtHms(ra) {
+        const t = Math.round(wrapRa(ra) / 15 * 36000);
+        return `${pad(Math.floor(t / 36000) % 24)}h ${pad(Math.floor(t / 600) % 60)}m ${pad(Math.floor((t % 600) / 10))}.${t % 10}s`;
+      }
+      function fmtDms(dec) {
+        const t = Math.round(Math.abs(dec) * 3600);
+        return `${dec < 0 ? '−' : '+'}${pad(Math.floor(t / 3600))}° ${pad(Math.floor(t / 60) % 60)}′ ${pad(t % 60)}″`;
+      }
+      function fmtAngle(deg) {
+        if (deg >= 1) return `${Number(deg.toFixed(deg < 10 ? 2 : 1))}°`;
+        if (deg >= 1 / 60) return `${Number((deg * 60).toFixed(1))}′`;
+        return `${Number((deg * 3600).toFixed(1))}″`;
+      }
+      function niceAtLeast(x) { return NICE.find((n) => n >= x) || NICE[NICE.length - 1]; }
+      function niceAtMost(x) { let best = NICE[0]; NICE.forEach((n) => { if (n <= x) best = n; }); return best; }
+
+      /* ---------- simulated sky model ---------- */
+      function targetAt(t, epoch) {
+        if (t.motion === 'proper') {
+          const k = epoch - REF_EPOCH;
+          const cosd = Math.max(.2, Math.cos(t.dec * DEG));
+          return { ra: t.ra + t.pm * k * Math.sin(t.pa * DEG) / cosd, dec: t.dec + t.pm * k * Math.cos(t.pa * DEG), bright: 1 };
+        }
+        const wave = Math.sin((epoch / EPOCHS + t.phase) * Math.PI * 2);
+        return { ra: t.ra, dec: t.dec, bright: .55 + .45 * (.5 + .5 * wave) };
+      }
+      function spectralWeight(temp) {
+        const t = state.channel / (CHANNELS - 1);
+        return .4 + .6 * (1 - Math.min(1, Math.abs(temp - (1 - t)) * 1.3));
+      }
+      function starColor(temp, a) {
+        return `rgba(${(255 - 55 * temp) | 0},${(208 + 7 * temp) | 0},${(170 + 85 * temp) | 0},${a.toFixed(3)})`;
+      }
+      function skyTint(alpha = 1) { // deep blue at short wavelengths, warm rust at long ones
+        const t = state.channel / (CHANNELS - 1);
+        const mix = (a, b) => Math.round(a + (b - a) * t);
+        return `rgba(${mix(16, 40)},${mix(22, 20)},${mix(44, 20)},${alpha})`;
+      }
+      function bandHaze(alpha) {
+        const t = state.channel / (CHANNELS - 1);
+        const mix = (a, b) => Math.round(a + (b - a) * t);
+        return `rgba(${mix(170, 255)},${mix(190, 168)},${mix(255, 125)},${alpha})`;
+      }
+      function bandDec(ra) { // Galactic equator in equatorial coordinates
+        return Math.atan(-Math.cos((ra - 192.86) * DEG) / Math.tan(27.13 * DEG)) / DEG;
+      }
+      const allSkyStars = (() => {
+        let seed = 271828;
+        const rnd = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
+        const gauss = () => Math.sqrt(-2 * Math.log(rnd() + 1e-9)) * Math.cos(2 * Math.PI * rnd());
+        const list = [];
+        for (let i = 0; i < 1400; i += 1) list.push({ ra: rnd() * 360, dec: Math.asin(rnd() * 2 - 1) / DEG, temp: rnd(), mag: rnd() });
+        for (let i = 0; i < 900; i += 1) { const ra = rnd() * 360; list.push({ ra, dec: clamp(bandDec(ra) + gauss() * 7, -89, 89), temp: rnd(), mag: rnd() * .8 }); }
+        return list;
+      })();
+
+      /* ---------- projections ---------- */
+      function makeView(vp) {
+        const ppd = W / state.fov; // field of view spans the full canvas width
+        return { ...vp, cx: vp.x + vp.w / 2, cy: vp.y + vp.h / 2, ppd, cosd: Math.max(.2, Math.cos(state.dec * DEG)) };
+      }
+      function panes() {
+        if (isAllSky()) return [];
+        if (state.mode === 'difference') { const half = W / 2; return [makeView({ x: 0, y: 0, w: half, h: H }), makeView({ x: half, y: 0, w: W - half, h: H })]; }
+        return [makeView({ x: 0, y: 0, w: W, h: H })];
+      }
+      function paneAt(x) { const ps = panes(); return ps.find((v) => x >= v.x && x < v.x + v.w) || ps[ps.length - 1]; }
+      function toScreen(v, ra, dec) {
+        const d = ((ra - state.ra + 540) % 360) - 180;
+        return { x: v.cx - d * v.cosd * v.ppd, y: v.cy - (dec - state.dec) * v.ppd };
+      }
+      function toSky(v, x, y) {
+        return { ra: wrapRa(state.ra + (v.cx - x) / (v.cosd * v.ppd)), dec: clamp(state.dec + (v.cy - y) / v.ppd, -90, 90) };
+      }
+      function skyEllipse() { const rx = Math.min(W * .45, H * .8); return { cx: W / 2, cy: H / 2, rx, ry: rx / 2 }; }
+      function allSkyToScreen(e, ra, dec) {
+        const r = ((ra + 180) % 360 + 360) % 360 - 180;
+        const s = Math.sqrt(Math.max(0, 1 - (dec / 90) ** 2));
+        return { x: e.cx - (r / 180) * e.rx * s, y: e.cy - (dec / 90) * e.ry };
+      }
+      function allSkyFromScreen(e, x, y) {
+        const dec = -(y - e.cy) / e.ry * 90;
+        if (Math.abs(dec) >= 90) return null;
+        const s = Math.sqrt(1 - (dec / 90) ** 2);
+        const r = -(x - e.cx) / (e.rx * s) * 180;
+        return Math.abs(r) > 180 ? null : { ra: wrapRa(r), dec };
+      }
+      function skyAt(p) {
+        if (isAllSky()) return allSkyFromScreen(skyEllipse(), p.x, p.y);
+        return toSky(paneAt(p.x), p.x, p.y);
+      }
+
+      /* ---------- drawing ---------- */
+      function resizeCanvas() {
+        const rect = canvas.getBoundingClientRect();
+        DPR = Math.min(window.devicePixelRatio || 1, 2);
+        W = Math.max(1, rect.width);
+        H = Math.max(1, rect.height);
+        canvas.width = Math.round(W * DPR);
+        canvas.height = Math.round(H * DPR);
+        updateScale();
+        draw();
+      }
+
+      function draw() {
+        ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+        ctx.fillStyle = '#05070c';
+        ctx.fillRect(0, 0, W, H);
+        hits = [];
+        if (isAllSky()) drawAllSky();
+        else if (state.mode === 'difference') drawComparison();
+        else { const v = panes()[0]; drawField(v, state.mode === 'time' ? state.epoch : REF_EPOCH, {}); }
+        drawRegion();
+        drawKeyboardCursor();
+      }
+
+      function drawAllSky() {
+        const e = skyEllipse();
+        const chT = state.channel / (CHANNELS - 1);
+        const sample = (pts) => { ctx.beginPath(); pts.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y))); ctx.stroke(); };
+        ctx.save();
+        ctx.beginPath();
+        ctx.ellipse(e.cx, e.cy, e.rx, e.ry, 0, 0, Math.PI * 2);
+        ctx.clip();
+        const bg = ctx.createRadialGradient(e.cx, e.cy, 0, e.cx, e.cy, e.rx);
+        bg.addColorStop(0, skyTint());
+        bg.addColorStop(1, '#070a11');
+        ctx.fillStyle = bg;
+        ctx.fillRect(e.cx - e.rx, e.cy - e.ry, e.rx * 2, e.ry * 2);
+        for (let ra = 0; ra < 360; ra += 5) { // dust glows brighter at long wavelengths
+          const p = allSkyToScreen(e, ra, bandDec(ra));
+          const r = e.ry * .2;
+          const haze = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, r);
+          haze.addColorStop(0, bandHaze(.035 + chT * .07));
+          haze.addColorStop(1, 'transparent');
+          ctx.fillStyle = haze;
+          ctx.fillRect(p.x - r, p.y - r, r * 2, r * 2);
+        }
+        ctx.strokeStyle = 'rgba(157,178,255,.08)';
+        ctx.lineWidth = 1;
+        [-60, -30, 0, 30, 60].forEach((dec) => { const pts = []; for (let r = -180; r <= 180; r += 4) pts.push(allSkyToScreen(e, r, dec)); sample(pts); });
+        [0, 60, 120, 180, 240, 300].forEach((ra) => { const pts = []; for (let d = -90; d <= 90; d += 3) pts.push(allSkyToScreen(e, ra, d)); sample(pts); });
+        allSkyStars.forEach((s) => {
+          const p = allSkyToScreen(e, s.ra, s.dec);
+          ctx.fillStyle = starColor(s.temp, (.15 + s.mag * .7) * spectralWeight(s.temp));
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, .4 + s.mag * 1.1, 0, Math.PI * 2);
+          ctx.fill();
+        });
+        ctx.restore();
+        ctx.strokeStyle = 'rgba(157,178,255,.28)';
+        ctx.beginPath();
+        ctx.ellipse(e.cx, e.cy, e.rx, e.ry, 0, 0, Math.PI * 2);
+        ctx.stroke();
+        TARGETS.forEach((t) => {
+          const p = allSkyToScreen(e, t.ra, t.dec);
+          const selected = t.id === state.target;
+          drawMarker(p.x, p.y, 6, selected ? ACCENT : 'rgba(232,234,240,.6)', 1);
+          drawLabel(t.name, p.x + 10, p.y + 4, selected ? '#c3d0ff' : 'rgba(232,234,240,.75)', 11);
+          hits.push({ id: t.id, x: p.x, y: p.y });
+        });
+      }
+
+      function drawComparison() {
+        const [left, right] = panes();
+        const a = state.swap ? EPOCHS - 1 : 0;
+        const b = state.swap ? 0 : EPOCHS - 1;
+        drawField(left, a, { color: WARM, ghost: b });
+        drawField(right, b, { color: ACCENT, ghost: a });
+        ctx.strokeStyle = 'rgba(232,234,240,.35)';
+        ctx.beginPath();
+        ctx.moveTo(right.x + .5, 0);
+        ctx.lineTo(right.x + .5, H);
+        ctx.stroke();
+        const pillY = W < 600 ? 60 : 12; // keep clear of the map tools on narrow screens
+        drawPill(`A · Epoch ${a + 1}`, left.x + 12, pillY, WARM);
+        drawPill(`B · Epoch ${b + 1}`, right.x + 12, pillY, ACCENT);
+      }
+
+      function drawField(v, epoch, opts) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(v.x, v.y, v.w, v.h);
+        ctx.clip();
+        const bg = ctx.createRadialGradient(v.cx, v.cy, 0, v.cx, v.cy, Math.max(v.w, v.h) * .75);
+        bg.addColorStop(0, skyTint());
+        bg.addColorStop(1, '#05070c');
+        ctx.fillStyle = bg;
+        ctx.fillRect(v.x, v.y, v.w, v.h);
+        drawStars(v);
+        drawGrid(v);
+        drawTargets(v, epoch, opts);
+        ctx.restore();
+      }
+
+      // Stars live in sky coordinates on nested cell grids, so zooming reveals
+      // fainter stars and spreads bright ones apart instead of redrawing the same image.
+      function drawStars(v) {
+        const cLog = Math.log2(26 / v.ppd); // finest cell ~26px, independent of screen size
+        const L0 = Math.floor(cLog);
+        const frac = cLog - L0;
+        const halfRa = v.w / 2 / (v.cosd * v.ppd);
+        const halfDec = v.h / 2 / v.ppd;
+        for (let k = 0; k < 5; k += 1) {
+          const L = L0 + k;
+          const c = 2 ** L;
+          const level = k - frac + 1;
+          const baseA = Math.min(1, .1 + level * .19);
+          const baseR = .45 + level * .32;
+          const i0 = Math.floor((state.ra - halfRa) / c);
+          const i1 = Math.floor((state.ra + halfRa) / c);
+          const j0 = Math.max(Math.floor((state.dec - halfDec) / c), Math.floor(-90 / c));
+          const j1 = Math.min(Math.floor((state.dec + halfDec) / c), Math.floor(90 / c));
+          for (let i = i0; i <= i1; i += 1) {
+            for (let j = j0; j <= j1; j += 1) {
+              const s = L * 8;
+              if (hash(i, j, s) > .72) continue;
+              const ra = (i + hash(i, j, s + 1)) * c;
+              const dec = (j + hash(i, j, s + 2)) * c;
+              const temp = hash(i, j, s + 3);
+              const mag = hash(i, j, s + 4);
+              const a = baseA * (.45 + .55 * mag) * spectralWeight(temp);
+              if (a < .03) continue;
+              const x = v.cx - (ra - state.ra) * v.cosd * v.ppd;
+              const y = v.cy - (dec - state.dec) * v.ppd;
+              const r = baseR * (.7 + .6 * mag);
+              if (a > .7 && r > 1.6) {
+                ctx.fillStyle = starColor(temp, .07);
+                ctx.beginPath();
+                ctx.arc(x, y, r * 3.2, 0, Math.PI * 2);
+                ctx.fill();
+              }
+              ctx.fillStyle = starColor(temp, a);
+              ctx.beginPath();
+              ctx.arc(x, y, r, 0, Math.PI * 2);
+              ctx.fill();
+            }
+          }
+        }
+      }
+
+      function drawGrid(v) {
+        const decStep = niceAtLeast(150 / v.ppd);
+        const raStep = niceAtLeast(decStep / v.cosd);
+        const halfRa = v.w / 2 / (v.cosd * v.ppd);
+        const halfDec = v.h / 2 / v.ppd;
+        ctx.strokeStyle = 'rgba(157,178,255,.09)';
+        ctx.lineWidth = 1;
+        ctx.font = '11px Inter, system-ui, sans-serif';
+        ctx.fillStyle = 'rgba(232,234,240,.4)';
+        for (let d = Math.ceil((state.dec - halfDec) / decStep) * decStep; d <= state.dec + halfDec; d += decStep) {
+          if (Math.abs(d) > 90) continue;
+          const y = Math.round(v.cy - (d - state.dec) * v.ppd) + .5;
+          ctx.beginPath(); ctx.moveTo(v.x, y); ctx.lineTo(v.x + v.w, y); ctx.stroke();
+          if (y > 40 && y < v.y + v.h - 150) ctx.fillText(fmtDms(d).replace(/ 00″$/, '').replace(/ 00′$/, ''), v.x + 10, y - 5);
+        }
+        for (let r = Math.ceil((state.ra - halfRa) / raStep) * raStep; r <= state.ra + halfRa; r += raStep) {
+          const x = Math.round(v.cx - (r - state.ra) * v.cosd * v.ppd) + .5;
+          ctx.beginPath(); ctx.moveTo(x, v.y); ctx.lineTo(x, v.y + v.h); ctx.stroke();
+          if (x > v.x + 8 && x < Math.min(v.x + v.w, W - 230) - 70) ctx.fillText(fmtHms(r).replace(/\.\ds$/, 's').replace(/ 00s$/, ''), x + 5, v.y + 20);
+        }
+      }
+
+      function drawTargets(v, epoch, opts) {
+        TARGETS.forEach((t) => {
+          const selected = t.id === state.target;
+          const pos = targetAt(t, epoch);
+          const p = toScreen(v, pos.ra, pos.dec);
+          if (p.x < v.x - 80 || p.x > v.x + v.w + 80 || p.y < v.y - 80 || p.y > v.y + v.h + 80) return;
+          const color = opts.color || (selected ? ACCENT : 'rgba(232,234,240,.55)');
+
+          if (selected && t.motion === 'proper' && state.mode === 'time') {
+            ctx.strokeStyle = 'rgba(157,178,255,.35)';
+            ctx.setLineDash([2, 4]);
+            ctx.beginPath();
+            for (let e = 0; e < EPOCHS; e += 1) { const q = toScreen(v, targetAt(t, e).ra, targetAt(t, e).dec); if (e) ctx.lineTo(q.x, q.y); else ctx.moveTo(q.x, q.y); }
+            ctx.stroke();
+            ctx.setLineDash([]);
+            for (let e = 0; e < EPOCHS; e += 1) {
+              const q = toScreen(v, targetAt(t, e).ra, targetAt(t, e).dec);
+              ctx.fillStyle = e === epoch ? ACCENT : 'rgba(157,178,255,.4)';
+              ctx.beginPath(); ctx.arc(q.x, q.y, 2.2, 0, Math.PI * 2); ctx.fill();
+            }
+          }
+          if (selected && opts.ghost !== undefined && t.motion === 'proper') {
+            const g = targetAt(t, opts.ghost);
+            const q = toScreen(v, g.ra, g.dec);
+            ctx.strokeStyle = 'rgba(232,234,240,.4)';
+            ctx.setLineDash([3, 3]);
+            ctx.beginPath(); ctx.arc(q.x, q.y, 11, 0, Math.PI * 2); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(q.x, q.y); ctx.lineTo(p.x, p.y); ctx.stroke();
+            ctx.setLineDash([]);
+          }
+
+          const glow = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, 22 * pos.bright);
+          glow.addColorStop(0, selected ? 'rgba(255,224,190,.45)' : 'rgba(255,224,190,.2)');
+          glow.addColorStop(1, 'transparent');
+          ctx.fillStyle = glow;
+          ctx.beginPath(); ctx.arc(p.x, p.y, 22 * pos.bright, 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = '#ffe9cf';
+          ctx.beginPath(); ctx.arc(p.x, p.y, 1.6 + 1.4 * pos.bright, 0, Math.PI * 2); ctx.fill();
+          drawMarker(p.x, p.y, 13, color, selected ? 1.5 : 1);
+          drawLabel(t.name, p.x + 19, p.y + 4, selected ? '#e8eaf0' : 'rgba(232,234,240,.7)', 12);
+          hits.push({ id: t.id, x: p.x, y: p.y });
+        });
+      }
+
+      function drawMarker(x, y, r, color, width) {
+        ctx.strokeStyle = color;
+        ctx.lineWidth = width;
+        ctx.beginPath();
+        ctx.arc(x, y, r, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.lineWidth = 1;
+      }
+      function drawLabel(text, x, y, color, size) {
+        ctx.save();
+        ctx.font = `500 ${size}px Inter, system-ui, sans-serif`;
+        ctx.shadowColor = 'rgba(0,0,0,.9)';
+        ctx.shadowBlur = 4;
+        ctx.fillStyle = color;
+        ctx.fillText(text, x, y);
+        ctx.restore();
+      }
+      function drawPill(text, x, y, dot) {
+        ctx.save();
+        ctx.font = '500 12px Inter, system-ui, sans-serif';
+        const w = ctx.measureText(text).width + 30;
+        ctx.fillStyle = 'rgba(12,15,23,.82)';
+        ctx.beginPath();
+        if (ctx.roundRect) ctx.roundRect(x, y, w, 26, 8); else ctx.rect(x, y, w, 26);
+        ctx.fill();
+        ctx.fillStyle = dot;
+        ctx.beginPath(); ctx.arc(x + 12, y + 13, 3, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#e8eaf0';
+        ctx.fillText(text, x + 21, y + 17);
+        ctx.restore();
+      }
+
+      function drawRegion() {
+        let rect = null;
+        if (pointer && pointer.moved && pointer.mode === 'region') {
+          rect = { x: Math.min(pointer.start.x, pointer.last.x), y: Math.min(pointer.start.y, pointer.last.y), w: Math.abs(pointer.last.x - pointer.start.x), h: Math.abs(pointer.last.y - pointer.start.y) };
+        } else if (state.roi) {
+          rect = { x: state.roi.x * W, y: state.roi.y * H, w: state.roi.w * W, h: state.roi.h * H };
+        }
+        if (!rect) return;
+        ctx.fillStyle = 'rgba(157,178,255,.07)';
+        ctx.fillRect(rect.x, rect.y, rect.w, rect.h);
+        ctx.strokeStyle = ACCENT;
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([5, 4]);
+        ctx.strokeRect(rect.x + .5, rect.y + .5, rect.w, rect.h);
+        ctx.setLineDash([]);
+        ctx.lineWidth = 1;
+      }
+
+      function drawKeyboardCursor() {
+        if (!keyboardCursor || state.tool !== 'region' || document.activeElement !== canvas || pointer) return;
+        const x = state.cursor.x * W;
+        const y = state.cursor.y * H;
+        ctx.save();
+        [[4, '#05070c'], [1.5, '#c3d0ff']].forEach(([lw, color]) => {
+          ctx.lineWidth = lw;
+          ctx.strokeStyle = color;
+          ctx.beginPath();
+          ctx.arc(x, y, 10, 0, Math.PI * 2);
+          ctx.moveTo(x - 16, y); ctx.lineTo(x + 16, y);
+          ctx.moveTo(x, y - 16); ctx.lineTo(x, y + 16);
+          ctx.stroke();
+        });
+        ctx.restore();
+      }
+
+      /* ---------- UI state ---------- */
+      const MODE_COPY = {
+        spectral: () => 'Slide across channels: hot stars fade and cool ones brighten as the wavelength gets longer.',
+        time: (t) => (!t ? 'Pick an object to follow it across six epochs.'
+          : t.motion === 'proper' ? `Step through six epochs to see ${t.name} drift across the field.`
+            : `Step through six epochs to see ${t.name} change in brightness.`),
+        difference: () => 'Two epochs side by side. The dashed ring marks where the object was in the other frame.',
+        object: (t) => (t ? t.note : 'Pick an object from the list to see its details.')
+      };
+
+      function buildTools() {
+        const tools = $('tools');
+        if (state.mode === 'spectral') {
+          tools.innerHTML = `<div class="range"><span aria-hidden="true">Short λ</span><input id="channel" type="range" min="0" max="${CHANNELS - 1}" aria-label="Spectral channel"><span aria-hidden="true">Long λ</span></div><output class="num" id="channelOut" for="channel"></output>`;
+          $('channel').addEventListener('input', (e) => { state.channel = Number(e.target.value); render(); });
+        } else if (state.mode === 'time') {
+          const segs = Array.from({ length: EPOCHS }, (_, i) => `<button class="seg num" type="button" data-epoch="${i}" aria-label="Epoch ${i + 1}">${i + 1}</button>`).join('');
+          tools.innerHTML = `<div class="segmented" role="group" aria-label="Epoch">${segs}</div><button class="btn" id="play" type="button">Play</button>`;
+          tools.querySelectorAll('[data-epoch]').forEach((b) => b.addEventListener('click', () => { stopPlay(); state.epoch = Number(b.dataset.epoch); render(); }));
+          $('play').addEventListener('click', togglePlay);
+        } else if (state.mode === 'difference') {
+          tools.innerHTML = `<span class="pair" id="pair"></span><button class="btn" id="swap" type="button">Swap A and B</button>`;
+          $('swap').addEventListener('click', () => { state.swap = !state.swap; render(); });
+        } else {
+          tools.innerHTML = `<button class="btn" id="centerObj" type="button">Center on object</button><button class="btn" id="copyCoords" type="button">Copy coordinates</button>`;
+          $('centerObj').addEventListener('click', () => { if (state.target) selectTarget(state.target); });
+          $('copyCoords').addEventListener('click', copyCoordinates);
+        }
+        builtMode = state.mode;
+      }
+
+      function renderPanel() {
+        const t = currentTarget();
+        document.querySelectorAll('[role="tab"]').forEach((tab) => {
+          const on = tab.dataset.mode === state.mode;
+          tab.setAttribute('aria-selected', String(on));
+          tab.tabIndex = on ? 0 : -1;
+        });
+        $('panelBody').setAttribute('aria-labelledby', `tab-${state.mode}`);
+        if (builtMode !== state.mode) buildTools();
+        $('panelDesc').textContent = MODE_COPY[state.mode](t);
+        if (state.mode === 'spectral') {
+          $('channel').value = state.channel;
+          $('channelOut').textContent = `Channel ${state.channel + 1} of ${CHANNELS}`;
+        } else if (state.mode === 'time') {
+          document.querySelectorAll('[data-epoch]').forEach((b) => b.setAttribute('aria-pressed', String(Number(b.dataset.epoch) === state.epoch)));
+          $('play').textContent = state.playing ? 'Pause' : 'Play';
+        } else if (state.mode === 'difference') {
+          const a = state.swap ? EPOCHS : 1;
+          const b = state.swap ? 1 : EPOCHS;
+          $('pair').innerHTML = `A <b>Epoch ${a}</b> · B <b>Epoch ${b}</b>`;
+        } else {
+          $('centerObj').disabled = !t;
+          $('copyCoords').disabled = !t;
+        }
+      }
+
+      function render() {
+        const t = currentTarget();
+        const all = isAllSky();
+        $('infoName').textContent = t ? t.name : all ? 'All sky' : 'Custom field';
+        $('infoType').textContent = t ? t.type : all ? (touchOnly ? 'Tap anywhere on the map to zoom in' : 'Click anywhere on the map to zoom in') : 'Centered on coordinates';
+        $('infoRows').hidden = all;
+        $('infoRa').textContent = fmtHms(t ? t.ra : state.ra);
+        $('infoDec').textContent = fmtDms(t ? t.dec : state.dec);
+        $('infoFov').textContent = fmtAngle(state.fov);
+        $('rowRegion').hidden = !state.roi && state.tool !== 'region';
+        $('infoRegion').textContent = state.roi ? `${fmtAngle(state.roi.wDeg)} × ${fmtAngle(state.roi.hDeg)}` : 'Drag on the map';
+
+        $('toolPan').setAttribute('aria-pressed', String(state.tool === 'pan'));
+        $('toolRegion').setAttribute('aria-pressed', String(state.tool === 'region'));
+        $('toolRegion').disabled = all;
+        $('zoomOut').disabled = all;
+        $('allSky').disabled = all;
+        $('zoomIn').disabled = !all && state.fov <= MIN_FOV;
+
+        document.querySelectorAll('.target').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.id === state.target)));
+        canvas.setAttribute('aria-label', all ? 'Sky map, all sky' : `Sky map, ${t ? t.name : 'custom field'}, field of view ${fmtAngle(state.fov)}`);
+
+        renderPanel();
+        updateScale();
+        draw();
+      }
+
+      function updateScale() {
+        const show = !isAllSky();
+        $('scale').hidden = !show;
+        if (show) {
+          const v = panes()[0];
+          const deg = niceAtMost(110 / v.ppd);
+          $('scaleBar').style.width = `${Math.max(12, Math.round(deg * v.ppd))}px`;
+          $('scaleLabel').textContent = fmtAngle(deg);
+        }
+        $('readout').hidden = $('scale').hidden && $('cursorCoords').hidden;
+      }
+
+      /* ---------- actions ---------- */
+      function selectTarget(id) {
+        const t = TARGETS.find((x) => x.id === id);
+        if (!t) return;
+        state.target = id;
+        state.ra = t.ra;
+        state.dec = t.dec;
+        if (isAllSky() || state.fov > 10) state.fov = 2;
+        state.roi = null;
+        dismissHint();
+        render();
+      }
+      function centerOn(ra, dec, fov) {
+        state.target = null;
+        state.ra = wrapRa(ra);
+        state.dec = clamp(dec, -89.9, 89.9);
+        state.fov = fov;
+        state.roi = null;
+        render();
+      }
+      function showAllSky() {
+        stopPlay();
+        state.fov = ALL_SKY;
+        state.roi = null;
+        state.tool = 'pan';
+        if (state.mode === 'time' || state.mode === 'difference') state.mode = 'spectral';
+        render();
+      }
+      function zoomBy(factor, anchor) {
+        dismissHint();
+        if (isAllSky()) {
+          if (factor >= 1) return;
+          const s = anchor ? skyAt(anchor) : null;
+          if (s) { state.ra = s.ra; state.dec = clamp(s.dec, -89.9, 89.9); }
+          state.fov = anchor ? MAX_FOV : 20;
+          state.roi = null;
+          render();
+          return;
+        }
+        let next = state.fov * factor;
+        if (next > MAX_FOV) {
+          if (state.fov >= MAX_FOV) { showAllSky(); return; }
+          next = MAX_FOV;
+        }
+        next = Math.max(MIN_FOV, next);
+        if (next === state.fov) return;
+        if (anchor) {
+          const s = toSky(paneAt(anchor.x), anchor.x, anchor.y);
+          state.fov = next;
+          const v = paneAt(anchor.x);
+          state.ra = wrapRa(s.ra - (v.cx - anchor.x) / (v.cosd * v.ppd));
+          state.dec = clamp(s.dec - (v.cy - anchor.y) / v.ppd, -89.9, 89.9);
+        } else {
+          state.fov = next;
+        }
+        state.roi = null;
+        render();
+      }
+      function panBy(dxFrac, dyFrac) {
+        if (isAllSky()) return;
+        const v = panes()[0];
+        state.ra = wrapRa(state.ra + dxFrac * v.w / (v.cosd * v.ppd));
+        state.dec = clamp(state.dec + dyFrac * v.h / v.ppd, -89.9, 89.9);
+        state.roi = null;
+        render();
+      }
+      function setTool(tool) {
+        if (tool === 'region' && isAllSky()) return;
+        state.tool = tool;
+        keyboardCursor = false;
+        render();
+      }
+      function setMode(mode) {
+        stopPlay();
+        state.mode = mode;
+        state.roi = null;
+        if (isAllSky() && mode !== 'spectral') {
+          if (mode === 'object' && !state.target) { render(); return; }
+          selectTarget(state.target || TARGETS[0].id);
+          return;
+        }
+        render();
+      }
+      function setRegion(a, b) {
+        const v = isAllSky() ? null : paneAt(a.x);
+        const x = clamp(Math.min(a.x, b.x), 0, W);
+        const y = clamp(Math.min(a.y, b.y), 0, H);
+        const w = Math.min(Math.abs(b.x - a.x), W - x);
+        const h = Math.min(Math.abs(b.y - a.y), H - y);
+        state.roi = { x: x / W, y: y / H, w: w / W, h: h / H, wDeg: v ? w / v.ppd : 0, hDeg: v ? h / v.ppd : 0 };
+        render();
+      }
+      function stopPlay() {
+        state.playing = false;
+        clearInterval(playTimer);
+        playTimer = null;
+      }
+      function togglePlay() {
+        if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+          state.epoch = (state.epoch + 1) % EPOCHS;
+          render();
+          return;
+        }
+        if (state.playing) { stopPlay(); render(); return; }
+        state.playing = true;
+        playTimer = setInterval(() => { state.epoch = (state.epoch + 1) % EPOCHS; render(); }, 700);
+        render();
+      }
+      async function copyCoordinates() {
+        const t = currentTarget();
+        if (!t) return;
+        const button = $('copyCoords');
+        try {
+          await navigator.clipboard.writeText(`${fmtHms(t.ra)} ${fmtDms(t.dec)}`);
+          button.textContent = 'Copied';
+        } catch {
+          button.textContent = 'Copy failed';
+        }
+        setTimeout(() => { if ($('copyCoords')) $('copyCoords').textContent = 'Copy coordinates'; }, 1500);
+      }
+
+      /* ---------- hint ---------- */
+      function storage(action, value) {
+        try { return action === 'get' ? localStorage.getItem('planetx-hint') : localStorage.setItem('planetx-hint', value); } catch { return null; }
+      }
+      function dismissHint() {
+        if ($('hint').classList.contains('gone')) return;
+        $('hint').classList.add('gone');
+        storage('set', '1');
+      }
+
+      /* ---------- events ---------- */
+      function localPoint(e) {
+        const rect = canvas.getBoundingClientRect();
+        return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+      }
+      function hitTarget(p) {
+        return hits.find((h) => Math.hypot(h.x - p.x, h.y - p.y) < 16) || null;
+      }
+      function updateHover(p) {
+        const s = p ? skyAt(p) : null;
+        $('cursorCoords').hidden = !s;
+        if (s) $('cursorCoords').textContent = `${fmtHms(s.ra)}   ${fmtDms(s.dec)}`;
+        $('readout').hidden = $('scale').hidden && $('cursorCoords').hidden;
+        if (!p) return;
+        let cursor = 'default';
+        if (hitTarget(p)) cursor = 'pointer';
+        else if (isAllSky()) cursor = s ? 'zoom-in' : 'default';
+        else if (state.tool === 'region') cursor = 'crosshair';
+        else cursor = pointer ? 'grabbing' : 'grab';
+        canvas.style.cursor = cursor;
+      }
+
+      function bindEvents() {
+        canvas.addEventListener('pointerdown', (e) => {
+          if (e.button !== 0) return;
+          canvas.setPointerCapture(e.pointerId);
+          const p = localPoint(e);
+          const v = isAllSky() ? null : paneAt(p.x);
+          pointer = { start: p, last: p, moved: false, mode: isAllSky() ? 'none' : state.tool, ra: state.ra, dec: state.dec, k: v ? v.cosd * v.ppd : 1, ppd: v ? v.ppd : 1 };
+          keyboardCursor = false;
+          dismissHint();
+          updateHover(p);
+        });
+        canvas.addEventListener('pointermove', (e) => {
+          const p = localPoint(e);
+          updateHover(p);
+          if (!pointer) return;
+          pointer.last = p;
+          if (!pointer.moved && Math.hypot(p.x - pointer.start.x, p.y - pointer.start.y) > 5) pointer.moved = true;
+          if (!pointer.moved) return;
+          if (pointer.mode === 'pan') {
+            state.ra = wrapRa(pointer.ra + (p.x - pointer.start.x) / pointer.k);
+            state.dec = clamp(pointer.dec + (p.y - pointer.start.y) / pointer.ppd, -89.9, 89.9);
+            state.roi = null;
+            render();
+          } else if (pointer.mode === 'region') {
+            draw();
+          }
+        });
+        canvas.addEventListener('pointerup', (e) => {
+          if (!pointer) return;
+          const p = localPoint(e);
+          const done = pointer;
+          pointer = null;
+          if (done.moved && done.mode === 'region') { setRegion(done.start, p); return; }
+          if (!done.moved) {
+            const hit = hitTarget(p);
+            if (hit) selectTarget(hit.id);
+            else if (isAllSky()) { const s = skyAt(p); if (s) centerOn(s.ra, s.dec, 20); }
+          }
+          updateHover(p);
+          draw();
+        });
+        canvas.addEventListener('pointercancel', () => { pointer = null; draw(); });
+        canvas.addEventListener('pointerleave', () => { if (!pointer) updateHover(null); });
+        canvas.addEventListener('dblclick', (e) => {
+          if (isAllSky()) return;
+          const p = localPoint(e);
+          if (hitTarget(p)) return;
+          const s = skyAt(p);
+          centerOn(s.ra, s.dec, Math.max(MIN_FOV, state.fov / 2));
+        });
+        canvas.addEventListener('wheel', (e) => {
+          e.preventDefault();
+          zoomBy(clamp(Math.exp(e.deltaY * .002), .5, 2), localPoint(e));
+        }, { passive: false });
+        canvas.addEventListener('focus', draw);
+        canvas.addEventListener('blur', draw);
+        canvas.addEventListener('keydown', (e) => {
+          const arrows = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
+          if (arrows[e.key]) {
+            e.preventDefault();
+            dismissHint();
+            const [dx, dy] = arrows[e.key];
+            if (state.tool === 'region') {
+              const step = e.shiftKey ? .05 : .015;
+              keyboardCursor = true;
+              state.cursor = { x: clamp(state.cursor.x + dx * step, 0, 1), y: clamp(state.cursor.y + dy * step, 0, 1) };
+              draw();
+            } else {
+              panBy(-dx * .1, -dy * .1);
+            }
+          } else if (e.key === 'Enter' && state.tool === 'region' && !isAllSky()) {
+            e.preventDefault();
+            const c = { x: state.cursor.x * W, y: state.cursor.y * H };
+            setRegion({ x: c.x - W * .05, y: c.y - H * .07 }, { x: c.x + W * .05, y: c.y + H * .07 });
+          }
+        });
+
+        document.addEventListener('keydown', (e) => {
+          if (e.key === 'Escape' && !$('dataNote').hidden) { closeNote(); $('dataBadge').focus(); return; }
+          const typing = e.target instanceof HTMLInputElement;
+          if (typing || e.ctrlKey || e.metaKey || e.altKey) return;
+          if (e.key === '+' || e.key === '=') { zoomBy(.5); }
+          else if (e.key === '-' || e.key === '_') { zoomBy(2); }
+          else if (e.key === '0') { showAllSky(); }
+          else if (e.key === 'r' || e.key === 'R') { setTool(state.tool === 'region' ? 'pan' : 'region'); }
+          else if (e.key === 'Escape' && state.roi) { state.roi = null; render(); }
+        });
+
+        $('toolPan').addEventListener('click', () => setTool('pan'));
+        $('toolRegion').addEventListener('click', () => setTool('region'));
+        $('zoomIn').addEventListener('click', () => zoomBy(.5));
+        $('zoomOut').addEventListener('click', () => zoomBy(2));
+        $('allSky').addEventListener('click', showAllSky);
+
+        const tabs = Array.from(document.querySelectorAll('[role="tab"]'));
+        tabs.forEach((tab, i) => {
+          tab.addEventListener('click', () => setMode(tab.dataset.mode));
+          tab.addEventListener('keydown', (e) => {
+            const move = { ArrowRight: 1, ArrowLeft: -1 }[e.key];
+            if (!move) return;
+            e.preventDefault();
+            const next = tabs[(i + move + tabs.length) % tabs.length];
+            next.focus();
+            setMode(next.dataset.mode);
+          });
+        });
+
+        $('search').addEventListener('input', filterTargets);
+        $('search').addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.target.value = ''; filterTargets(); } });
+        $('searchForm').addEventListener('submit', (e) => {
+          e.preventDefault();
+          const first = document.querySelector('.targets li:not([hidden]) .target');
+          if (first) selectTarget(first.dataset.id);
+        });
+
+        $('coordsPanel').addEventListener('toggle', () => {
+          if (!$('coordsPanel').open) return;
+          $('raInput').value = state.ra.toFixed(4);
+          $('decInput').value = state.dec.toFixed(4);
+          $('coordError').textContent = '';
+        });
+        $('coordForm').addEventListener('submit', (e) => {
+          e.preventDefault();
+          const parse = (s) => Number(s.trim().replace('−', '-').replace(',', '.'));
+          const ra = parse($('raInput').value);
+          const dec = parse($('decInput').value);
+          if (!$('raInput').value.trim() || !Number.isFinite(ra) || ra < 0 || ra >= 360) { $('coordError').textContent = 'RA must be between 0 and 360 degrees.'; $('raInput').focus(); return; }
+          if (!$('decInput').value.trim() || !Number.isFinite(dec) || dec < -90 || dec > 90) { $('coordError').textContent = 'Dec must be between −90 and 90 degrees.'; $('decInput').focus(); return; }
+          $('coordError').textContent = '';
+          dismissHint();
+          centerOn(ra, dec, isAllSky() ? 2 : state.fov);
+        });
+
+        $('dataBadge').addEventListener('click', (e) => {
+          e.stopPropagation();
+          const open = $('dataNote').hidden;
+          $('dataNote').hidden = !open;
+          $('dataBadge').setAttribute('aria-expanded', String(open));
+        });
+        document.addEventListener('click', (e) => { if (!$('dataNote').hidden && !$('dataNote').contains(e.target)) closeNote(); });
+
+        new ResizeObserver(resizeCanvas).observe($('map'));
+      }
+      function closeNote() {
+        $('dataNote').hidden = true;
+        $('dataBadge').setAttribute('aria-expanded', 'false');
+      }
+
+      function buildTargetList() {
+        $('targetList').innerHTML = TARGETS.map((t) => `<li><button class="target" type="button" data-id="${t.id}" aria-pressed="false"><span class="target-name">${esc(t.name)}</span><span class="target-type">${esc(t.type)}</span></button></li>`).join('');
+        $('targetList').querySelectorAll('.target').forEach((b) => b.addEventListener('click', () => selectTarget(b.dataset.id)));
+      }
+      function filterTargets() {
+        const norm = (s) => s.toLocaleLowerCase().replace(/[−-]/g, '-').replace(/['’]/g, '');
+        const q = norm($('search').value.trim());
+        let visible = 0;
+        $('targetList').querySelectorAll('li').forEach((li, i) => {
+          const t = TARGETS[i];
+          const match = !q || norm(`${t.name} ${t.type}`).includes(q);
+          li.hidden = !match;
+          if (match) visible += 1;
+        });
+        $('emptyList').hidden = visible > 0;
+      }
+
+      /* ---------- init ---------- */
+      $('hint').textContent = touchOnly ? 'Tap the sky to zoom in · drag to pan' : 'Click the sky to zoom in · scroll to zoom · drag to pan';
+      if (storage('get') === '1') $('hint').classList.add('gone');
+      buildTargetList();
+      bindEvents();
+      resizeCanvas();
+      render();
+    })();
+  </script>
+</body>
+</html>

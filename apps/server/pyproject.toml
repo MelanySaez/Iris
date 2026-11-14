@@ -1,0 +1,53 @@
+[project]
+name = "server"
+version = "0.1.0"
+description = "Nasa Space Apps Server"
+readme = "README.md"
+authors = [
+    { name = "JuanD", email = "pereznjuandiego@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "astropy[recommended,typing]>=8.0.2",
+    "fastapi>=0.115",
+    "httpx>=0.27",
+    "uvicorn>=0.30",
+    "pillow>=10.4",
+    "astroquery>=0.4.11",
+    "firefly-client>=3.4.0",
+    "pandas>=3.1.1",
+    "polars>=2.1.0",
+    "reproject>=0.21.0",
+    "scikit-learn>=1.9.1",
+]
+
+[dependency-groups]
+dev = [
+    "ipykernel>=7.4.0",
+    "httpx>=0.27",
+    "pytest>=8.3",
+    "matplotlib>=3.11.2",
+    "ruff>=0.17.4",
+]
+
+[tool.ruff]
+exclude = [".git", ".pytest_cache", ".venv"]
+line-length = 90
+indent-width = 4
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F"]
+fixable = ["ALL"]
+extend-select = ["I", "UP", "SIM", "E"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "auto"
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+filterwarnings = [
+    "ignore::starlette.testclient.StarletteDeprecationWarning",
+]

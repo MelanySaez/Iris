@@ -1,0 +1,63 @@
+# Planet X — SPHEREx discovery lab
+
+The application now has **two separate workspaces**. The all-sky view uses authentic DR1 All-Sky Cube PNG HiPS tiles through the existing Aladin Lite service-worker adapter. Selecting a small region begins a backend coverage check and prefetch for a local DR1 individual spectral-image FITS. The spectral-image view uses that FITS, not the All-Sky PNG tile.
+
+## Run both services
+
+```bash
+cd apps/server
+uv sync
+uv run uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+```
+
+```bash
+cd apps/web
+pnpm install
+pnpm dev
+```
+
+Open the Vite localhost URL. The frontend needs IRSA network access for the official HiPS and localhost/HTTPS for its service worker. Vite proxies `/api` to the FastAPI server on port 8000.
+
+## Try the first real spectral-image slice
+
+1. Select **Open local DR1 sample** in the sidebar. This moves Aladin to the footprint of the one local FITS and starts prefetch before opening the result.
+2. Open **Spectral image** while it loads to see progress and a skeleton; the image appears only once the FITS job is ready.
+3. IMAGE is loaded by default. Opt into VARIANCE and FLAGS in the inspector; each request is deduplicated by coordinates, size and product set.
+4. Click a detector pixel for its raw values and position-dependent wavelength lookup.
+
+The per-pixel `WCS-WAVE` value is **visualization-only**, not calibrated CWAVE/CBAND. The All-Sky Cube channel index does not automatically identify a unique wavelength across an individual LVF image.
+
+The mockup supplies layout direction only. Its generated stars, epochs, historical effects and catalog are not used. Arbitrary-region SIA discovery, calibrated per-pixel channel association, multi-FITS mosaics, precomputed object assets and real historical comparison remain pending. Regions outside the local FITS explicitly report unavailable coverage.
+
+## Checks
+
+```bash
+cd apps/server && uv run ruff check app tests && uv run pytest -q
+cd ../web && pnpm test --run && pnpm typecheck && pnpm build
+```
+
+## Current audit update
+The mounted UI is `App` / `SkyWorkspace` / `PlateWorkspace`, using `/api/jobs`.
+Sky tiles now use a browser cache (128 entries / 64 MiB); after settling, up to
+16 neighbour requests warm recently observed tile paths, skipping channels 50/51.
+Prefetch is cancelled on navigation and disabled with Save-Data. The 8 MiB batch
+budget stops after the current response; one tile may exceed the remaining budget.
+This caches compressed tiles, not decoded GPU textures; instant switching is not guaranteed.
+Selected regions retain sky coordinates while moving between Sky and Plate; hover
+or keyboard-focus the selection to remove it. Cutouts retain native pixels, with
+no silent 512-pixel crop. Region limit: 60 arcmin; multi-FITS mosaicking is pending.
+Backend logs expose request IDs/timing and job IDs/stages/cache hits; job snapshots
+include an execution trace. WCS-WAVE remains approximate.
+Validation: 65 frontend tests, typecheck/build pass. Backend: 15 pass / 11 fail
+because the configured local FITS fixture is absent; real cutout size/hover and
+multi-FITS behavior are NOT verified. Desktop screenshot covers loading UI only,
+not live sky interaction or mobile. Large Aladin bundle warning remains.
+
+Sky view update: the channel control now passes the selected virtual HiPS URL
+through Aladin Lite's documented `setImageLayer(url)` API. The stage reports
+which channel's real tile request succeeds/fails; distinct URL invocation is
+covered by unit tests, but this is not a browser proof that the rendered pixels
+differ. Projection choices are orthographic, Aitoff, Mollweide and tangent.
+The data card distinguishes center from live cursor ICRS coordinates. Sky region
+selection still starts backend preparation, but its detailed progress is shown
+in the Plate workspace only; Sky offers an explicit **Open spectral plate** action.

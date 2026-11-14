@@ -1,0 +1,237 @@
+export type ProductType = 'image' | 'variance' | 'flags';
+export type JobStatus =
+  | 'queued'
+  | 'discovering'
+  | 'downloading'
+  | 'extracting'
+  | 'rendering'
+  | 'ready'
+  | 'failed';
+
+export type JobMode = 'latest' | 'history';
+export type StretchMode = 'asinh' | 'linear';
+export type FrameRenderMode = 'full' | 'slice';
+
+export interface HealthResponse {
+  status: string;
+  version: string;
+  products: string[];
+  local_assets: boolean;
+  network: string;
+}
+
+export interface ChannelInfo {
+  index: number;
+  band: number;
+  detector: string;
+  wavelength_um: number;
+  bandwidth_um: number;
+  available: boolean;
+}
+
+export interface ChannelsResponse {
+  source: {
+    collection: string;
+    properties_url: string;
+    depth: number;
+    order: number;
+    blank_channels: number[];
+  };
+  channels: ChannelInfo[];
+  cached: boolean;
+}
+
+export interface CatalogObject {
+  id: string;
+  name: string;
+  ra_deg: number;
+  dec_deg: number;
+  type: string;
+  default_size_arcmin: number;
+  description?: string;
+  precomputed?: boolean;
+}
+
+export interface CatalogResponse {
+  objects: CatalogObject[];
+}
+
+export interface RegionRequest {
+  ra_deg: number;
+  dec_deg: number;
+  size_arcmin: number;
+}
+
+export interface RegionResolveResponse {
+  region: {
+    ra_deg: number;
+    dec_deg: number;
+    size_arcmin: number;
+    fov_deg: number;
+  };
+  coverage: 'available' | 'none' | 'unknown';
+  cached: boolean;
+  query_ms: number;
+  warning: string | null;
+  products: Array<{
+    id: string;
+    source: 'local' | 'remote';
+    detector: number;
+    band: string;
+    obs_id: string;
+    uri: string;
+    date_mjd: number;
+    date_iso: string;
+  }>;
+  detectors: Array<{
+    detector: number;
+    band: string;
+    count: number;
+    epochs: Array<{
+      date_mjd: number;
+      date_iso: string;
+      product_id: string;
+    }>;
+  }>;
+  notes: string[];
+}
+
+export interface JobCreateRequest {
+  ra_deg: number;
+  dec_deg: number;
+  size_arcmin: number;
+  channels: number[];
+  products: ProductType[];
+  mode?: JobMode;
+  stretch?: StretchMode;
+}
+
+export interface FlagBit {
+  bit: number;
+  name: string;
+  description: string;
+}
+
+export interface JobCutout {
+  detector: number;
+  epoch: number;
+  obs_id: string;
+  date_iso: string;
+  source: 'local' | 'remote';
+  uri?: string;
+  version?: string;
+  shape: [number, number];
+  pixel_scale_arcsec: number;
+  wavelength_min_um: number;
+  wavelength_max_um: number;
+  bandwidth_median_um: number;
+  image_unit: string;
+  variance_unit: string;
+  flags_defined: boolean;
+  flag_bits: FlagBit[];
+}
+
+export interface JobFrame {
+  channel: number;
+  product: ProductType;
+  detector: number;
+  epoch: number;
+  obs_id: string;
+  date_iso: string;
+  source: 'local' | 'remote';
+  width: number;
+  height: number;
+  url: string;
+  slice_url: string;
+  wavelengths_url?: string;
+  window_um: [number, number];
+}
+
+export interface JobSnapshot {
+  id: string;
+  status: JobStatus;
+  progress: number;
+  stage: string;
+  events?: Array<{stage: string; at: number}>;
+  error: string | null;
+  request: JobCreateRequest;
+  region: {
+    ra_deg: number;
+    dec_deg: number;
+    size_arcmin: number;
+    fov_deg: number;
+  };
+  channels: Array<{
+    index: number;
+    wavelength_um: number;
+    bandwidth_um: number;
+    detector: number | string;
+    available: boolean;
+  }>;
+  products: ProductType[];
+  frames: JobFrame[];
+  cutouts: JobCutout[];
+  cache: { hit: boolean };
+  wavelength_status: string;
+  calibrated: boolean;
+  multi_product_mosaic: string;
+}
+
+export interface PixelReadout {
+  x: number;
+  y: number;
+  channel: number;
+  epoch: number;
+  wavelength_um: number | null;
+  bandwidth_um: number | null;
+  window_um?: [number, number];
+  in_channel?: boolean;
+  image?: number | null;
+  variance?: number | null;
+  flags?: number | null;
+  flag_bits?: FlagBit[];
+  wavelength_status?: string;
+  calibrated?: boolean;
+}
+
+export interface ManifestCutout {
+  detector: number;
+  epoch: number;
+  obs_id: string;
+  source: string;
+  uri: string;
+  version: string;
+  date_obs: string;
+  date_mjd: number;
+  units: Record<string, string>;
+  flag_bits: FlagBit[];
+  pixel_scale_arcsec: number;
+  shape: [number, number];
+}
+
+export interface JobManifest {
+  job_id: string;
+  request: JobCreateRequest;
+  region: {
+    ra_deg: number;
+    dec_deg: number;
+    size_arcmin: number;
+    fov_deg?: number;
+  };
+  products: ProductType[];
+  release: string;
+  dates: string[];
+  units: {
+    image: string;
+    variance: string;
+  };
+  lvf_status: string;
+  wavelength_status: string;
+  calibrated: boolean;
+  flag_definitions: FlagBit[];
+  cache: { hit: boolean };
+  multi_product_mosaic: string;
+  collection: string;
+  cutouts: ManifestCutout[];
+  notes: string[];
+}

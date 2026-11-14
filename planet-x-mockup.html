@@ -1,0 +1,1269 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#090b0d">
+  <title>Planet X — Sky Observatory</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --ground: #090b0d;
+      --surface: #101315;
+      --surface-raised: #161a1c;
+      --line: #2b3031;
+      --line-bright: #424849;
+      --ink: #e6e8e2;
+      --muted: #969e9b;
+      --quiet: #858d89;
+      --amber: #e8b96f;
+      --ice: #87c9c5;
+      --danger: #e78c7d;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      --serif: Georgia, "Times New Roman", serif;
+      --sans: "Avenir Next", "Helvetica Neue", ui-sans-serif, system-ui, sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      background: var(--ground);
+    }
+
+    body {
+      margin: 0;
+      min-width: 320px;
+      background: var(--ground);
+      color: var(--ink);
+      font: 14px/1.45 var(--sans);
+    }
+
+    button,
+    input,
+    select {
+      font: inherit;
+      color: inherit;
+    }
+
+    button {
+      cursor: pointer;
+    }
+
+    button:disabled {
+      cursor: not-allowed;
+      opacity: .42;
+    }
+
+    button:focus-visible,
+    input:focus-visible,
+    select:focus-visible,
+    canvas:focus-visible {
+      outline: 2px solid var(--amber);
+      outline-offset: 3px;
+    }
+
+    .shell {
+      min-height: 100vh;
+      min-height: 100svh;
+      display: grid;
+      grid-template-rows: auto 1fr;
+    }
+
+    .topbar {
+      min-height: 62px;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+      padding: 0 24px;
+    }
+
+    .identity {
+      display: flex;
+      align-items: baseline;
+      gap: 13px;
+      white-space: nowrap;
+    }
+
+    .wordmark {
+      font: 600 15px/1 var(--sans);
+      letter-spacing: .17em;
+    }
+
+    .edition {
+      color: var(--muted);
+      font: 12px/1 var(--mono);
+      letter-spacing: .09em;
+      text-transform: uppercase;
+    }
+
+    .top-meta {
+      display: flex;
+      align-items: center;
+      gap: 18px;
+      color: var(--muted);
+      font: 12px/1.4 var(--mono);
+    }
+
+    .sample-flag {
+      color: var(--amber);
+      border-left: 1px solid var(--amber);
+      padding-left: 9px;
+    }
+
+    .workspace {
+      display: grid;
+      grid-template-columns: 230px minmax(0, 1fr) 255px;
+      min-height: 0;
+    }
+
+    .rail {
+      min-width: 0;
+      padding: 20px 17px;
+      background: var(--surface);
+    }
+
+    .rail-left {
+      border-right: 1px solid var(--line);
+    }
+
+    .rail-right {
+      border-left: 1px solid var(--line);
+    }
+
+    .section-label {
+      margin: 0 0 12px;
+      color: var(--quiet);
+      font: 12px/1.3 var(--mono);
+      letter-spacing: .11em;
+      text-transform: uppercase;
+    }
+
+    .control-block {
+      padding-top: 8px;
+    }
+
+    .control-block+.control-block {
+      margin-top: 25px;
+      padding-top: 20px;
+      border-top: 1px solid var(--line);
+    }
+
+    .field-label {
+      display: block;
+      margin: 0 0 6px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .text-field,
+    .select-field {
+      width: 100%;
+      min-height: 37px;
+      border: 1px solid var(--line-bright);
+      border-radius: 2px;
+      background: #0b0e0f;
+      padding: 8px 10px;
+      font: 12px var(--mono);
+    }
+
+    .search-row {
+      display: flex;
+      gap: 6px;
+    }
+
+    .search-row .text-field {
+      min-width: 0;
+    }
+
+    .icon-action,
+    .plain-action,
+    .mode-button,
+    .step-button {
+      border: 1px solid var(--line-bright);
+      border-radius: 2px;
+      background: var(--surface-raised);
+    }
+
+    .icon-action {
+      min-width: 38px;
+      padding: 0 10px;
+      color: var(--amber);
+    }
+
+    .plain-action {
+      min-height: 36px;
+      padding: 8px 11px;
+      color: var(--ink);
+      font-size: 12px;
+    }
+
+    .plain-action:hover,
+    .icon-action:hover,
+    .step-button:hover {
+      border-color: var(--amber);
+    }
+
+    .coordinate-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .coordinate-grid .text-field {
+      padding-inline: 7px;
+    }
+
+    .full-action {
+      width: 100%;
+      margin-top: 9px;
+    }
+
+    .target-list {
+      display: grid;
+      gap: 3px;
+    }
+
+    .target-button {
+      min-height: 40px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 8px 10px;
+      border: 1px solid transparent;
+      background: transparent;
+      text-align: left;
+      color: var(--muted);
+    }
+
+    .target-button:hover {
+      color: var(--ink);
+      background: #171b1c;
+    }
+
+    .target-button[aria-pressed="true"] {
+      border-color: #5d4b32;
+      background: #211d16;
+      color: var(--amber);
+    }
+
+    .target-kind {
+      color: var(--quiet);
+      font: 12px var(--mono);
+    }
+
+    .coordinate-hint,
+    .micro-copy {
+      margin: 9px 0 0;
+      color: var(--quiet);
+      font-size: 12px;
+    }
+
+    .main-stage {
+      min-width: 0;
+      padding: 20px clamp(16px, 2.1vw, 32px) 15px;
+      display: grid;
+      grid-template-rows: auto minmax(280px, 1fr) auto;
+      gap: 14px;
+    }
+
+    .stage-heading {
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      gap: 16px;
+    }
+
+    .overline {
+      margin: 0 0 5px;
+      color: var(--amber);
+      font: 12px var(--mono);
+      letter-spacing: .12em;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      margin: 0;
+      font-family: var(--serif);
+      font-size: clamp(28px, 2.6vw, 38px);
+      font-weight: 400;
+      line-height: 1.08;
+      letter-spacing: -.025em;
+    }
+
+    .stage-subtitle {
+      margin: 6px 0 0;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .field-readout {
+      flex: none;
+      color: var(--muted);
+      text-align: right;
+      font: 12px/1.7 var(--mono);
+    }
+
+    .sky-instrument {
+      position: relative;
+      min-height: 280px;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      background: #050708;
+    }
+
+    #sky {
+      display: block;
+      width: 100%;
+      height: 100%;
+      min-height: 280px;
+      touch-action: none;
+      cursor: crosshair;
+    }
+
+    .sky-overlay {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 12px;
+      pointer-events: none;
+    }
+
+    .sky-topline,
+    .sky-bottomline {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: start;
+      color: #c7ceca;
+      font: 12px/1.5 var(--mono);
+      text-shadow: 0 1px 5px #000;
+    }
+
+    .sky-bottomline {
+      align-items: end;
+    }
+
+    .instrument-tag {
+      display: inline-block;
+      padding: 8px 10px;
+      border: 1px solid #555d59;
+      background: #090c0dd9;
+    }
+
+    .instrument-tag.amber {
+      border-color: #866d48;
+      color: #f1cc8f;
+    }
+
+    .scale-bar {
+      width: 62px;
+      height: 5px;
+      border-top: 1px solid #d0d7d3;
+      border-left: 1px solid #d0d7d3;
+      border-right: 1px solid #d0d7d3;
+    }
+
+    .instrument-controls {
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      display: flex;
+      gap: 5px;
+      pointer-events: auto;
+    }
+
+    .instrument-controls button {
+      min-width: 34px;
+      height: 32px;
+      border: 1px solid #68706c;
+      background: #111615e8;
+      color: var(--ink);
+    }
+
+    .instrument-controls button:hover {
+      border-color: var(--amber);
+      color: var(--amber);
+    }
+
+    .instrument-controls .roi-button[aria-pressed="true"] {
+      background: #332918;
+      border-color: var(--amber);
+      color: var(--amber);
+    }
+
+    .below-sky {
+      border-top: 1px solid var(--line);
+    }
+
+    .analysis-head {
+      min-height: 49px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+    }
+
+    .mode-nav {
+      display: flex;
+      gap: 5px;
+      overflow-x: auto;
+    }
+
+    .mode-button {
+      min-height: 36px;
+      padding: 8px 12px;
+      color: var(--muted);
+      font-size: 12px;
+      white-space: nowrap;
+      transition: background-color 140ms ease, color 140ms ease, border-color 140ms ease;
+    }
+
+    .mode-button[aria-selected="true"] {
+      border-color: var(--amber);
+      background: #282116;
+      color: var(--amber);
+    }
+
+    .mode-button:hover {
+      border-color: #8a7656;
+      color: var(--ink);
+    }
+
+    .analysis-label {
+      color: var(--quiet);
+      font: 12px var(--mono);
+      text-align: right;
+    }
+
+    .analysis-panel {
+      min-height: 99px;
+      display: grid;
+      grid-template-columns: minmax(0, 1.1fr) minmax(170px, .9fr);
+      align-items: center;
+      gap: 25px;
+      border-top: 1px solid var(--line);
+      padding: 14px 0 5px;
+    }
+
+    .analysis-panel h2 {
+      margin: 0 0 5px;
+      font-family: var(--serif);
+      font-size: 20px;
+      font-weight: 400;
+      line-height: 1.2;
+    }
+
+    .analysis-panel p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .analysis-tools {
+      display: flex;
+      align-items: center;
+      justify-content: end;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .analysis-tools input[type="range"] {
+      width: min(190px, 100%);
+      accent-color: var(--amber);
+    }
+
+    .analysis-tools output {
+      min-width: 72px;
+      color: var(--amber);
+      font: 12px var(--mono);
+      text-align: right;
+    }
+
+    .timeline {
+      display: flex;
+      align-items: center;
+      justify-content: end;
+      gap: 5px;
+    }
+
+    .step-button {
+      min-width: 39px;
+      min-height: 38px;
+      padding: 8px;
+      font: 12px var(--mono);
+      color: var(--muted);
+    }
+
+    .step-button[aria-pressed="true"] {
+      border-color: var(--amber);
+      color: var(--amber);
+    }
+
+    .timeline .plain-action {
+      min-height: 36px;
+    }
+
+    .metadata-title {
+      margin: 1px 0 5px;
+      font-family: var(--serif);
+      font-size: 22px;
+      font-weight: 400;
+      line-height: 1.2;
+    }
+
+    .metadata-subtitle {
+      margin: 0 0 18px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .metadata-list {
+      margin: 0;
+    }
+
+    .metadata-row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 10px;
+      border-top: 1px solid var(--line);
+      padding: 10px 0;
+    }
+
+    .metadata-row dt {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .metadata-row dd {
+      margin: 0;
+      color: var(--ink);
+      font: 12px var(--mono);
+      text-align: right;
+    }
+
+    .selection-note {
+      margin-top: 24px;
+      padding: 11px;
+      border-left: 2px solid var(--amber);
+      background: #191712;
+      color: #c8b995;
+      font-size: 12px;
+    }
+
+    .prototype-note {
+      margin-top: 15px;
+      color: var(--quiet);
+      font: 12px/1.6 var(--mono);
+    }
+
+    .toast {
+      position: fixed;
+      z-index: 5;
+      left: 50%;
+      bottom: max(20px, env(safe-area-inset-bottom));
+      transform: translate(-50%, 10px);
+      padding: 10px 14px;
+      border: 1px solid var(--line-bright);
+      background: #171b1c;
+      color: var(--ink);
+      font-size: 12px;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 140ms ease, transform 140ms ease;
+    }
+
+    .toast.show {
+      opacity: 1;
+      transform: translate(-50%, 0);
+    }
+
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+
+    @media (min-width: 1500px) {
+      .main-stage {
+        padding-inline: 34px;
+      }
+
+      .sky-instrument,
+      #sky {
+        min-height: 420px;
+      }
+    }
+
+    @media (max-width: 1100px) {
+      .workspace {
+        grid-template-columns: 205px minmax(0, 1fr);
+      }
+
+      .rail-right {
+        grid-column: 1 / -1;
+        border-left: 0;
+        border-top: 1px solid var(--line);
+        display: grid;
+        grid-template-columns: 1fr 1fr 1fr;
+        gap: 20px;
+        padding: 15px 20px;
+      }
+
+      .rail-right .control-block+.control-block {
+        margin: 0;
+        padding: 0;
+        border: 0;
+      }
+
+      .main-stage {
+        min-height: 680px;
+      }
+    }
+
+    @media (max-width: 720px) {
+      .topbar {
+        min-height: 58px;
+        padding: 0 14px;
+      }
+
+      .edition {
+        display: none;
+      }
+
+      .top-meta {
+        gap: 9px;
+        font-size: 12px;
+      }
+
+      .workspace {
+        display: flex;
+        flex-direction: column;
+      }
+
+      .rail-left {
+        order: 2;
+        border-right: 0;
+        border-top: 1px solid var(--line);
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+        padding: 15px;
+      }
+
+      .rail-left .control-block+.control-block {
+        margin: 0;
+        padding: 0;
+        border: 0;
+      }
+
+      .main-stage {
+        order: 1;
+        min-height: 600px;
+        padding: 16px 12px 14px;
+      }
+
+      .sky-instrument,
+      #sky {
+        min-height: 330px;
+      }
+
+      .rail-right {
+        order: 3;
+        grid-template-columns: 1fr 1fr;
+        padding: 14px 15px;
+      }
+
+      .analysis-panel {
+        grid-template-columns: 1fr;
+        gap: 12px;
+      }
+
+      .analysis-tools {
+        justify-content: start;
+      }
+
+      .timeline {
+        justify-content: start;
+        flex-wrap: wrap;
+      }
+
+      .field-readout {
+        font-size: 12px;
+      }
+
+      .stage-subtitle {
+        max-width: 38ch;
+      }
+    }
+
+    @media (max-width: 460px) {
+      .top-meta .sample-flag {
+        max-width: 112px;
+        line-height: 1.3;
+      }
+
+      .stage-heading {
+        align-items: start;
+      }
+
+      .field-readout {
+        max-width: 110px;
+      }
+
+      .main-stage {
+        min-height: 570px;
+      }
+
+      .sky-instrument,
+      #sky {
+        min-height: 290px;
+      }
+
+      .analysis-head {
+        align-items: start;
+        flex-direction: column;
+        padding: 12px 0;
+      }
+
+      .mode-nav {
+        width: 100%;
+      }
+
+      .analysis-label {
+        text-align: left;
+      }
+
+      .rail-left {
+        grid-template-columns: minmax(0, 1fr);
+      }
+
+      .rail-right {
+        grid-template-columns: 1fr;
+      }
+
+      .sky-bottomline {
+        font-size: 11px;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+
+      *,
+      *::before,
+      *::after {
+        scroll-behavior: auto !important;
+        animation-duration: .01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: .01ms !important;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="shell">
+    <header class="topbar">
+      <div class="identity"><span class="wordmark">PLANET X</span><span class="edition">Infrared sky observatory</span>
+      </div>
+      <div class="top-meta"><span id="viewStatus">FIELD / ALL SKY</span><span class="sample-flag">PROTOTYPE / SIMULATED
+          DATA</span></div>
+    </header>
+    <div class="workspace">
+      <aside class="rail rail-left" aria-label="Sky navigation and controls">
+        <section class="control-block">
+          <p class="section-label">Find a field</p>
+          <form id="searchForm" role="search">
+            <label class="field-label" for="targetSearch">Object or field</label>
+            <div class="search-row"><input id="targetSearch" class="text-field" type="search" list="targetOptions"
+                placeholder="Search catalog" autocomplete="off"><datalist id="targetOptions"></datalist><button
+                class="icon-action" type="submit" aria-label="Find object">Go</button></div>
+          </form>
+        </section>
+        <section class="control-block">
+          <p class="section-label">Coordinates / ICRS</p>
+          <form id="coordinateForm">
+            <div class="coordinate-grid">
+              <div><label class="field-label" for="raInput">RA · degrees</label><input class="text-field" id="raInput"
+                  inputmode="decimal" type="number" min="0" max="360" step="any" value="133.7951"></div>
+              <div><label class="field-label" for="decInput">Dec · degrees</label><input class="text-field"
+                  id="decInput" inputmode="decimal" type="number" min="-90" max="90" step="any" value="-7.2451"></div>
+            </div>
+            <button class="plain-action full-action" type="submit">Center coordinates</button>
+          </form>
+          <p class="coordinate-hint">Drag across the sky to define a region of interest. Focus the sky and use arrow
+            keys, then Enter to place the region.</p>
+        </section>
+        <section class="control-block">
+          <p class="section-label">Reference objects</p>
+          <div class="target-list" id="targetList" aria-label="Select a reference object"></div>
+          <p class="micro-copy">Catalog names are navigation examples; displayed imagery remains synthetic.</p>
+        </section>
+      </aside>
+
+      <main class="main-stage">
+        <div class="stage-heading">
+          <div>
+            <h1 id="stageTitle">The infrared sky, in context</h1>
+            <p class="stage-subtitle" id="stageDescription">Choose a field, then define a region to inspect the
+              simulated observation.</p>
+          </div>
+          <div class="field-readout">
+            <div id="readoutName">CUSTOM FIELD</div>
+            <div id="readoutCoordinates">08h 55m · −07° 14′</div>
+          </div>
+        </div>
+
+        <section class="sky-instrument" aria-label="Interactive synthetic sky map">
+          <canvas id="sky" tabindex="0" role="img"
+            aria-label="Synthetic sky map. Drag to select a region. Use arrow keys to move the selection cursor and Enter to place a region."></canvas>
+          <div class="sky-overlay">
+            <div class="sky-topline"><span class="instrument-tag" id="mapMode">ALL SKY · SYNTHETIC MOSAIC</span><span
+                class="instrument-tag amber" id="roiReadout">ROI / NOT SET</span></div>
+            <div class="sky-bottomline"><span id="mapCaption">Illustrative star field · not an astronomical survey
+                product</span><span><span id="fovReadout">FOV / 360°</span><span class="scale-bar"
+                  aria-hidden="true"></span></span></div>
+          </div>
+          <div class="instrument-controls" aria-label="Sky controls">
+            <button id="zoomIn" type="button" aria-label="Zoom in">+</button><button id="zoomOut" type="button"
+              aria-label="Zoom out">−</button><button id="resetSky" type="button"
+              aria-label="Reset to full sky">↺</button>
+          </div>
+        </section>
+
+        <section class="below-sky" aria-label="Analysis controls">
+          <div class="analysis-head">
+            <div class="mode-nav" role="tablist" aria-label="Analysis mode">
+              <button class="mode-button" id="tab-spectral" type="button" role="tab" aria-selected="true"
+                aria-controls="analysisPanel" data-mode="spectral">Spectral</button>
+              <button class="mode-button" id="tab-time" type="button" role="tab" aria-selected="false"
+                aria-controls="analysisPanel" data-mode="time">Time</button>
+              <button class="mode-button" id="tab-difference" type="button" role="tab" aria-selected="false"
+                aria-controls="analysisPanel" data-mode="difference">Difference</button>
+              <button class="mode-button" id="tab-object" type="button" role="tab" aria-selected="false"
+                aria-controls="analysisPanel" data-mode="object">Object</button>
+            </div>
+            <span class="analysis-label">SYNTHETIC DISPLAY · NOT FOR SCIENTIFIC MEASUREMENT</span>
+          </div>
+          <div class="analysis-panel" id="analysisPanel" role="tabpanel" aria-labelledby="tab-spectral"
+            aria-live="polite">
+            <div>
+              <h2 id="analysisTitle">Spectral channel</h2>
+              <p id="analysisDescription">Browse a conceptual channel index. Wavelength mapping is illustrative, not
+                calibrated.</p>
+            </div>
+            <div class="analysis-tools" id="analysisTools"></div>
+          </div>
+        </section>
+      </main>
+
+      <aside class="rail rail-right" aria-label="Selected field context">
+        <section class="control-block">
+          <h2 class="metadata-title" id="objectName">Custom field</h2>
+          <p class="metadata-subtitle" id="objectType">Selected field · manually selected sky region</p>
+          <dl class="metadata-list">
+            <div class="metadata-row">
+              <dt>Right ascension</dt>
+              <dd id="metaRa">133.7951°</dd>
+            </div>
+            <div class="metadata-row">
+              <dt>Declination</dt>
+              <dd id="metaDec">−7.2451°</dd>
+            </div>
+            <div class="metadata-row">
+              <dt>Field of view</dt>
+              <dd id="metaFov">360°</dd>
+            </div>
+            <div class="metadata-row">
+              <dt>Source</dt>
+              <dd id="metaSource">Coordinate entry</dd>
+            </div>
+          </dl>
+        </section>
+        <section class="control-block">
+          <p class="section-label">Observation context</p>
+          <dl class="metadata-list">
+            <div class="metadata-row">
+              <dt>Display state</dt>
+              <dd id="metaState">SIMULATED</dd>
+            </div>
+            <div class="metadata-row">
+              <dt>Epoch</dt>
+              <dd id="metaEpoch">E03 / SAMPLE</dd>
+            </div>
+            <div class="metadata-row">
+              <dt>Channel index</dt>
+              <dd id="metaChannel">063 / 102</dd>
+            </div>
+            <div class="metadata-row">
+              <dt>Region selection</dt>
+              <dd id="metaRoi">NOT SET</dd>
+            </div>
+          </dl>
+        </section>
+        <section class="control-block">
+          <p class="section-label">Prototype boundary</p>
+          <p class="selection-note">This interface uses procedural illustrations and sample metadata. It is not
+            connected to live survey imagery, calibrated spectra, or real temporal analysis.</p>
+          <p class="prototype-note">SIMULATED DATA<br>NO SCIENTIFIC INFERENCE</p>
+        </section>
+      </aside>
+    </div>
+  </div>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script>
+    (() => {
+      const targets = [
+        { id: 'wise', name: 'WISE 0855−0714', short: 'WISE 0855', type: 'Brown dwarf · example target', ra: 133.7951, dec: -7.2451, note: 'Reference target for a simulated proper-motion illustration.' },
+        { id: 'barnard', name: "Barnard's Star", short: 'Barnard’s Star', type: 'Nearby star · example target', ra: 269.4521, dec: 4.6934, note: 'Reference target for a simulated motion illustration.' },
+        { id: 'indi', name: 'Epsilon Indi Ba/Bb', short: 'Epsilon Indi B', type: 'Brown dwarf system · example', ra: 330.8471, dec: -56.7892, note: 'Example system used to demonstrate object context.' },
+        { id: 'rw', name: 'RW Aurigae', short: 'RW Aurigae', type: 'Variable star · example target', ra: 77.8981, dec: 30.3974, note: 'Sample label for a simulated variability sequence.' },
+        { id: 'rdraco', name: 'R Draconis', short: 'R Draconis', type: 'Variable star · example target', ra: 248.1676, dec: 66.755, note: 'Sample label for a simulated brightness sequence.' }
+      ];
+      const epochs = ['E01 · SAMPLE', 'E02 · SAMPLE', 'E03 · SAMPLE', 'E04 · SAMPLE', 'E05 · SAMPLE', 'E06 · SAMPLE'];
+      const state = { target: 'wise', ra: 133.7951, dec: -7.2451, fov: 360, channel: 62, mode: 'spectral', epoch: 2, frameSwap: false, roi: null, cursor: { x: .5, y: .5 }, playing: false };
+      const $ = (id) => document.getElementById(id);
+      const canvas = $('sky');
+      const ctx = canvas.getContext('2d');
+      let width = 1;
+      let height = 1;
+      let pixelRatio = 1;
+      let playTimer = null;
+      let toastTimer = null;
+      let dragStart = null;
+      const stars = [];
+      let seed = 271828;
+      const random = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
+      for (let i = 0; i < 1500; i += 1) stars.push({ x: random(), y: random(), magnitude: random(), color: random() });
+
+      function toast(message) {
+        $('toast').textContent = message;
+        $('toast').classList.add('show');
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => $('toast').classList.remove('show'), 2300);
+      }
+      function formatCoordinate(value, digits = 4) {
+        return `${value < 0 ? '−' : ''}${Math.abs(value).toFixed(digits)}°`;
+      }
+      function currentTarget() { return targets.find((target) => target.id === state.target) || null; }
+      function renderTargets() {
+        $('targetList').innerHTML = targets.map((target) => `<button class="target-button" type="button" data-target="${target.id}" aria-pressed="${target.id === state.target}"><span>${target.short}</span><span class="target-kind">${target.id === state.target ? 'SELECTED' : 'OPEN'}</span></button>`).join('');
+        $('targetOptions').innerHTML = targets.map((target) => `<option value="${target.name}"></option>`).join('');
+        $('targetList').querySelectorAll('[data-target]').forEach((button) => button.addEventListener('click', () => selectTarget(button.dataset.target)));
+      }
+      function selectTarget(id) {
+        const target = targets.find((item) => item.id === id);
+        if (!target) { toast('No matching reference object.'); return; }
+        state.target = id;
+        state.ra = target.ra;
+        state.dec = target.dec;
+        state.fov = 2;
+        state.roi = null;
+        sync();
+        toast(`${target.name} centered in the synthetic field.`);
+      }
+      function updateCoordinates(ra, dec, source) {
+        if (!Number.isFinite(ra) || !Number.isFinite(dec) || dec < -90 || dec > 90) { toast('Enter a valid RA from 0° to 360° and Dec from −90° to 90°.'); return; }
+        state.ra = ((ra % 360) + 360) % 360;
+        state.dec = dec;
+        state.target = null;
+        state.roi = null;
+        $('metaSource').textContent = source;
+        sync();
+      }
+      function modeDetails() {
+        if (state.mode === 'spectral') return { title: 'Spectral channel', description: 'Browse a conceptual channel index. Wavelength mapping is illustrative, not calibrated.', label: 'Channel index' };
+        if (state.mode === 'time') return { title: 'Simulated time sequence', description: 'Step through sample epochs or play a restrained blink between synthetic frames.', label: 'Sample epoch' };
+        if (state.mode === 'difference') return { title: 'Comparison A / B', description: 'Compare two illustrative frames. The displayed difference is not a scientific detection.', label: 'Frame pair' };
+        const target = currentTarget();
+        return { title: target ? target.name : 'Object context', description: target ? target.note : 'Select a catalog example or enter coordinates to inspect field metadata.', label: 'Context record' };
+      }
+      function renderAnalysis() {
+        const detail = modeDetails();
+        $('analysisTitle').textContent = detail.title;
+        $('analysisDescription').textContent = detail.description;
+        $('analysisPanel').setAttribute('aria-labelledby', `tab-${state.mode}`);
+        document.querySelectorAll('[data-mode]').forEach((button) => button.setAttribute('aria-selected', String(button.dataset.mode === state.mode)));
+        const tools = $('analysisTools');
+        if (tools.dataset.renderedMode !== state.mode) {
+          if (state.mode === 'spectral') {
+            tools.innerHTML = `<label class="sr-only" for="channelSlider">${detail.label}</label><input id="channelSlider" type="range" min="0" max="101" value="${state.channel}"><output for="channelSlider" id="channelOutput">${String(state.channel + 1).padStart(3, '0')} / 102</output>`;
+            $('channelSlider').addEventListener('input', (event) => { state.channel = Number(event.target.value); sync(); });
+          } else if (state.mode === 'time') {
+            tools.innerHTML = `<div class="timeline" aria-label="Simulated epoch controls"><button class="step-button" type="button" data-step="-1" aria-label="Previous sample epoch">−</button>${epochs.map((epoch, index) => `<button class="step-button" type="button" data-epoch="${index}" aria-label="Select ${epoch}" aria-pressed="${index === state.epoch}">${String(index + 1).padStart(2, '0')}</button>`).join('')}<button class="step-button" type="button" data-step="1" aria-label="Next sample epoch">+</button><button class="plain-action" id="playToggle" type="button" aria-pressed="${state.playing}">${state.playing ? 'Pause' : 'Play'}</button></div>`;
+            tools.querySelectorAll('[data-epoch]').forEach((button) => button.addEventListener('click', () => { state.epoch = Number(button.dataset.epoch); stopPlayback(); sync(); }));
+            tools.querySelectorAll('[data-step]').forEach((button) => button.addEventListener('click', () => { state.epoch = (state.epoch + Number(button.dataset.step) + epochs.length) % epochs.length; stopPlayback(); sync(); }));
+            $('playToggle').addEventListener('click', togglePlayback);
+          } else if (state.mode === 'difference') {
+            tools.innerHTML = `<span class="analysis-label" id="frameALabel"></span><button class="plain-action" id="swapFrames" type="button">Swap A / B</button><span class="analysis-label" id="frameBLabel"></span>`;
+            $('swapFrames').addEventListener('click', () => { state.frameSwap = !state.frameSwap; sync(); });
+          } else {
+            tools.innerHTML = `<span class="analysis-label" id="objectContext"></span><button class="plain-action" id="focusObject" type="button">Center field</button>`;
+            $('focusObject').addEventListener('click', () => { state.fov = 2; sync(); });
+          }
+          tools.dataset.renderedMode = state.mode;
+        }
+        if (state.mode === 'spectral') {
+          $('channelSlider').value = state.channel;
+          $('channelOutput').textContent = `${String(state.channel + 1).padStart(3, '0')} / 102`;
+        } else if (state.mode === 'time') {
+          tools.querySelectorAll('[data-epoch]').forEach((button) => button.setAttribute('aria-pressed', String(Number(button.dataset.epoch) === state.epoch)));
+          $('playToggle').setAttribute('aria-pressed', String(state.playing));
+          $('playToggle').textContent = state.playing ? 'Pause' : 'Play';
+        } else if (state.mode === 'difference') {
+          $('frameALabel').textContent = `A · ${epochs[state.frameSwap ? 5 : 0]}`;
+          $('frameBLabel').textContent = `B · ${epochs[state.frameSwap ? 0 : 5]}`;
+        } else {
+          const target = currentTarget();
+          $('objectContext').textContent = target ? target.type : 'CUSTOM FIELD · SYNTHETIC';
+        }
+      }
+      function stopPlayback() {
+        state.playing = false;
+        clearInterval(playTimer);
+        playTimer = null;
+      }
+      function togglePlayback() {
+        if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+          state.epoch = (state.epoch + 1) % epochs.length;
+          sync();
+          toast('Reduced motion is enabled; advanced one sample epoch.');
+          return;
+        }
+        if (state.playing) { stopPlayback(); sync(); return; }
+        state.playing = true;
+        playTimer = setInterval(() => { state.epoch = (state.epoch + 1) % epochs.length; sync(); }, 900);
+        sync();
+      }
+      function sync() {
+        const target = currentTarget();
+        $('raInput').value = state.ra.toFixed(4);
+        $('decInput').value = state.dec.toFixed(4);
+        $('readoutName').textContent = target ? target.name.toUpperCase() : 'CUSTOM FIELD';
+        $('readoutCoordinates').textContent = `${state.ra.toFixed(4)}° / ${state.dec.toFixed(4)}°`;
+        $('objectName').textContent = target ? target.name : 'Custom field';
+        $('objectType').textContent = target ? target.type : 'Manually selected sky region';
+        $('metaRa').textContent = formatCoordinate(state.ra);
+        $('metaDec').textContent = formatCoordinate(state.dec);
+        $('metaFov').textContent = `${state.fov}°`;
+        $('metaSource').textContent = target ? 'Reference selection' : ($('metaSource').textContent === 'Coordinate entry' ? 'Coordinate entry' : $('metaSource').textContent);
+        $('metaEpoch').textContent = epochs[state.epoch];
+        $('metaChannel').textContent = `${String(state.channel + 1).padStart(3, '0')} / 102`;
+        $('metaRoi').textContent = state.roi ? 'DEFINED · SIMULATED' : 'NOT SET';
+        $('roiReadout').textContent = state.roi ? 'ROI / DEFINED · SIMULATED' : 'ROI / NOT SET';
+        $('fovReadout').textContent = state.roi ? 'FOV / ROI' : `FOV / ${state.fov}°`;
+        $('viewStatus').textContent = state.fov === 360 ? 'FIELD / ALL SKY' : `FIELD / ${state.fov}° FOV`;
+        $('mapMode').textContent = state.mode === 'difference' ? 'FRAME DIFFERENCE · SIMULATED' : state.mode === 'time' ? `${epochs[state.epoch]} · SIMULATED` : state.mode === 'object' ? 'OBJECT CONTEXT · SYNTHETIC' : `CHANNEL ${String(state.channel + 1).padStart(3, '0')} · SIMULATED`;
+        $('mapCaption').textContent = state.mode === 'difference' ? 'Illustrative frame subtraction · no scientific inference' : 'Procedural sky rendering · not an astronomical survey product';
+        $('stageTitle').textContent = state.mode === 'time' ? 'A sequence of sample epochs' : state.mode === 'difference' ? 'Two illustrative frames, side by side' : state.mode === 'object' ? 'Context for the selected object' : 'The infrared sky, in context';
+        $('stageDescription').textContent = target ? `${target.name} · ${target.note}` : 'Choose a field, then define a region to inspect the simulated observation.';
+        $('metaState').textContent = 'SIMULATED';
+        renderTargets();
+        renderAnalysis();
+        draw();
+      }
+      function resizeCanvas() {
+        const rect = canvas.getBoundingClientRect();
+        pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
+        width = Math.max(1, rect.width);
+        height = Math.max(1, rect.height);
+        canvas.width = Math.round(width * pixelRatio);
+        canvas.height = Math.round(height * pixelRatio);
+        ctx.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+        draw();
+      }
+      function draw() {
+        ctx.clearRect(0, 0, width, height);
+        ctx.fillStyle = '#050708';
+        ctx.fillRect(0, 0, width, height);
+        const allSky = state.fov === 360;
+        const cx = width / 2;
+        const cy = height / 2;
+        if (allSky) {
+          const rx = width * .43;
+          const ry = height * .39;
+          ctx.save();
+          ctx.beginPath();
+          ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+          ctx.clip();
+          const field = ctx.createLinearGradient(0, cy - ry, 0, cy + ry);
+          field.addColorStop(0, '#111b21');
+          field.addColorStop(.52, '#18201f');
+          field.addColorStop(1, '#0a1012');
+          ctx.fillStyle = field;
+          ctx.fillRect(cx - rx, cy - ry, rx * 2, ry * 2);
+          for (let i = 0; i < 50; i += 1) {
+            const x = cx - rx + (i / 49) * rx * 2;
+            const y = cy + Math.sin(i * .22) * ry * .25;
+            const haze = ctx.createRadialGradient(x, y, 1, x, y, ry * .24);
+            haze.addColorStop(0, i % 2 ? 'rgba(127,175,166,.075)' : 'rgba(197,153,102,.045)');
+            haze.addColorStop(1, 'transparent');
+            ctx.fillStyle = haze;
+            ctx.fillRect(x - ry * .24, y - ry * .24, ry * .48, ry * .48);
+          }
+          stars.forEach((star) => {
+            const x = cx - rx + star.x * rx * 2;
+            const y = cy - ry + star.y * ry * 2;
+            const alpha = .18 + star.magnitude * .72;
+            ctx.fillStyle = star.color > .83 ? `rgba(232,197,143,${alpha})` : `rgba(213,224,219,${alpha})`;
+            ctx.beginPath();
+            ctx.arc(x, y, .35 + star.magnitude * 1.15, 0, Math.PI * 2);
+            ctx.fill();
+          });
+          ctx.restore();
+          ctx.strokeStyle = '#737d78';
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+          ctx.stroke();
+        } else {
+          const wash = ctx.createRadialGradient(cx, cy, 3, cx, cy, Math.max(width, height) * .67);
+          wash.addColorStop(0, state.mode === 'difference' ? '#182522' : '#151c1c');
+          wash.addColorStop(1, '#060909');
+          ctx.fillStyle = wash;
+          ctx.fillRect(0, 0, width, height);
+          ctx.strokeStyle = '#75827d22';
+          for (let i = 1; i < 7; i += 1) { ctx.beginPath(); ctx.moveTo(width * i / 7, 0); ctx.lineTo(width * i / 7, height); ctx.stroke(); }
+          for (let i = 1; i < 5; i += 1) { ctx.beginPath(); ctx.moveTo(0, height * i / 5); ctx.lineTo(width, height * i / 5); ctx.stroke(); }
+          stars.slice(0, 850).forEach((star, index) => {
+            const split = state.mode === 'difference';
+            const panes = split ? [0, 1] : [0];
+            panes.forEach((pane) => {
+              const x = split ? pane * width / 2 + star.x * width / 2 : star.x * width;
+              const y = star.y * height;
+              const shift = state.mode === 'time' ? (state.epoch - 2) * ((index % 3) + 1) * .9 : split && index % 19 === 0 ? (pane === 0 ? -3 : 3) : 0;
+              const sparkle = split && index % 19 === 0;
+              ctx.fillStyle = sparkle ? (pane === 0 ? '#d29a66' : '#87c9c5') : `rgba(220,226,219,${.16 + star.magnitude * .7})`;
+              ctx.beginPath();
+              ctx.arc(x + shift, y, .4 + star.magnitude * 1.1, 0, Math.PI * 2);
+              ctx.fill();
+            });
+          });
+          if (state.mode === 'difference') {
+            ctx.strokeStyle = '#c4cbc5';
+            ctx.beginPath();
+            ctx.moveTo(width / 2, 0);
+            ctx.lineTo(width / 2, height);
+            ctx.stroke();
+            ctx.fillStyle = '#e5c48b';
+            ctx.font = '12px ui-monospace, monospace';
+            ctx.fillText(`A · ${epochs[state.frameSwap ? 5 : 0]}`, 14, 23);
+            ctx.fillText(`B · ${epochs[state.frameSwap ? 0 : 5]}`, width / 2 + 14, 23);
+          }
+          const targetX = width * (.47 + ((state.ra % 7) - 3) * .012);
+          const targetY = height * (.5 - state.dec / 220);
+          ctx.fillStyle = 'rgba(232,185,111,.14)';
+          ctx.beginPath();
+          ctx.arc(targetX, targetY, 24 + state.channel % 9, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = '#f2d5a4';
+          ctx.beginPath();
+          ctx.arc(targetX, targetY, 2.2, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.strokeStyle = '#e8b96f';
+          ctx.beginPath();
+          ctx.arc(targetX, targetY, 13, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+        if (state.roi) {
+          ctx.strokeStyle = '#e8b96f';
+          ctx.lineWidth = 1.5;
+          ctx.setLineDash([5, 4]);
+          ctx.strokeRect(state.roi.x * width, state.roi.y * height, state.roi.w * width, state.roi.h * height);
+          ctx.setLineDash([]);
+        }
+        if (dragStart) {
+          ctx.strokeStyle = '#e8b96f';
+          ctx.setLineDash([5, 4]);
+          ctx.strokeRect(dragStart.x * width, dragStart.y * height, (state.cursor.x - dragStart.x) * width, (state.cursor.y - dragStart.y) * height);
+          ctx.setLineDash([]);
+        }
+        if (document.activeElement === canvas && !dragStart && !state.roi) {
+          const x = state.cursor.x * width;
+          const y = state.cursor.y * height;
+          ctx.save();
+          ctx.lineWidth = 4;
+          ctx.strokeStyle = '#090b0d';
+          ctx.beginPath();
+          ctx.arc(x, y, 10, 0, Math.PI * 2);
+          ctx.moveTo(x - 16, y);
+          ctx.lineTo(x + 16, y);
+          ctx.moveTo(x, y - 16);
+          ctx.lineTo(x, y + 16);
+          ctx.stroke();
+          ctx.lineWidth = 1.5;
+          ctx.strokeStyle = '#ffe0a6';
+          ctx.beginPath();
+          ctx.arc(x, y, 10, 0, Math.PI * 2);
+          ctx.moveTo(x - 16, y);
+          ctx.lineTo(x + 16, y);
+          ctx.moveTo(x, y - 16);
+          ctx.lineTo(x, y + 16);
+          ctx.stroke();
+          ctx.restore();
+        }
+      }
+      function canvasPosition(event) {
+        const rect = canvas.getBoundingClientRect();
+        return { x: Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width)), y: Math.max(0, Math.min(1, (event.clientY - rect.top) / rect.height)) };
+      }
+      function finishSelection(start, end) {
+        const x = Math.max(0, Math.min(1, Math.min(start.x, end.x)));
+        const y = Math.max(0, Math.min(1, Math.min(start.y, end.y)));
+        const w = Math.max(Math.abs(end.x - start.x), .025);
+        const h = Math.max(Math.abs(end.y - start.y), .04);
+        state.roi = { x, y, w: Math.min(w, 1 - x), h: Math.min(h, 1 - y) };
+        $('metaSource').textContent = 'Canvas selection';
+        $('fovReadout').textContent = 'FOV / ROI';
+        sync();
+        toast('Region of interest set. Analysis remains simulated.');
+      }
+      function bindEvents() {
+        $('searchForm').addEventListener('submit', (event) => {
+          event.preventDefault();
+          const query = $('targetSearch').value.trim().toLocaleLowerCase();
+          const target = targets.find((item) => item.name.toLocaleLowerCase() === query || item.short.toLocaleLowerCase() === query || item.id === query);
+          if (target) selectTarget(target.id); else toast('No matching example object. Try a listed reference target.');
+        });
+        $('coordinateForm').addEventListener('submit', (event) => { event.preventDefault(); updateCoordinates(Number($('raInput').value), Number($('decInput').value), 'Coordinate entry'); });
+        document.querySelectorAll('[data-mode]').forEach((button) => button.addEventListener('click', () => { stopPlayback(); state.mode = button.dataset.mode; if (state.mode !== 'spectral' && state.fov === 360) state.fov = 2; sync(); }));
+        $('zoomIn').addEventListener('click', () => { state.fov = state.fov === 360 ? 20 : Math.max(.5, state.fov / 2); state.roi = null; sync(); });
+        $('zoomOut').addEventListener('click', () => { state.fov = state.fov >= 180 ? 360 : Math.min(360, state.fov * 2); state.roi = null; sync(); });
+        $('resetSky').addEventListener('click', () => { state.fov = 360; state.roi = null; state.mode = 'spectral'; sync(); });
+        canvas.addEventListener('pointerdown', (event) => { canvas.setPointerCapture(event.pointerId); dragStart = canvasPosition(event); state.cursor = dragStart; draw(); });
+        canvas.addEventListener('pointermove', (event) => { state.cursor = canvasPosition(event); if (dragStart) draw(); });
+        canvas.addEventListener('pointerup', (event) => { const end = canvasPosition(event); if (dragStart) finishSelection(dragStart, end); dragStart = null; draw(); });
+        canvas.addEventListener('pointercancel', () => { dragStart = null; draw(); });
+        canvas.addEventListener('focus', draw);
+        canvas.addEventListener('blur', draw);
+        canvas.addEventListener('keydown', (event) => {
+          const step = event.shiftKey ? .05 : .015;
+          const keys = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] };
+          if (keys[event.key]) { event.preventDefault(); state.cursor.x = Math.max(0, Math.min(1, state.cursor.x + keys[event.key][0])); state.cursor.y = Math.max(0, Math.min(1, state.cursor.y + keys[event.key][1])); draw(); }
+          if (event.key === 'Enter') { event.preventDefault(); finishSelection({ x: state.cursor.x - .04, y: state.cursor.y - .06 }, { x: state.cursor.x + .04, y: state.cursor.y + .06 }); }
+        });
+        window.addEventListener('resize', resizeCanvas);
+      }
+      renderTargets();
+      bindEvents();
+      resizeCanvas();
+      sync();
+    })();
+  </script>
+</body>
+
+</html>
