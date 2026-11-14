@@ -36,7 +36,9 @@ import { useRgbComposite } from '../../hooks/useRgbComposite';
 import { RgbControls } from './RgbControls';
 import {
   computeRegionFromPoints,
+  moveRegion,
   REGION_EXCEEDS_LIMIT_MESSAGE,
+  resizeRegion,
   validateCoordinates,
 } from '../../region';
 import type { CatalogObject, JobCreateRequest, JobSnapshot, RegionRequest } from '../../types';
@@ -358,18 +360,25 @@ export function SkyWorkspace({
     height: number;
   } | null>(null);
   const [selectedRegion, setSelectedRegion] = useState<RegionRequest | null>(null);
-  const [projectedRegion, setProjectedRegion] = useState<string>('');
+  // A drawn or adjusted region stays a draft until the user confirms it.
+  const [regionConfirmed, setRegionConfirmed] = useState(true);
+  const regionEdit = useRef<{
+    kind: 'move' | 'resize';
+    startWorld: [number, number];
+    startRegion: RegionRequest;
+  } | null>(null);
+  const [projectedRegion, setProjectedRegion] = useState<[number, number][] | null>(null);
   const [regionError, setRegionError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!selectedRegion) { setProjectedRegion(''); return; }
+    if (!selectedRegion) { setProjectedRegion(null); return; }
     const draw = () => {
       const v = viewerRef.current;
       if (!v?.world2pix) return;
       const half = selectedRegion.size_arcmin / 120;
       const dra = half / Math.max(0.01, Math.cos(selectedRegion.dec_deg * Math.PI / 180));
       const points = [[-1,-1], [1,-1], [1,1], [-1,1]].map(([x,y]) => v.world2pix!((selectedRegion.ra_deg + x * dra + 360) % 360, selectedRegion.dec_deg + y * half));
-      setProjectedRegion(points.every(p => p && p.every(Number.isFinite)) ? points.map(p => `${p![0]},${p![1]}`).join(' ') : '');
+      setProjectedRegion(points.every(p => p && p.every(Number.isFinite)) ? points.map(p => [p![0], p![1]] as [number, number]) : null);
     };
     draw(); const timer = window.setInterval(draw, 100);
     return () => window.clearInterval(timer);
@@ -572,6 +581,7 @@ export function SkyWorkspace({
       setCoordError(null);
       setRegionError(null);
       setSelectedRegion(target);
+      setRegionConfirmed(true);
 
       if (viewerRef.current) {
         viewerRef.current.gotoRaDec?.(target.ra_deg, target.dec_deg);
@@ -693,18 +703,58 @@ export function SkyWorkspace({
     setRegionError(null);
     setMode('pan');
 
+    // Valid region: keep it as an adjustable draft until the user confirms it.
     setSelectedRegion({ ra_deg: regionBounds.ra_deg, dec_deg: regionBounds.dec_deg, size_arcmin: regionBounds.clamped_size_arcmin });
-    // Valid region: immediately POST /api/jobs
+    setRegionConfirmed(false);
+  };
+
+  // Move (drag the box) or resize (drag a corner) the selected region
+  const handleRegionEditStart = (kind: 'move' | 'resize') => (e: React.PointerEvent<SVGElement>) => {
+    if (!selectedRegion) return;
+    e.stopPropagation();
+    e.preventDefault();
+    const world = toWorld(e);
+    if (!world) return;
+    regionEdit.current = { kind, startWorld: world, startRegion: selectedRegion };
+    e.currentTarget.setPointerCapture(e.pointerId);
+  };
+
+  const handleRegionEditMove = (e: React.PointerEvent<SVGElement>) => {
+    const edit = regionEdit.current;
+    if (!edit) return;
+    e.stopPropagation();
+    const world = toWorld(e);
+    if (!world) return;
+    setSelectedRegion(
+      edit.kind === 'move'
+        ? moveRegion(edit.startRegion, edit.startWorld, world)
+        : resizeRegion(edit.startRegion, world),
+    );
+    setRegionConfirmed(false);
+  };
+
+  const handleRegionEditEnd = (e: React.PointerEvent<SVGElement>) => {
+    if (!regionEdit.current) return;
+    e.stopPropagation();
+    regionEdit.current = null;
+  };
+
+  const handleConfirmRegion = () => {
+    if (!selectedRegion) return;
+    setRegionConfirmed(true);
     void onStartJob({
-      ra_deg: regionBounds.ra_deg,
-      dec_deg: regionBounds.dec_deg,
-      size_arcmin: regionBounds.clamped_size_arcmin,
+      ...selectedRegion,
       channels: [currentChannel],
       products: ['image'],
       mode: 'latest',
     }).catch(() => {
       // Job creation errors surface through the app-level banner.
     });
+  };
+
+  const handleClearRegion = () => {
+    setSelectedRegion(null);
+    setRegionConfirmed(true);
   };
 
   // Zoom controls
@@ -988,7 +1038,60 @@ export function SkyWorkspace({
         >
           <div id="aladin-view" aria-label="Aladin Lite All-Sky DR1 HiPS view" />
 
-          {selectedRegion && projectedRegion && <svg className="persistent-region" aria-label="Selected sky region"><polygon points={projectedRegion} /><foreignObject x={Number(projectedRegion.split(' ')[0].split(',')[0])} y={Number(projectedRegion.split(' ')[0].split(',')[1])} width="36" height="36"><button type="button" aria-label="Clear selected region" onClick={() => setSelectedRegion(null)}>×</button></foreignObject></svg>}
+          {selectedRegion && projectedRegion && (() => {
+            const cx = projectedRegion.reduce((sum, p) => sum + p[0], 0) / 4;
+            const cy = projectedRegion.reduce((sum, p) => sum + p[1], 0) / 4;
+            // Place the clear button just outside the first corner so it never covers a resize handle.
+            const [x0, y0] = projectedRegion[0];
+            const dist = Math.hypot(x0 - cx, y0 - cy) || 1;
+            const clearX = x0 + ((x0 - cx) / dist) * 26 - 16;
+            const clearY = y0 + ((y0 - cy) / dist) * 26 - 16;
+            return (
+              <svg
+                className="persistent-region"
+                aria-label="Selected sky region"
+                onPointerMove={handleRegionEditMove}
+                onPointerUp={handleRegionEditEnd}
+                onPointerCancel={handleRegionEditEnd}
+              >
+                <polygon
+                  className="region-body"
+                  points={projectedRegion.map(([x, y]) => `${x},${y}`).join(' ')}
+                  aria-label="Drag to move the selected region"
+                  onPointerDown={handleRegionEditStart('move')}
+                />
+                {projectedRegion.map(([x, y], i) => (
+                  <circle
+                    key={i}
+                    className={`region-handle ${i % 2 === 0 ? 'handle-nwse' : 'handle-nesw'}`}
+                    cx={x}
+                    cy={y}
+                    r={7}
+                    aria-label="Drag to resize the selected region"
+                    onPointerDown={handleRegionEditStart('resize')}
+                  />
+                ))}
+                <foreignObject x={clearX} y={clearY} width="32" height="32">
+                  <button type="button" className="region-clear" aria-label="Clear selected region" onClick={handleClearRegion}>
+                    <svg viewBox="0 0 12 12" aria-hidden="true">
+                      <path d="M3 3 9 9M9 3 3 9" />
+                    </svg>
+                  </button>
+                </foreignObject>
+              </svg>
+            );
+          })()}
+          {selectedRegion && !regionConfirmed && (
+            <div className="region-confirm-bar float" role="group" aria-label="Confirm selected region">
+              <span>
+                {formatRa(selectedRegion.ra_deg)} {formatDec(selectedRegion.dec_deg)} · {selectedRegion.size_arcmin.toFixed(1)}′
+              </span>
+              <span className="region-confirm-hint">Drag to move, corners to resize</span>
+              <button type="button" className="region-confirm-btn" onClick={handleConfirmRegion}>
+                Confirm region
+              </button>
+            </div>
+          )}
           {/* Selection Drag Box */}
           {selectionBox && (
             <div

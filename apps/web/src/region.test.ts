@@ -4,7 +4,9 @@ import {
   computeRegionFromPoints,
   MAX_REGION_SIZE_ARCMIN,
   MIN_REGION_SIZE_ARCMIN,
+  moveRegion,
   REGION_EXCEEDS_LIMIT_MESSAGE,
+  resizeRegion,
   validateCoordinates,
 } from './region';
 
@@ -111,6 +113,47 @@ describe('region module', () => {
 
       const res = computeRegionFromPoints(p1, p2);
       expect(res.raw_size_arcmin).toBeCloseTo(6.0);
+    });
+  });
+
+  describe('moveRegion', () => {
+    it('shifts the centre by the pointer delta and keeps the size', () => {
+      const res = moveRegion({ ra_deg: 100, dec_deg: 10, size_arcmin: 6 }, [100.5, 10.2], [100.7, 10.1]);
+      expect(res.ra_deg).toBeCloseTo(100.2);
+      expect(res.dec_deg).toBeCloseTo(9.9);
+      expect(res.size_arcmin).toBe(6);
+    });
+
+    it('wraps RA across the 0/360 boundary', () => {
+      const res = moveRegion({ ra_deg: 359.95, dec_deg: 0, size_arcmin: 6 }, [359.9, 0], [0.1, 0]);
+      expect(res.ra_deg).toBeCloseTo(0.15);
+    });
+
+    it('keeps Declination within [-90, +90]', () => {
+      const res = moveRegion({ ra_deg: 10, dec_deg: 89.9, size_arcmin: 6 }, [10, 89], [10, 91]);
+      expect(res.dec_deg).toBe(90);
+    });
+  });
+
+  describe('resizeRegion', () => {
+    it('sizes the square so the pointer sits on its edge, keeping the centre', () => {
+      // 0.05 deg in Dec from the centre = 3 arcmin half side = 6 arcmin square
+      const res = resizeRegion({ ra_deg: 100, dec_deg: 0, size_arcmin: 20 }, [100.01, 0.05]);
+      expect(res.ra_deg).toBe(100);
+      expect(res.dec_deg).toBe(0);
+      expect(res.size_arcmin).toBeCloseTo(6);
+    });
+
+    it('applies cos(Dec) to the RA offset and wraps RA', () => {
+      // 0.1 deg RA at dec 60 = 0.05 deg = 3 arcmin half side
+      const res = resizeRegion({ ra_deg: 359.95, dec_deg: 60, size_arcmin: 20 }, [0.05, 60]);
+      expect(res.size_arcmin).toBeCloseTo(6);
+    });
+
+    it('clamps the size to the allowed range', () => {
+      const centre = { ra_deg: 100, dec_deg: 0, size_arcmin: 6 };
+      expect(resizeRegion(centre, [100, 5]).size_arcmin).toBe(MAX_REGION_SIZE_ARCMIN);
+      expect(resizeRegion(centre, [100, 0]).size_arcmin).toBe(MIN_REGION_SIZE_ARCMIN);
     });
   });
 });
