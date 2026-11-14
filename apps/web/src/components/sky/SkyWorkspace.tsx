@@ -36,6 +36,7 @@ import { useRgbComposite } from '../../hooks/useRgbComposite';
 import { RgbControls } from './RgbControls';
 import { SelectionActions, type SpectrumTarget } from './SelectionActions';
 import { contextFovDeg, resolveSelectionView, saveSelectionView } from '../../selectionView';
+import { ensureServiceWorkerControl } from '../../serviceWorkerControl';
 import {
   computeRegionFromPoints,
   moveRegion,
@@ -113,19 +114,6 @@ function workerMessage(worker: ServiceWorker, properties: string): Promise<void>
       else reject(new Error('HiPS adapter rejected metadata'));
     };
     worker.postMessage({ type: 'SYNC_PROPERTIES', properties }, [channel.port2]);
-  });
-}
-
-function waitForControl(): Promise<void> {
-  if (navigator.serviceWorker.controller) return Promise.resolve();
-  return new Promise((resolve) => {
-    const done = () => {
-      window.clearTimeout(timer);
-      navigator.serviceWorker.removeEventListener('controllerchange', done);
-      resolve();
-    };
-    const timer = window.setTimeout(done, 2500);
-    navigator.serviceWorker.addEventListener('controllerchange', done);
   });
 }
 
@@ -468,9 +456,12 @@ export function SkyWorkspace({
           worker,
           imagePropertiesFromCube(propsText, channelVirtualHipsUrl(0, location.origin)),
         );
-        await waitForControl();
-        if (!navigator.serviceWorker.controller) {
-          throw new Error('HiPS adapter is not controlling page. Check localhost/HTTPS.');
+        const control = await ensureServiceWorkerControl(worker);
+        if (control === 'reloading') return;
+        if (control === 'uncontrolled') {
+          throw new Error(
+            'HiPS adapter is not controlling this page. Reload with F5; service workers also require localhost or HTTPS.',
+          );
         }
 
         setAladinStatus('Initializing Aladin Lite canvas...');
