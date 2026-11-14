@@ -2,10 +2,12 @@ import { useCallback, useEffect, useState } from 'react';
 import { api, ApiError } from '../../api';
 import { canOpenInPlate, describeSelectionRegion, failureDetails, RECORDS_PAGE_SIZE, removeSelection } from '../../records';
 import type { FailureDetails } from '../../records';
-import type { SelectionSummary } from '../../types';
+import type { RegionRequest, SelectionSummary } from '../../types';
 
 interface RecordsWorkspaceProps {
   onOpenPlate: (jobId: string) => void;
+  /** Rebuild the selection box on the Sky map, back in the view where it was made. */
+  onShowInSky?: (region: RegionRequest) => void;
 }
 
 function errorText(err: unknown): string {
@@ -63,7 +65,7 @@ function FailureReason({ details }: { details: FailureDetails | null }) {
   );
 }
 
-export function RecordsWorkspace({ onOpenPlate }: RecordsWorkspaceProps) {
+export function RecordsWorkspace({ onOpenPlate, onShowInSky }: RecordsWorkspaceProps) {
   const [items, setItems] = useState<SelectionSummary[]>([]);
   const [nextBefore, setNextBefore] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -156,6 +158,22 @@ export function RecordsWorkspace({ onOpenPlate }: RecordsWorkspaceProps) {
                 <td className="records-mono">{selection.hits}</td>
                 <td className="records-actions">
                   <div className="records-actions-inner">
+                    {onShowInSky && (
+                      <button
+                        type="button"
+                        className="records-btn"
+                        title="Rebuild this selection on the Sky map"
+                        onClick={() =>
+                          onShowInSky({
+                            ra_deg: selection.region.ra_deg,
+                            dec_deg: selection.region.dec_deg,
+                            size_arcmin: selection.region.size_arcmin,
+                          })
+                        }
+                      >
+                        Show in Sky
+                      </button>
+                    )}
                     <button
                       type="button"
                       className="records-btn"

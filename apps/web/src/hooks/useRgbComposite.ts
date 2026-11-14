@@ -75,12 +75,13 @@ export function useRgbComposite({
     [viewerRef, ready, channelRef, onStatus],
   );
 
+  /** `composite` is drawn when turning RGB on (e.g. a restored view); otherwise the last or first preset. */
   const setRgbMode = useCallback(
-    (enabled: boolean) => {
+    (enabled: boolean, composite?: RgbChannels) => {
       const viewer = viewerRef.current;
       if (!viewer || !ready) return;
       if (enabled) {
-        setRgbModeState(applyRgb(rgb ?? presetChannels(channels, RGB_PRESETS[0])));
+        setRgbModeState(applyRgb(composite ?? rgb ?? presetChannels(channels, RGB_PRESETS[0])));
         return;
       }
       // Back to the single channel: drop the overlays, restore the grey base layer.

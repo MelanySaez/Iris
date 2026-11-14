@@ -3,12 +3,12 @@ import { api, ApiError } from './api';
 import { TopBar } from './components/TopBar';
 import { PlateWorkspace } from './components/plate/PlateWorkspace';
 import { RecordsWorkspace } from './components/records/RecordsWorkspace';
-import { SkyWorkspace } from './components/sky/SkyWorkspace';
+import { SkyWorkspace, type SelectionRestoreRequest } from './components/sky/SkyWorkspace';
 import { SpectralLab, type SpectrumRequest } from './components/spectral/SpectralLab';
 import type { SpectrumTarget } from './components/sky/SelectionActions';
 import { useJobPoller } from './hooks/useJobPoller';
 import { useRoute } from './router';
-import type { JobCreateRequest } from './types';
+import type { JobCreateRequest, RegionRequest } from './types';
 
 export function App() {
   const { route, navigate } = useRoute();
@@ -84,6 +84,16 @@ export function App() {
     [navigate],
   );
 
+  // Records → Sky: rebuild a recorded selection on the map; each click is a new request id.
+  const [restoreRequest, setRestoreRequest] = useState<SelectionRestoreRequest | null>(null);
+  const handleShowInSky = useCallback(
+    (region: RegionRequest) => {
+      setRestoreRequest((prev) => ({ id: (prev?.id ?? 0) + 1, region }));
+      navigate('#/sky');
+    },
+    [navigate],
+  );
+
   const handleOpenPlate = (jobId: string) => {
     navigate({ type: 'plate', jobId });
   };
@@ -130,6 +140,7 @@ export function App() {
             onStartJob={handleStartJob}
             onOpenPlate={handleOpenPlate}
             onViewSpectrum={handleViewSpectrum}
+            restoreRequest={restoreRequest}
             onRetryJob={handleRetryJob}
           />
         </div>
@@ -144,7 +155,7 @@ export function App() {
 
         {isRecords && (
           <div className="workspace-layer records-layer layer-active" aria-hidden={false}>
-            <RecordsWorkspace onOpenPlate={handleOpenPlate} />
+            <RecordsWorkspace onOpenPlate={handleOpenPlate} onShowInSky={handleShowInSky} />
           </div>
         )}
 

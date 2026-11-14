@@ -35,6 +35,7 @@ import { setChannelImageLayer } from '../../aladinView';
 import { useRgbComposite } from '../../hooks/useRgbComposite';
 import { RgbControls } from './RgbControls';
 import { SelectionActions, type SpectrumTarget } from './SelectionActions';
+import { contextFovDeg, resolveSelectionView, saveSelectionView } from '../../selectionView';
 import {
   computeRegionFromPoints,
   moveRegion,
@@ -50,6 +51,13 @@ interface SkyWorkspaceProps {
   onOpenPlate: (jobId: string) => void;
   onViewSpectrum: (target: SpectrumTarget) => void;
   onRetryJob: () => void;
+  /** Rebuild a recorded selection on the map; each request id is applied once. */
+  restoreRequest?: SelectionRestoreRequest | null;
+}
+
+export interface SelectionRestoreRequest {
+  id: number;
+  region: RegionRequest;
 }
 
 interface RecentSelection {
@@ -126,6 +134,7 @@ export function SkyWorkspace({
   onStartJob,
   onOpenPlate,
   onViewSpectrum,
+  restoreRequest = null,
 }: SkyWorkspaceProps) {
   const mapRef = useRef<HTMLDivElement>(null);
   const viewerRef = useRef<AladinViewer | null>(null);
@@ -573,6 +582,21 @@ export function SkyWorkspace({
     onStatus: setTileStatus,
   });
 
+  // Remember how the map looked when a selection was made, so Records can restore it.
+  const rememberSelectionView = useCallback(
+    (region: RegionRequest, center: [number, number], fovDeg: number) => {
+      saveSelectionView({
+        region,
+        center,
+        fov_deg: fovDeg,
+        projection,
+        channel: currentChannel,
+        rgb: rgbMode ? rgb : null,
+      });
+    },
+    [projection, currentChannel, rgbMode, rgb],
+  );
+
   // Go to coordinates
   const handleGoto = useCallback(
     (target: RegionRequest, name?: string) => {
@@ -589,10 +613,11 @@ export function SkyWorkspace({
       if (viewerRef.current) {
         viewerRef.current.gotoRaDec?.(target.ra_deg, target.dec_deg);
         // Set FOV slightly larger than region to provide context
-        const fovDeg = Math.min(60, Math.max(0.1, (target.size_arcmin * 2) / 60));
+        const fovDeg = contextFovDeg(target.size_arcmin);
         viewerRef.current.setFoV?.(fovDeg);
         setCurrentFov(fovDeg);
         setCenterCoords([target.ra_deg, target.dec_deg]);
+        rememberSelectionView(target, [target.ra_deg, target.dec_deg], fovDeg);
       }
 
       saveRecentSelection({
@@ -616,7 +641,7 @@ export function SkyWorkspace({
         // Job creation errors surface through the app-level banner.
       });
     },
-    [currentChannel, onStartJob],
+    [currentChannel, onStartJob, rememberSelectionView],
   );
 
   const handleFormSubmit = (e: React.FormEvent) => {
@@ -745,6 +770,13 @@ export function SkyWorkspace({
   const handleConfirmRegion = () => {
     if (!selectedRegion) return;
     setRegionConfirmed(true);
+    const liveCenter = viewerRef.current?.getRaDec?.();
+    const liveFov = viewerRef.current?.getFoV?.()?.[0];
+    rememberSelectionView(
+      selectedRegion,
+      liveCenter?.length === 2 && liveCenter.every(Number.isFinite) ? [liveCenter[0], liveCenter[1]] : centerCoords,
+      liveFov !== undefined && Number.isFinite(liveFov) ? liveFov : currentFov,
+    );
     void onStartJob({
       ...selectedRegion,
       channels: [currentChannel],
@@ -759,6 +791,42 @@ export function SkyWorkspace({
     setSelectedRegion(null);
     setRegionConfirmed(true);
   };
+
+  // Rebuild a recorded selection: the cached view when there is one, else from its coordinates.
+  const appliedRestoreId = useRef<number | null>(null);
+  useEffect(() => {
+    if (!restoreRequest || !aladinReady || appliedRestoreId.current === restoreRequest.id) return;
+    const viewer = viewerRef.current;
+    if (!viewer) return;
+    appliedRestoreId.current = restoreRequest.id;
+
+    const { view, source } = resolveSelectionView(restoreRequest.region);
+    if (view.projection && view.projection !== projection) {
+      viewer.setProjection?.(view.projection);
+      setProjection(view.projection);
+    }
+    viewer.gotoRaDec?.(view.center[0], view.center[1]);
+    viewer.setFoV?.(view.fov_deg);
+    setCenterCoords(view.center);
+    setCurrentFov(view.fov_deg);
+
+    if (view.rgb) {
+      setRgbMode(true, view.rgb);
+    } else if (view.channel !== null) {
+      if (rgbMode) setRgbMode(false);
+      if (view.channel !== currentChannel) handleChannelChange(view.channel);
+    }
+
+    setMode('pan');
+    setRegionError(null);
+    setSelectedRegion(view.region);
+    setRegionConfirmed(true);
+    setTileStatus(
+      source === 'cache'
+        ? 'Selection restored from its saved view'
+        : 'Selection rebuilt from its coordinates (no saved view)',
+    );
+  }, [restoreRequest, aladinReady, projection, rgbMode, currentChannel, setRgbMode, handleChannelChange]);
 
   // Zoom controls
   const handleZoom = (factor: number) => {
