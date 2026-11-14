@@ -168,7 +168,9 @@ describe('SpectralLab', () => {
     render(<SpectralLab />);
     await act(async () => fireEvent.click(catalogButton('M81 field')));
 
-    expect(screen.queryByRole('note', { name: '' })).toBeTruthy(); // disclaimer only
+    // Linear axis: only the quick-look disclaimer, no hidden-value note.
+    const linearNotes = screen.getAllByRole('note').map((n) => n.textContent ?? '');
+    expect(linearNotes.some((t) => t.includes('not drawn on the log axis'))).toBe(false);
     fireEvent.click(screen.getByRole('button', { name: 'Log' }));
 
     const notes = screen.getAllByRole('note').map((n) => n.textContent ?? '');

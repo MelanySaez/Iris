@@ -73,6 +73,12 @@ describe('spectrumKey', () => {
     expect(spectrumKey(-10, 5)).toBe(spectrumKey(350, 5));
     expect(spectrumKey(360, 0)).toBe(spectrumKey(0, 0));
   });
+
+  it('gives the same key to positions that round to the same place', () => {
+    expect(spectrumKey(10, -0.00001)).toBe(spectrumKey(10, 0));
+    expect(spectrumKey(359.99999, 5)).toBe(spectrumKey(0, 5));
+    expect(spectrumKey(-0.00001, 5)).toBe(spectrumKey(0, 5));
+  });
 });
 
 describe('niceTicks', () => {

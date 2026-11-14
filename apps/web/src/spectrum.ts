@@ -28,8 +28,11 @@ export function nextColorSlot(usedSlots: number[]): number | null {
 
 /** Stable identity for a position, so the same object is never fetched twice. */
 export function spectrumKey(raDeg: number, decDeg: number): string {
-  const ra = ((raDeg % 360) + 360) % 360;
-  return `${ra.toFixed(4)},${decDeg.toFixed(4)}`;
+  // Round first, then wrap RA, so 359.99999 and 360 both become 0; adding 0
+  // turns a rounded -0 into +0 so "-0.0000" never appears in a key.
+  const ra = ((Math.round(raDeg * 1e4) / 1e4) % 360 + 360) % 360 + 0;
+  const dec = Math.round(decDeg * 1e4) / 1e4 + 0;
+  return `${ra.toFixed(4)},${dec.toFixed(4)}`;
 }
 
 /** Round, human-friendly axis ticks covering [min, max]. */
