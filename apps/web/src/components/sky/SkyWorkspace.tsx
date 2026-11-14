@@ -34,6 +34,7 @@ import {
 import { setChannelImageLayer } from '../../aladinView';
 import { useRgbComposite } from '../../hooks/useRgbComposite';
 import { RgbControls } from './RgbControls';
+import { SelectionActions, type SpectrumTarget } from './SelectionActions';
 import {
   computeRegionFromPoints,
   moveRegion,
@@ -47,6 +48,7 @@ interface SkyWorkspaceProps {
   activeJob: JobSnapshot | null;
   onStartJob: (req: JobCreateRequest) => Promise<void>;
   onOpenPlate: (jobId: string) => void;
+  onViewSpectrum: (target: SpectrumTarget) => void;
   onRetryJob: () => void;
 }
 
@@ -123,6 +125,7 @@ export function SkyWorkspace({
   activeJob,
   onStartJob,
   onOpenPlate,
+  onViewSpectrum,
 }: SkyWorkspaceProps) {
   const mapRef = useRef<HTMLDivElement>(null);
   const viewerRef = useRef<AladinViewer | null>(null);
@@ -1209,7 +1212,12 @@ export function SkyWorkspace({
             <div className="status-caption">{aladinStatus} · {tileStatus}</div>
           </div>
 
-          {activeJob && <button type="button" className="plate-open-quiet float" onClick={() => onOpenPlate(activeJob.id)}>Open spectral plate →</button>}
+          <SelectionActions
+            selection={selectedRegion}
+            activeJobId={activeJob?.id ?? null}
+            onOpenPlate={onOpenPlate}
+            onViewSpectrum={onViewSpectrum}
+          />
 
           {/* Bottom-centre stack: the region bar always sits right above the dock, whatever its height */}
           <div className="sky-bottom-stack">

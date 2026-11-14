@@ -42,7 +42,15 @@ function formatValue(value: number | null): string {
   return Math.abs(value) >= 100 ? value.toFixed(0) : value.toFixed(1);
 }
 
-export function SpectralLab() {
+/** A spectrum to add, e.g. the centre of a Sky selection; `id` makes each click unique. */
+export interface SpectrumRequest {
+  id: number;
+  ra: number;
+  dec: number;
+  label: string;
+}
+
+export function SpectralLab({ request = null }: { request?: SpectrumRequest | null } = {}) {
   const [catalog, setCatalog] = useState<CatalogObject[]>(CURATED_CATALOG_FALLBACK);
   const [entries, setEntries] = useState<SpectrumEntry[]>([]);
   const [raText, setRaText] = useState('');
@@ -105,6 +113,14 @@ export function SpectralLab() {
     },
     [updateEntries],
   );
+
+  // Add a requested spectrum once per request id (effects may re-run).
+  const handledRequest = useRef<number | null>(null);
+  useEffect(() => {
+    if (!request || handledRequest.current === request.id) return;
+    handledRequest.current = request.id;
+    addSpectrum(request.label, request.ra, request.dec);
+  }, [request, addSpectrum]);
 
   const handleSubmit = (event: FormEvent) => {
     event.preventDefault();

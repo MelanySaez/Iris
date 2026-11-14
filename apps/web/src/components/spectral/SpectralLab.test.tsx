@@ -179,5 +179,25 @@ describe('SpectralLab', () => {
       'true',
     );
   });
-});
 
+  it('adds a spectrum requested from the Sky selection exactly once per request', async () => {
+    getSpectrum.mockResolvedValue(spectrum([1, 2], 3016));
+    const request = { id: 1, ra: 270.69303, dec: 61.87652, label: 'Selection centre (270.693°, 61.877°)' };
+    const { rerender } = render(<SpectralLab request={request} />);
+    await act(async () => {});
+
+    expect(getSpectrum).toHaveBeenCalledTimes(1);
+    expect(getSpectrum).toHaveBeenCalledWith(270.69303, 61.87652);
+    expect(screen.getByText('Selection centre (270.693°, 61.877°)')).toBeTruthy();
+
+    rerender(<SpectralLab request={request} />); // same request re-rendered: no second add
+    await act(async () => {});
+    expect(getSpectrum).toHaveBeenCalledTimes(1);
+    expect(legendItems()).toHaveLength(1);
+
+    rerender(<SpectralLab request={{ ...request, id: 2 }} />); // same place requested again
+    await act(async () => {});
+    expect(getSpectrum).toHaveBeenCalledTimes(1);
+    expect(screen.getByText('Selection centre (270.693°, 61.877°) is already in the comparison.')).toBeTruthy();
+  });
+});
