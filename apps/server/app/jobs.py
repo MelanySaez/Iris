@@ -141,8 +141,14 @@ class JobObserver(Protocol):
     logged and swallowed by the manager.
     """
 
-    def on_submitted(self, job: JobState, is_new: bool) -> None:
-        """``is_new`` is False for cache hits: the job will not run again."""
+    def on_submitted(
+        self, job: JobState, is_new: bool, request: JobRequest | None = None
+    ) -> None:
+        """``is_new`` is False for cache hits: the job will not run again.
+
+        ``request`` is the request just submitted. On a cache hit it can differ
+        from ``job.request`` in fields outside the job id, such as ``view``.
+        """
 
     def on_discovered(self, job: JobState, discovery: dict[str, Any]) -> None: ...
 
@@ -251,7 +257,7 @@ class JobManager:
         no lifecycle event can reach them ahead of ``on_submitted``.
         """
         job, is_new = self._submit(req)
-        self._notify("on_submitted", job, is_new)
+        self._notify("on_submitted", job, is_new, req)
         if is_new:
             self.pool.submit(self._run_job, job)
         return job

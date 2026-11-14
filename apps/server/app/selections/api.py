@@ -43,6 +43,8 @@ class SelectionSummary(BaseModel):
     error_kind: str | None
     error_trace: str | None
     job_events: list[dict[str, Any]] | None
+    view_mode: Literal["single", "rgb"] | None
+    rgb_channels: list[int] | None
     hits: int
     created_at: datetime
     last_seen_at: datetime
@@ -96,6 +98,8 @@ def _summary_fields(sel: Selection) -> dict[str, Any]:
         "error_kind": sel.error_kind,
         "error_trace": sel.error_trace,
         "job_events": sel.job_events,
+        "view_mode": sel.view_mode,
+        "rgb_channels": list(sel.rgb_channels) if sel.rgb_channels is not None else None,
         "hits": sel.hits,
         "created_at": sel.created_at,
         "last_seen_at": sel.last_seen_at,

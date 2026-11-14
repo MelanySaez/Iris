@@ -6,7 +6,7 @@ import logging
 from typing import Any
 
 from app.jobs import JobState, get_job_manifest
-from app.models import ManifestResponse
+from app.models import JobRequest, ManifestResponse
 from app.selections.store import SelectionStore
 
 logger = logging.getLogger("uvicorn.error")
@@ -20,9 +20,12 @@ class SelectionRecorder:
     def __init__(self, store: SelectionStore) -> None:
         self.store = store
 
-    def on_submitted(self, job: JobState, is_new: bool) -> None:
+    def on_submitted(
+        self, job: JobState, is_new: bool, request: JobRequest | None = None
+    ) -> None:
+        # The submitted request carries the latest view; job.request may be an older one.
         result = self.store.record_submission(
-            job.id, job.request, job.status, new_attempt=is_new
+            job.id, request or job.request, job.status, new_attempt=is_new
         )
         if is_new or job.status not in TERMINAL_STATUSES:
             return

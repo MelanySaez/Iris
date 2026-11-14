@@ -45,6 +45,10 @@ The project uses a single database. Selection tests use `DATABASE_URL` but never
 uv run pytest -q   # in apps/server, with .env sourced
 ```
 
+### View mode
+
+`POST /api/jobs` accepts an optional `view` describing how the Sky map showed the region: `{"mode": "single"}` or `{"mode": "rgb", "rgb": [r, g, b]}` (channels 0..101; `rgb` is required for `rgb` and rejected for `single`). It is display metadata: it does not change the job id or the channels the job processes. The saved selection stores the latest view it was sent as `view_mode` and `rgb_channels` (migration `0004`); a request without `view` keeps the recorded one, and selections saved before `0004` have both as `null`.
+
 ### Failure traceability
 
 Every failed job records where, why and how it stopped. The job snapshot (`GET /api/jobs/{id}`) and the saved selection carry:

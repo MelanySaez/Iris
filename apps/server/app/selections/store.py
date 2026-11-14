@@ -25,6 +25,13 @@ def _quantize(value: float, quantum: Decimal) -> Decimal:
     return Decimal(repr(value)).quantize(quantum, rounding=ROUND_HALF_EVEN)
 
 
+def _view_columns(req: JobRequest) -> dict[str, Any]:
+    """Selection columns for the request's view (all None when it sent none)."""
+    if req.view is None:
+        return {"view_mode": None, "rgb_channels": None}
+    return {"view_mode": req.view.mode, "rgb_channels": req.view.rgb}
+
+
 def normalize_region(
     ra_deg: float, dec_deg: float, size_arcmin: float
 ) -> dict[str, Decimal]:
@@ -102,11 +109,17 @@ class SelectionStore:
                 mode=req.mode,
                 stretch=req.stretch,
                 job_status=status,
+                **_view_columns(req),
             )
             changes: dict[str, Any] = {
                 "hits": Selection.hits + 1,
                 "last_seen_at": func.now(),
             }
+            if req.view is not None:
+                # Keep the latest view. Requests without one (e.g. from Plate)
+                # leave the recorded view untouched.
+                changes["view_mode"] = stmt.excluded.view_mode
+                changes["rgb_channels"] = stmt.excluded.rgb_channels
             if new_attempt:
                 changes["job_status"] = stmt.excluded.job_status
                 changes.update(dict.fromkeys(OUTCOME_DETAIL_COLUMNS))

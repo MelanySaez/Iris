@@ -171,6 +171,52 @@ def test_repeated_selection_counts_hits_instead_of_duplicating(client):
     assert items[0]["last_seen_at"] >= items[0]["created_at"]
 
 
+# -- view mode (how the Sky map showed the region) ----------------------------
+
+
+@requires_db
+def test_selection_stores_the_view_mode_it_was_made_in(client):
+    view = {"mode": "rgb", "rgb": [16, 32, 46]}
+    payload = {**region(12.5), "channels": [44], "view": view}
+    job = client.post("/api/jobs", json=payload).json()
+
+    saved = find_by_job(client, job["id"])
+    assert saved["view_mode"] == "rgb"
+    assert saved["rgb_channels"] == [16, 32, 46]
+    assert saved["channels"] == [44]
+
+
+@requires_db
+def test_selection_without_a_view_has_no_view_mode(client):
+    job = client.post("/api/jobs", json={**region(13.5), "channels": [44]}).json()
+
+    saved = find_by_job(client, job["id"])
+    assert saved["view_mode"] is None
+    assert saved["rgb_channels"] is None
+
+
+@requires_db
+def test_repeated_selection_keeps_the_latest_view_and_ignores_missing_ones(client):
+    payload = {**region(14.5), "channels": [44]}
+    rgb_view = {"mode": "rgb", "rgb": [16, 32, 46]}
+    first = client.post("/api/jobs", json={**payload, "view": rgb_view}).json()
+    saved = find_by_job(client, first["id"])
+    wait_for_outcome(client, saved["id"])
+
+    second = client.post("/api/jobs", json={**payload, "view": {"mode": "single"}}).json()
+    assert second["id"] == first["id"]
+    latest = find_by_job(client, first["id"])
+    assert latest["view_mode"] == "single"
+    assert latest["rgb_channels"] is None
+    assert latest["hits"] == 2
+
+    # A request without a view (e.g. Plate re-requesting a job) keeps the recorded one.
+    client.post("/api/jobs", json=payload)
+    kept = find_by_job(client, first["id"])
+    assert kept["view_mode"] == "single"
+    assert kept["hits"] == 3
+
+
 @requires_db
 def test_discovered_products_are_stored_with_derived_fields(client):
     discovery = {
@@ -318,7 +364,7 @@ class _OrderObserver:
     def __init__(self) -> None:
         self.events: list[str] = []
 
-    def on_submitted(self, job, is_new) -> None:
+    def on_submitted(self, job, is_new, request=None) -> None:
         self.events.append("submitted" if is_new else "submitted-cached")
 
     def on_discovered(self, job, discovery) -> None:
