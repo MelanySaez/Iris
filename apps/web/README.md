@@ -46,7 +46,9 @@ the blank channels 50/51 are not offered. This is false colour built from the
 
 ## Spectral Lab
 
-Open **Spectral Lab** in the top bar (`#/spectral`). Add up to 8 spectra from the
+Open **Spectral Lab** in the top bar (`#/spectral`), or select a region in Sky
+and press **View spectrum →** to open the Lab with the spectrum at the centre of
+the selection already added. Add up to 8 spectra from the
 curated catalog or by typing RA/Dec in degrees; each is fetched from
 `GET /api/spectrum` and plotted as wavelength (µm) against surface brightness
 (MJy/sr) on one shared axis. Hover the chart for per-channel values and hit

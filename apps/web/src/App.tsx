@@ -4,7 +4,8 @@ import { TopBar } from './components/TopBar';
 import { PlateWorkspace } from './components/plate/PlateWorkspace';
 import { RecordsWorkspace } from './components/records/RecordsWorkspace';
 import { SkyWorkspace } from './components/sky/SkyWorkspace';
-import { SpectralLab } from './components/spectral/SpectralLab';
+import { SpectralLab, type SpectrumRequest } from './components/spectral/SpectralLab';
+import type { SpectrumTarget } from './components/sky/SelectionActions';
 import { useJobPoller } from './hooks/useJobPoller';
 import { useRoute } from './router';
 import type { JobCreateRequest } from './types';
@@ -68,6 +69,21 @@ export function App() {
     [updateSnapshot, navigate],
   );
 
+  // Sky selection → Spectral Lab: each click is a new request id, consumed once.
+  const [spectrumRequest, setSpectrumRequest] = useState<SpectrumRequest | null>(null);
+  const handleViewSpectrum = useCallback(
+    (target: SpectrumTarget) => {
+      setSpectrumRequest((prev) => ({
+        id: (prev?.id ?? 0) + 1,
+        ra: target.ra_deg,
+        dec: target.dec_deg,
+        label: target.label,
+      }));
+      navigate('#/spectral');
+    },
+    [navigate],
+  );
+
   const handleOpenPlate = (jobId: string) => {
     navigate({ type: 'plate', jobId });
   };
@@ -113,6 +129,7 @@ export function App() {
             activeJob={activeJob}
             onStartJob={handleStartJob}
             onOpenPlate={handleOpenPlate}
+            onViewSpectrum={handleViewSpectrum}
             onRetryJob={handleRetryJob}
           />
         </div>
@@ -122,7 +139,7 @@ export function App() {
           className={`workspace-layer spectral-layer ${isSpectral ? 'layer-active' : 'layer-hidden'}`}
           aria-hidden={!isSpectral}
         >
-          <SpectralLab />
+          <SpectralLab request={spectrumRequest} />
         </div>
 
         {isRecords && (
