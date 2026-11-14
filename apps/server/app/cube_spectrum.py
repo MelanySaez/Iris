@@ -239,7 +239,10 @@ def read_ranges(
     spec = ",".join(f"{o}-{o + length - 1}" for o in offsets)
     headers, body = _fetch_partial(client, url, f"bytes={spec}")
     total = _range_total(headers, body)
-    if expected_total is not None and total is not None and total != expected_total:
+    if expected_total is not None and total != expected_total:
+        # A missing or unknown total (`bytes a-b/*`) cannot prove the cached
+        # offsets still fit, so it is treated as a changed tile.
+        # (TileChangedError triggers one rediscovery, which requires a total.)
         raise TileChangedError(f"tile size {total} != cached {expected_total}")
     ctype = headers.get("content-type", "")
     if ctype.startswith("multipart/byteranges"):

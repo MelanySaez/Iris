@@ -94,6 +94,7 @@ class RangeServer:
         self.requests = 0
         self.coalesce = False
         self.omit_content_range = False
+        self.unknown_total = False
 
     def __call__(self, request: httpx.Request) -> httpx.Response:
         self.requests += 1
@@ -114,12 +115,13 @@ class RangeServer:
                 else {"content-range": f"bytes {a}-{b}/{total}"}
             )
             return httpx.Response(206, content=self.blob[a : b + 1], headers=headers)
+        shown_total = "*" if self.unknown_total else total
         boundary = "TESTBOUNDARY"
         body = b""
         for a, b in ranges:
             body += (
                 f"\r\n--{boundary}\r\nContent-Type: application/fits\r\n"
-                f"Content-Range: bytes {a}-{b}/{total}\r\n\r\n"
+                f"Content-Range: bytes {a}-{b}/{shown_total}\r\n\r\n"
             ).encode() + self.blob[a : b + 1]
         body += f"\r\n--{boundary}--\r\n".encode()
         return httpx.Response(
@@ -446,3 +448,15 @@ def test_oversized_coalesced_span_is_rejected(cube_server, monkeypatch):
 )
 def test_pixel_index_includes_tile_edges(position, size, expected):
     assert cube.pixel_index(position, size) == expected
+
+
+def test_unknown_tile_size_is_not_trusted_as_unchanged(cube_server):
+    """HTTP allows `bytes a-b/*`; without a size we cannot prove the layout still fits."""
+    assert get().json()["points"][0]["value"] == pytest.approx(10.0)
+    cube_server.blob = build_cube_bytes(base_value=1000.0, extra_cards=60)
+    cube_server.unknown_total = True
+    for f in cube.CUBE_SPECTRUM_CACHE_DIR.glob("*.json"):
+        f.unlink()
+    resp = get()
+    # Never a 200 built from stale offsets: either correct data or an explicit 502.
+    assert resp.status_code == 502
