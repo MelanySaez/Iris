@@ -12,7 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import BaseModel
 
 from app.jobs import JobManager
-from app.selections.db import make_session_factory
+from app.selections.db import make_session_factory, normalize_database_url
 from app.selections.orm import Selection, SkyRegion, SpectralProduct
 from app.selections.recorder import SelectionRecorder
 from app.selections.store import SelectionStore
@@ -123,7 +123,13 @@ def configure_selections(url: str | None, manager: JobManager) -> SelectionStore
         manager.remove_observer(_recorder)
     _store, _recorder = None, None
     if url:
-        _store = SelectionStore(make_session_factory(url))
+        try:
+            store = SelectionStore(make_session_factory(normalize_database_url(url)))
+        except Exception:
+            # A malformed URL must never stop the server; records stay disabled.
+            logger.exception("selection records disabled: invalid DATABASE_URL")
+            return None
+        _store = store
         _recorder = SelectionRecorder(_store)
         manager.add_observer(_recorder)
         logger.info("selection records enabled")

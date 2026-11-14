@@ -276,3 +276,86 @@ def test_unreachable_database_does_not_break_job_submission():
         assert status in ("ready", "failed")
     finally:
         configure_selections(None, job_manager)
+
+
+# -- review follow-ups: startup safety, event ordering, cached outcomes --------
+
+
+def test_driverless_or_invalid_database_url_never_breaks_startup():
+    try:
+        store = configure_selections(
+            "postgresql://iris:iris@127.0.0.1:1/iris", job_manager
+        )
+        assert store is not None
+        assert store.engine_url.startswith("postgresql+psycopg://")
+        assert configure_selections("definitely not a url", job_manager) is None
+        resp = TestClient(app).get("/api/selections")
+        assert resp.status_code == 503
+    finally:
+        configure_selections(None, job_manager)
+
+
+class _OrderObserver:
+    def __init__(self) -> None:
+        self.events: list[str] = []
+
+    def on_submitted(self, job) -> None:
+        self.events.append("submitted")
+
+    def on_discovered(self, job, discovery) -> None:
+        self.events.append("discovered")
+
+    def on_finished(self, job) -> None:
+        self.events.append("finished")
+
+
+def test_submission_is_notified_before_the_job_can_finish():
+    """Even a job that finishes instantly must be recorded before its outcome."""
+    from app.models import JobRequest
+
+    observer = _OrderObserver()
+    job_manager.add_observer(observer)
+
+    def run_inline(fn, *args):
+        fn(*args)
+
+    try:
+        with patch.object(job_manager.pool, "submit", side_effect=run_inline):
+            job_manager.submit(JobRequest(**region(19.5), channels=[44]))
+    finally:
+        job_manager.remove_observer(observer)
+    assert observer.events == ["submitted", "discovered", "finished"]
+
+
+def test_cached_terminal_job_records_its_outcome_on_submit():
+    """A cache hit never runs the job again, so the submit must store the outcome."""
+    from app.jobs import JobState
+    from app.models import JobRequest
+    from app.selections.recorder import SelectionRecorder
+
+    calls: list[tuple] = []
+
+    class FakeStore:
+        def record_submission(self, job_id, req, status):
+            calls.append(("submission", job_id, status))
+
+        def record_outcome(self, job_id, status, manifest):
+            calls.append(("outcome", job_id, status, manifest))
+
+    job = JobState(id="cached-job", request=JobRequest(**region(20.5)), status="ready")
+    manifest = {"job_id": "cached-job", "region": {}}
+    with (
+        patch("app.selections.recorder.get_job_manifest", return_value=manifest),
+        patch(
+            "app.selections.recorder.ManifestResponse",
+            side_effect=lambda **kw: type(
+                "M", (), {"model_dump": lambda self, mode: kw}
+            )(),
+        ),
+    ):
+        SelectionRecorder(FakeStore()).on_submitted(job)
+
+    assert calls == [
+        ("submission", "cached-job", "ready"),
+        ("outcome", "cached-job", "ready", manifest),
+    ]

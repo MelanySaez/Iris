@@ -12,10 +12,21 @@ DATABASE_URL_ENV = "DATABASE_URL"
 CONNECT_TIMEOUT_SECONDS = 3
 
 
+def normalize_database_url(url: str) -> str:
+    """Use the psycopg 3 driver for driverless PostgreSQL URLs.
+
+    ``postgresql://`` would select psycopg2, which is not a dependency.
+    """
+    for prefix in ("postgresql://", "postgres://"):
+        if url.startswith(prefix):
+            return "postgresql+psycopg://" + url[len(prefix) :]
+    return url
+
+
 def get_database_url() -> str | None:
     """Return the configured database URL, or ``None`` when storage is disabled."""
     url = os.environ.get(DATABASE_URL_ENV, "").strip()
-    return url or None
+    return normalize_database_url(url) if url else None
 
 
 @lru_cache(maxsize=4)

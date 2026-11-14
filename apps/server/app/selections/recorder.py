@@ -11,6 +11,8 @@ from app.selections.store import SelectionStore
 
 logger = logging.getLogger("uvicorn.error")
 
+TERMINAL_STATUSES = ("ready", "failed")
+
 
 class SelectionRecorder:
     """Persists job submissions, discoveries and outcomes as selection records."""
@@ -20,6 +22,9 @@ class SelectionRecorder:
 
     def on_submitted(self, job: JobState) -> None:
         self.store.record_submission(job.id, job.request, job.status)
+        if job.status in TERMINAL_STATUSES:
+            # Cache hit: the job will not run again, so store its outcome now.
+            self.on_finished(job)
 
     def on_discovered(self, job: JobState, discovery: dict[str, Any]) -> None:
         self.store.record_discovery(job.request, discovery)

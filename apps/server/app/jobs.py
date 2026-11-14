@@ -216,13 +216,19 @@ class JobManager:
             req.products.append("image")
 
     def submit(self, req: JobRequest) -> JobState:
-        """Submit a job or retrieve an active/cached one, notifying observers."""
-        job = self._submit(req)
+        """Submit a job or retrieve an active/cached one, notifying observers.
+
+        Observers hear about the submission before a new job is scheduled, so
+        no lifecycle event can reach them ahead of ``on_submitted``.
+        """
+        job, is_new = self._submit(req)
         self._notify("on_submitted", job)
+        if is_new:
+            self.pool.submit(self._run_job, job)
         return job
 
-    def _submit(self, req: JobRequest) -> JobState:
-        """Submit a job or retrieve an active/cached one."""
+    def _submit(self, req: JobRequest) -> tuple[JobState, bool]:
+        """Find an active/cached job or register a new one (not yet scheduled)."""
         self.validate_request(req)
         job_id = self.compute_job_id(req)
 
@@ -236,7 +242,7 @@ class JobManager:
                 else:
                     logger.info("job=%s cache=memory_hit", job_id)
                     self.jobs.move_to_end(job_id)
-                    return job
+                    return job, False
 
             # Check disk snapshot cache
             snapshot_file = JOBS_CACHE_DIR / f"{job_id}.json"
@@ -250,7 +256,7 @@ class JobManager:
                             logger.info("job=%s cache=disk_hit", job_id)
                             job.cache_hit = True
                             self._put_lru(job)
-                            return job
+                            return job, False
                 except Exception:
                     pass
 
@@ -263,8 +269,7 @@ class JobManager:
                 req.channels,
                 req.size_arcmin,
             )
-            self.pool.submit(self._run_job, job)
-            return job
+            return job, True
 
     def _put_lru(self, job: JobState) -> None:
         """Insert or refresh job in memory LRU cache."""

@@ -11,7 +11,7 @@ uv run uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 
 ## Database (selection records)
 
-Every job submission is saved as a selection record in PostgreSQL (SQLAlchemy + Alembic). Storage is optional: when `DATABASE_URL` is unset, jobs still work and `/api/selections` answers 503.
+Every job submission is saved as a selection record in PostgreSQL (SQLAlchemy + Alembic). Storage is optional: when `DATABASE_URL` is unset or invalid, jobs still work and `/api/selections` answers 503. A driverless `postgresql://` URL is accepted and uses psycopg 3. Saving runs inside `POST /api/jobs`, so an unreachable database can delay a submission by up to 3 seconds (connect timeout).
 
 1. Start PostgreSQL from the repository root (`docker compose` works the same):
 

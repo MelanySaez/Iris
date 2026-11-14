@@ -44,6 +44,11 @@ class SelectionStore:
     def __init__(self, session_factory: sessionmaker) -> None:
         self._sessions = session_factory
 
+    @property
+    def engine_url(self) -> str:
+        """Database URL in use, with the password hidden."""
+        return self._sessions.kw["bind"].url.render_as_string(hide_password=True)
+
     # -- writes ---------------------------------------------------------------
 
     def _region_id(self, session: Session, key: dict[str, Decimal]) -> int:

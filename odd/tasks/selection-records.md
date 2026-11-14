@@ -19,7 +19,8 @@ Branch: `feat/selection-records` · Delivery: ask-on-risk · Runners: `uv run py
 |----|-------|-------|--------|--------|
 | T1 | S1, S2, S6 | inline | done | 5f18541 |
 | T2 | S3, S4, S7 | inline | done | 0d64d27 |
-| T3 | S5 | inline | done | (this commit) |
+| T3 | S5 | inline | done | 2cce791 |
+| T4 | S3, S7 | inline | done | (this commit) |
 
 Route evidence: one sequential feature (T3 depends on T2's API contract); no parallel independent units, so no writer trigger.
 
@@ -33,3 +34,6 @@ Route evidence: one sequential feature (T3 depends on T2's API contract); no par
 - **L6** — T2: `JobObserver` port in `jobs.py`; `SelectionRecorder` saves submit/discovery/outcome; failures logged, never raised. `tests/test_selections.py`: 9 tests (6 need `TEST_DATABASE_URL`), all pass against Postgres. Note: tests were written after the code (no RED observed first). Differential check of `POST /api/jobs` vs base: identical output.
 - **L7** — T3: RED observed first (4 api tests, router test, missing `records.ts`), then GREEN: 75/75 web tests, typecheck and build pass. `Records` tab at `#/records` lists, reopens ready jobs in Plate, deletes with confirm, paginates with `next_before`.
 - **L8** — End-to-end smoke with real uvicorn + Postgres: POST /api/jobs 202 → record listed (hits 1) → DELETE 204 → list empty. Commits under_budget for native review (risk medium).
+- **L9** — Independent verifier (Risk item 5, psycopg dependency): S1–S7 PASS, no blockers. Advisories: cache-hit jobs never store a manifest; on_submitted could race job completion; pagination ties on equal last_seen_at; sync DB latency on submit.
+- **L10** — Native review (reliability lens) granted by user, approved and acknowledged (lineage review-d8b98913e111bfea). Non-blocking findings: startup crash on driverless/invalid DATABASE_URL, status race, pagination ties, sync DB latency.
+- **L11** — T4 follow-up: RED observed for 3 new tests, then fixed: driverless `postgresql://` normalized to psycopg and invalid URLs disable records instead of crashing; `on_submitted` now fires before the job is scheduled; cache hits in a terminal state store their outcome/manifest on submit. Pagination ties and sync DB latency remain known limitations (connect timeout 3s).
