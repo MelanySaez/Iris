@@ -17,6 +17,32 @@ from app.catalog import CURATED_OBJECTS  # noqa: E402
 from app.jobs import job_manager  # noqa: E402
 from app.models import JobRequest  # noqa: E402
 
+# Old catalog ids and the id that replaced them, so stale commands fail loudly.
+RENAMED_IDS = {
+    "m81-field": (
+        "'m81-field' was renamed to 'm101-field' (the field is M101); "
+        "use 'm81' for M81 itself."
+    ),
+}
+
+
+def select_objects(objects: list[dict], ids_arg: str) -> list[dict]:
+    """Objects named in ``--objects`` (all when empty), in catalog order.
+
+    Exits with an explanation when an id is unknown, instead of silently
+    warming nothing for it.
+    """
+    target_ids = {o.strip() for o in ids_arg.split(",") if o.strip()}
+    if not target_ids:
+        return list(objects)
+    known = [obj["id"] for obj in objects]
+    unknown = sorted(target_ids - set(known))
+    if unknown:
+        hints = [RENAMED_IDS[i] for i in unknown if i in RENAMED_IDS]
+        detail = " ".join(hints) if hints else f"Valid ids: {', '.join(known)}."
+        raise SystemExit(f"Unknown catalog object id(s): {', '.join(unknown)}. {detail}")
+    return [obj for obj in objects if obj["id"] in target_ids]
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
@@ -67,12 +93,7 @@ def main() -> None:
     if "image" not in products:
         products.append("image")
 
-    target_ids = {o.strip() for o in args.objects.split(",") if o.strip()}
-    objects_to_process = [
-        obj
-        for obj in CURATED_OBJECTS
-        if not target_ids or obj["id"] in target_ids
-    ]
+    objects_to_process = select_objects(CURATED_OBJECTS, args.objects)
 
     if args.limit is not None and args.limit > 0:
         objects_to_process = objects_to_process[: args.limit]
