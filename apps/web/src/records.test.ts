@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { canOpenInPlate, describeSelectionRegion, removeSelection, selectionError } from './records';
+import { canOpenInPlate, describeSelectionRegion, failureDetails, removeSelection, selectionError } from './records';
 import type { SelectionSummary } from './types';
 
 function selection(overrides: Partial<SelectionSummary> = {}): SelectionSummary {
@@ -20,6 +20,10 @@ function selection(overrides: Partial<SelectionSummary> = {}): SelectionSummary 
     stretch: 'asinh',
     job_status: 'ready',
     job_error: null,
+    failed_stage: null,
+    error_kind: null,
+    error_trace: null,
+    job_events: null,
     hits: 1,
     created_at: '2026-11-14T10:00:00Z',
     last_seen_at: '2026-11-14T10:00:00Z',
@@ -51,5 +55,44 @@ describe('records helpers', () => {
     expect(selectionError(selection({ job_status: 'failed', job_error: null }))).toBe('Failed without a recorded reason.');
     expect(selectionError(selection({ job_status: 'ready', job_error: null }))).toBeNull();
     expect(selectionError(selection({ job_status: 'queued', job_error: 'stale' }))).toBeNull();
+  });
+
+  it('builds failure details with stage, kind, timeline offsets and trace', () => {
+    const details = failureDetails(
+      selection({
+        job_status: 'failed',
+        job_error: 'RuntimeError: No network',
+        failed_stage: 'downloading',
+        error_kind: 'download_failed',
+        error_trace: 'Traceback (most recent call last):\nRuntimeError: No network',
+        job_events: [
+          { stage: 'Discovering products', at: 100 },
+          { stage: 'Downloading DR1 cutouts 0/1', at: 101.25 },
+          { stage: 'Failed', at: 160.5 },
+        ],
+      }),
+    );
+    expect(details).toEqual({
+      message: 'RuntimeError: No network',
+      stage: 'downloading',
+      kind: 'download_failed',
+      trace: 'Traceback (most recent call last):\nRuntimeError: No network',
+      timeline: [
+        { stage: 'Discovering products', offset: '+0.0s' },
+        { stage: 'Downloading DR1 cutouts 0/1', offset: '+1.3s' },
+        { stage: 'Failed', offset: '+60.5s' },
+      ],
+    });
+  });
+
+  it('has no failure details for non-failed selections and tolerates old rows', () => {
+    expect(failureDetails(selection({ job_status: 'ready' }))).toBeNull();
+    expect(failureDetails(selection({ job_status: 'failed' }))).toEqual({
+      message: 'Failed without a recorded reason.',
+      stage: null,
+      kind: null,
+      trace: null,
+      timeline: [],
+    });
   });
 });

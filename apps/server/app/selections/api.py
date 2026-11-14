@@ -39,6 +39,10 @@ class SelectionSummary(BaseModel):
     stretch: str
     job_status: str
     job_error: str | None
+    failed_stage: str | None
+    error_kind: str | None
+    error_trace: str | None
+    job_events: list[dict[str, Any]] | None
     hits: int
     created_at: datetime
     last_seen_at: datetime
@@ -88,6 +92,10 @@ def _summary_fields(sel: Selection) -> dict[str, Any]:
         "stretch": sel.stretch,
         "job_status": sel.job_status,
         "job_error": sel.job_error,
+        "failed_stage": sel.failed_stage,
+        "error_kind": sel.error_kind,
+        "error_trace": sel.error_trace,
+        "job_events": sel.job_events,
         "hits": sel.hits,
         "created_at": sel.created_at,
         "last_seen_at": sel.last_seen_at,

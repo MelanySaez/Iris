@@ -45,6 +45,25 @@ The project uses a single database. Selection tests use `DATABASE_URL` but never
 uv run pytest -q   # in apps/server, with .env sourced
 ```
 
+### Failure traceability
+
+Every failed job records where, why and how it stopped. The job snapshot (`GET /api/jobs/{id}`) and the saved selection carry:
+
+| Field | Meaning |
+|-------|---------|
+| `failed_stage` | Pipeline stage that was running: `discovering`, `downloading`, `extracting` or `rendering`. |
+| `error_kind` | Stable category: `no_coverage`, `discovery_unavailable`, `no_detector_coverage`, `download_failed`, `extraction_failed`, `render_failed` or `unexpected`. |
+| `job_error` | Human-readable message. |
+| `error_trace` | Traceback (file and line) for unexpected errors, trimmed to the innermost frames; empty for expected failures. It exposes server file paths, so treat it as development-only data. |
+| `job_events` | Timeline of stages with epoch timestamps (selection only; the snapshot calls it `events`). |
+
+Every HTTP response has an `X-Request-ID` header. The request that created a job is stored as `request_id` in its snapshot and printed in the job's log lines (`job=<id> request=<request_id> ...`), so `grep <job_id>` on the server log returns the whole story. To query failures in the database:
+
+```bash
+docker compose exec db psql -U iris -P pager=off -c \
+  "select job_id, failed_stage, error_kind, job_error from selection where job_status = 'failed';"
+```
+
 After changing the models in `app/selections/orm.py`, create a migration with `uv run alembic revision --autogenerate -m "<message>"` and review it before committing.
 
 To run with a custom local spectral asset:
@@ -66,7 +85,7 @@ All endpoints are mounted under `/api`:
 - `GET /api/jobs/{id}/frames/{channel}/{product}.npy`: Export raw float32/int32 NumPy array (`image`, `variance`, `flags`, `wavelengths`, `bandwidths`).
 - `GET /api/jobs/{id}/pixel?x=&y=&channel=&epoch=`: Per-pixel probe returning calibrated units, raw values, exact LVF wavelength/bandwidth, channel window inclusion, and set `MP_*` flag bit names.
 - `GET /api/jobs/{id}/manifest`: Complete scientific provenance document for the plate inspector.
-- `GET /api/selections?limit=&before=`: Saved selections (one per job request), most recently seen first, with `job_status` and, for failed jobs, `job_error` (the reason). `next_before` is the cursor for the next page.
+- `GET /api/selections?limit=&before=`: Saved selections (one per job request), most recently seen first, with `job_status` and, for failed jobs, `job_error` plus its traceability fields (see below). `next_before` is the cursor for the next page.
 - `GET /api/selections/{id}`: One saved selection with its discovered spectral products and, for ready jobs, the provenance manifest.
 - `DELETE /api/selections/{id}`: Delete one saved selection (204). Shared region data is kept. All selection endpoints answer 503 when `DATABASE_URL` is unset.
 

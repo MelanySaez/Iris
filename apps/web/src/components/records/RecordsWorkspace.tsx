@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api, ApiError } from '../../api';
-import { canOpenInPlate, describeSelectionRegion, RECORDS_PAGE_SIZE, removeSelection, selectionError } from '../../records';
+import { canOpenInPlate, describeSelectionRegion, failureDetails, RECORDS_PAGE_SIZE, removeSelection } from '../../records';
+import type { FailureDetails } from '../../records';
 import type { SelectionSummary } from '../../types';
 
 interface RecordsWorkspaceProps {
@@ -14,6 +15,52 @@ function errorText(err: unknown): string {
 function formatTimestamp(iso: string): string {
   const date = new Date(iso);
   return Number.isNaN(date.getTime()) ? iso : date.toLocaleString();
+}
+
+function FailureReason({ details }: { details: FailureDetails | null }) {
+  if (!details) return null;
+  return (
+    <details className="records-status-error">
+      <summary>
+        <span className="when-closed">Show reason</span>
+        <span className="when-open">Hide reason</span>
+      </summary>
+      <div className="records-failure">
+        {(details.stage || details.kind) && (
+          <dl className="records-failure-meta">
+            {details.stage && (
+              <>
+                <dt>Stage</dt>
+                <dd>{details.stage}</dd>
+              </>
+            )}
+            {details.kind && (
+              <>
+                <dt>Kind</dt>
+                <dd>{details.kind}</dd>
+              </>
+            )}
+          </dl>
+        )}
+        <p className="records-failure-message">{details.message}</p>
+        {details.timeline.length > 0 && (
+          <ol className="records-failure-timeline" aria-label="Job timeline">
+            {details.timeline.map((step, index) => (
+              <li key={`${index}-${step.stage}`}>
+                <span className="records-mono">{step.offset}</span> {step.stage}
+              </li>
+            ))}
+          </ol>
+        )}
+        {details.trace && (
+          <details className="records-failure-trace">
+            <summary>Traceback</summary>
+            <pre>{details.trace}</pre>
+          </details>
+        )}
+      </div>
+    </details>
+  );
 }
 
 export function RecordsWorkspace({ onOpenPlate }: RecordsWorkspaceProps) {
@@ -104,15 +151,7 @@ export function RecordsWorkspace({ onOpenPlate }: RecordsWorkspaceProps) {
                 <td>{selection.region.coverage}</td>
                 <td>
                   <span className={`records-status status-${selection.job_status}`}>{selection.job_status}</span>
-                  {selectionError(selection) && (
-                    <details className="records-status-error">
-                      <summary>
-                        <span className="when-closed">Show reason</span>
-                        <span className="when-open">Hide reason</span>
-                      </summary>
-                      <p>{selectionError(selection)}</p>
-                    </details>
-                  )}
+                  <FailureReason details={failureDetails(selection)} />
                 </td>
                 <td className="records-mono">{selection.hits}</td>
                 <td className="records-actions">

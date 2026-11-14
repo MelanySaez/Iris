@@ -11,6 +11,7 @@ Branch: `feat/selection-records` · Delivery: ask-on-risk · Runners: `uv run py
 - **S4** — Records can be deleted: "que se puedan eliminar de ser requerido". `DELETE /api/selections/{id}` hard-deletes the selection only (regions/products remain as shared cache). Also `GET /api/selections` (paginated by `last_seen_at`) and `GET /api/selections/{id}`.
 - **S5** — A frontend section ("una sección para la parte del guardado de registros") lists records and lets the user delete them and reopen a ready one in the plate view.
 - **S6** — Local DB setup steps: "dime los pasos para crear la db en local".
+- **S8** — Failure traceability: "necesito que me des trazabilidad sobre el caso de los errores, es posible recuperar el punto exacto del fallo?" Persist in `selection`: `failed_stage`, `error_kind`, `error_trace` (traceback for unexpected errors), `job_events` (timeline); log `request_id` with `job_id`; Records shows them (approved: "si, implementalo así").
 - **S7** (assumption) — Persistence must never break job processing: when `DATABASE_URL` is unset or the DB fails, jobs keep working; selection endpoints answer 503 when storage is not configured.
 
 ## Tasks
@@ -20,7 +21,8 @@ Branch: `feat/selection-records` · Delivery: ask-on-risk · Runners: `uv run py
 | T1 | S1, S2, S6 | inline | done | 5f18541 |
 | T2 | S3, S4, S7 | inline | done | 0d64d27 |
 | T3 | S5 | inline | done | 2cce791 |
-| T4 | S3, S7 | inline | done | (this commit) |
+| T4 | S3, S7 | inline | done | 9399632 |
+| T5 | S8 | inline | done | (this commit) |
 
 Route evidence: one sequential feature (T3 depends on T2's API contract); no parallel independent units, so no writer trigger.
 
@@ -49,3 +51,4 @@ Route evidence: one sequential feature (T3 depends on T2's API contract); no par
 - **L21** — Eighth review follow-ups (user: "adelante con las modificaciones para estos avisos"). `on_submitted(job, is_new)`: only a new attempt resets `job_status`/`job_error`; cache hits only count `hits`/`last_seen_at`, closing the late-duplicate-write race. Terminal cache hits rebuild the outcome/manifest only when the row was just created (`record_submission` returns inserted via `xmax = 0`). Network-dependence claim refuted (test_api.py has an autouse IRSA mock). RED 6 tests then GREEN: 38 passed with DATABASE_URL, 28 + 9 skipped without.
 - **L22** — User UI fixes: "el desfase en la linea de open y delete" and "que el error tenga una opcion para mostrar u ocultar ... (por defecto que salga colapsada)". Cause of the misalignment: `display: flex` on the actions `<td>` removed it from the table layout; buttons now sit in an inner flex `div`. Failure reason is a native `<details>` (collapsed by default, Show/Hide reason, keyboard accessible, long text scrolls). Web: 76 passed, typecheck/build OK; visual check pending by the user.
 - **L23** — Tenth review follow-up (user: "si, aplica el ajuste"). `record_submission` returns `SubmissionResult(inserted, stored_status)`; a cache hit on a finished job stores its outcome when the row was just created or is still stuck in an intermediate status (lost outcome write), never over a recorded outcome. RED 7 tests (incl. real Postgres row stuck in `discovering`) then GREEN: 40 passed with DATABASE_URL, 29 + 11 skipped without.
+- **L24** — T5 (S8): `JobManager._fail` records `failed_stage` (stage running at failure), `error_kind` (`no_coverage`, `discovery_unavailable`, `no_detector_coverage`, `download_failed`, `extraction_failed`, `render_failed`, `unexpected`) and, for exceptions, a trimmed `error_trace`; `request_id` flows from the HTTP middleware via a ContextVar into the job snapshot and log lines. Migration 0003 adds `failed_stage`, `error_kind`, `error_trace`, `job_events` (JSONB); a new attempt clears them. Records "Show reason" shows stage, kind, message, timeline offsets and a nested Traceback. RED observed (4 job tests, 3 persistence tests, 2 web tests) then GREEN: server 45 passed (34 + 11 skipped without DB), web 78 passed, typecheck/build OK; migration up/down/check verified; user DB at 0003.

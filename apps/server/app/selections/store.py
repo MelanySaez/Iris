@@ -39,6 +39,16 @@ def normalize_region(
     }
 
 
+# Outcome columns cleared when a new attempt starts.
+OUTCOME_DETAIL_COLUMNS = (
+    "job_error",
+    "failed_stage",
+    "error_kind",
+    "error_trace",
+    "job_events",
+)
+
+
 @dataclass(frozen=True)
 class SubmissionResult:
     """Outcome of ``record_submission``."""
@@ -99,7 +109,7 @@ class SelectionStore:
             }
             if new_attempt:
                 changes["job_status"] = stmt.excluded.job_status
-                changes["job_error"] = None
+                changes.update(dict.fromkeys(OUTCOME_DETAIL_COLUMNS))
             stmt = stmt.on_conflict_do_update(
                 index_elements=[Selection.job_id], set_=changes
             ).returning(literal_column("(xmax = 0)"), Selection.job_status)
@@ -150,9 +160,21 @@ class SelectionStore:
         status: str,
         manifest: dict[str, Any] | None,
         error: str | None,
+        *,
+        failed_stage: str | None = None,
+        error_kind: str | None = None,
+        error_trace: str | None = None,
+        events: list[dict[str, Any]] | None = None,
     ) -> None:
-        """Store the final job status, its error and, when ready, the manifest."""
-        values: dict[str, Any] = {"job_status": status, "job_error": error}
+        """Store the final status, its failure details and, when ready, the manifest."""
+        values: dict[str, Any] = {
+            "job_status": status,
+            "job_error": error,
+            "failed_stage": failed_stage,
+            "error_kind": error_kind,
+            "error_trace": error_trace,
+            "job_events": events,
+        }
         if manifest is not None:
             values["manifest"] = manifest
         with self._sessions.begin() as session:

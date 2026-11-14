@@ -127,6 +127,12 @@ class Selection(Base):
     stretch: Mapped[str] = mapped_column(Text)
     job_status: Mapped[str] = mapped_column(Text)
     job_error: Mapped[str | None] = mapped_column(Text)
+    # Failure traceability: where (stage), why (stable kind), how (traceback
+    # for unexpected errors) and when (stage timeline with epoch seconds).
+    failed_stage: Mapped[str | None] = mapped_column(Text)
+    error_kind: Mapped[str | None] = mapped_column(Text)
+    error_trace: Mapped[str | None] = mapped_column(Text)
+    job_events: Mapped[list[dict[str, Any]] | None] = mapped_column(JSONB)
     manifest: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     hits: Mapped[int] = mapped_column(server_default="1")
     created_at: Mapped[datetime] = mapped_column(

@@ -238,6 +238,12 @@ export interface JobManifest {
 
 export type SelectionCoverage = 'available' | 'none' | 'unknown';
 
+export interface SelectionEvent {
+  stage: string;
+  /** Epoch seconds. */
+  at: number;
+}
+
 export interface SelectionSummary {
   id: string;
   job_id: string;
@@ -255,6 +261,10 @@ export interface SelectionSummary {
   stretch: StretchMode;
   job_status: JobStatus;
   job_error: string | null;
+  failed_stage: string | null;
+  error_kind: string | null;
+  error_trace: string | null;
+  job_events: SelectionEvent[] | null;
   hits: number;
   created_at: string;
   last_seen_at: string;

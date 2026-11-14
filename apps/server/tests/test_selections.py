@@ -147,6 +147,10 @@ def test_job_submission_is_saved_automatically(client):
     final = wait_for_outcome(client, saved["id"])
     assert final["job_status"] == "failed"
     assert final["job_error"] == "No SPHEREx coverage found for this region."
+    assert final["failed_stage"] == "discovering"
+    assert final["error_kind"] == "no_coverage"
+    assert final["error_trace"] is None
+    assert [e["stage"] for e in final["job_events"]] == ["Discovering products", "Failed"]
     assert final["region"]["coverage"] == "none"
     assert final["manifest"] is None
 
@@ -356,7 +360,7 @@ class _FakeStore:
             inserted=self.inserted, stored_status=self.stored_status or status
         )
 
-    def record_outcome(self, job_id, status, manifest, error):
+    def record_outcome(self, job_id, status, manifest, error, **details):
         self.calls.append(("outcome", job_id, status, manifest, error))
 
 
@@ -461,7 +465,7 @@ def test_failed_outcome_stores_the_job_error():
     calls: list[tuple] = []
 
     class FakeStore:
-        def record_outcome(self, job_id, status, manifest, error):
+        def record_outcome(self, job_id, status, manifest, error, **details):
             calls.append((job_id, status, manifest, error))
 
     job = JobState(
@@ -499,6 +503,10 @@ def test_resubmission_clears_the_previous_error(client):
     detail = client.get(f"/api/selections/{saved['id']}").json()
     assert detail["job_status"] == "queued"
     assert detail["job_error"] is None
+    assert detail["failed_stage"] is None
+    assert detail["error_kind"] is None
+    assert detail["error_trace"] is None
+    assert detail["job_events"] is None
 
 
 @requires_db
@@ -587,3 +595,37 @@ def test_lost_outcome_is_recovered_on_the_next_cache_hit(client):
     assert saved["job_status"] == "failed"
     assert saved["job_error"] == job.error
     assert saved["hits"] == 2
+
+
+def test_outcome_carries_stage_kind_trace_and_timeline():
+    from app.jobs import JobState
+    from app.models import JobRequest
+    from app.selections.recorder import SelectionRecorder
+
+    seen: dict = {}
+
+    class FakeStore:
+        def record_outcome(self, job_id, status, manifest, error, **details):
+            seen.update(details)
+
+    events = [
+        {"stage": "Discovering products", "at": 1.0},
+        {"stage": "Failed", "at": 2.5},
+    ]
+    job = JobState(
+        id="traced-job",
+        request=JobRequest(**region(27.5)),
+        status="failed",
+        error="RuntimeError: boom",
+        failed_stage="downloading",
+        error_kind="download_failed",
+        error_trace="Traceback ...\nRuntimeError: boom",
+        events=events,
+    )
+    SelectionRecorder(FakeStore()).on_finished(job)
+    assert seen == {
+        "failed_stage": "downloading",
+        "error_kind": "download_failed",
+        "error_trace": "Traceback ...\nRuntimeError: boom",
+        "events": events,
+    }

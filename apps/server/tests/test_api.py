@@ -147,3 +147,78 @@ def test_failed_job_is_replaced_and_rerun_on_resubmit():
     assert snapshot["status"] == "failed"
     assert snapshot["error"] == "No SPHEREx coverage found for this region."
     assert any(e["stage"] == "Discovering products" for e in snapshot["events"])
+
+
+# -- failure traceability ----------------------------------------------------
+
+
+def _submit_and_wait(client: TestClient, payload: dict) -> tuple[dict, dict]:
+    resp = client.post("/api/jobs", json=payload)
+    assert resp.status_code == 202
+    return resp, wait_until_ready(client, resp.json()["id"])
+
+
+def test_no_coverage_failure_records_stage_and_kind():
+    client = TestClient(app)
+    _, snap = _submit_and_wait(client, {**NO_COVERAGE, "ra_deg": 11.25, "channels": [44]})
+    assert snap["status"] == "failed"
+    assert snap["failed_stage"] == "discovering"
+    assert snap["error_kind"] == "no_coverage"
+    assert snap["error_trace"] is None
+    assert [e["stage"] for e in snap["events"]] == ["Discovering products", "Failed"]
+
+
+def test_discovery_outage_is_classified_as_unavailable():
+    discovery = {
+        "coverage": "unknown",
+        "warning": "ReadTimeout: timed out",
+        "products": [],
+    }
+    client = TestClient(app)
+    with patch("app.jobs.resolve_region", return_value=discovery):
+        _, snap = _submit_and_wait(
+            client, {**NO_COVERAGE, "ra_deg": 12.25, "channels": [44]}
+        )
+    assert snap["failed_stage"] == "discovering"
+    assert snap["error_kind"] == "discovery_unavailable"
+    assert "ReadTimeout: timed out" in snap["error"]
+
+
+def test_unexpected_error_keeps_stage_kind_and_traceback():
+    discovery = {
+        "coverage": "available",
+        "products": [
+            {
+                "id": "p1",
+                "source": "remote",
+                "detector": 3,
+                "band": "SPHEREx-D3",
+                "obs_id": "o1",
+                "uri": "https://example.invalid/p1.fits",
+                "date_mjd": 60800.5,
+                "date_iso": "2025-05-05T12:00:00.000Z",
+            }
+        ],
+    }
+    client = TestClient(app)
+    with (
+        patch("app.jobs.resolve_region", return_value=discovery),
+        patch("app.jobs.download_cutout", side_effect=RuntimeError("No network")),
+    ):
+        _, snap = _submit_and_wait(
+            client, {**NO_COVERAGE, "ra_deg": 13.25, "channels": [44]}
+        )
+    assert snap["failed_stage"] == "downloading"
+    assert snap["error_kind"] == "download_failed"
+    assert snap["error"] == "RuntimeError: No network"
+    assert "Traceback" in snap["error_trace"]
+    assert 'File "' in snap["error_trace"] and ", line " in snap["error_trace"]
+    assert snap["error_trace"].rstrip().endswith("RuntimeError: No network")
+
+
+def test_job_keeps_the_request_id_that_created_it():
+    client = TestClient(app)
+    resp, snap = _submit_and_wait(
+        client, {**NO_COVERAGE, "ra_deg": 14.25, "channels": [44]}
+    )
+    assert snap["request_id"] == resp.headers["X-Request-ID"]

@@ -45,4 +45,13 @@ class SelectionRecorder:
                 )
             except Exception:
                 logger.exception("selection manifest unavailable for job=%s", job.id)
-        self.store.record_outcome(job.id, job.status, manifest, job.error)
+        self.store.record_outcome(
+            job.id,
+            job.status,
+            manifest,
+            job.error,
+            failed_stage=job.failed_stage,
+            error_kind=job.error_kind,
+            error_trace=job.error_trace,
+            events=list(job.events),
+        )

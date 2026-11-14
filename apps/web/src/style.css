@@ -2262,9 +2262,59 @@ button:disabled {
   display: inline;
 }
 
-.records-status-error p {
-  margin: 4px 0 0;
+.records-failure {
+  margin-top: 4px;
+}
+
+.records-failure-meta {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px 8px;
+  margin: 0 0 4px;
+}
+
+.records-failure-meta dt {
+  color: var(--sky-faint);
+}
+
+.records-failure-meta dd {
+  margin: 0;
+  color: var(--sky-ink);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.records-failure-message {
+  margin: 0;
   max-height: 12em;
   overflow-y: auto;
   overflow-wrap: anywhere;
+}
+
+.records-failure-timeline {
+  margin: 6px 0 0;
+  padding-left: 1.2em;
+}
+
+.records-failure-trace {
+  margin-top: 6px;
+}
+
+.records-failure-trace summary {
+  width: fit-content;
+  color: var(--sky-accent);
+  cursor: pointer;
+}
+
+.records-failure-trace pre {
+  margin: 4px 0 0;
+  max-height: 16em;
+  max-width: 60ch;
+  overflow: auto;
+  padding: 8px;
+  border: 1px solid var(--sky-line);
+  border-radius: 4px;
+  background: var(--sky-bg);
+  color: var(--sky-ink);
+  font-size: 0.75rem;
+  white-space: pre;
 }
