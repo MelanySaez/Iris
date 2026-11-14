@@ -18,8 +18,9 @@ import {
   SPHEREX_HIPS_ROOT,
   type SpectralChannel,
 } from '../../hips';
-import { clearRgbComposite, setChannelImageLayer, showRgbComposite } from '../../aladinView';
-import { RGB_PRESETS, presetChannels, validateRgb, type RgbChannels } from '../../rgb';
+import { setChannelImageLayer } from '../../aladinView';
+import { useRgbComposite } from '../../hooks/useRgbComposite';
+import { RGB_PRESETS, presetChannels } from '../../rgb';
 import {
   computeRegionFromPoints,
   REGION_EXCEEDS_LIMIT_MESSAGE,
@@ -111,11 +112,6 @@ export function SkyWorkspace({
   const lastCursorUpdate = useRef(0);
   const channelRef = useRef(DEFAULT_CHANNEL_INDEX);
   const [tileStatus, setTileStatus] = useState('Loading tiles');
-
-  // RGB composite (band selector)
-  const [rgbMode, setRgbMode] = useState(false);
-  const [rgb, setRgb] = useState<RgbChannels | null>(null);
-  const [rgbError, setRgbError] = useState<string | null>(null);
 
   // Catalog & Search
   const [catalog, setCatalog] = useState<CatalogObject[]>(CURATED_CATALOG_FALLBACK);
@@ -309,48 +305,14 @@ export function SkyWorkspace({
   );
 
   // RGB composite: three channels painted red/green/blue and blended additively.
-  const applyRgb = useCallback(
-    (next: RgbChannels) => {
-      const problem = validateRgb(next);
-      setRgb(next);
-      setRgbError(problem);
-      if (problem || !viewerRef.current || !aladinReady) return;
-      try {
-        showRgbComposite(viewerRef.current, {
-          r: channelVirtualHipsUrl(next.r, location.origin),
-          g: channelVirtualHipsUrl(next.g, location.origin),
-          b: channelVirtualHipsUrl(next.b, location.origin),
-        });
-        setTileStatus(`RGB composite: R ch ${next.r} · G ch ${next.g} · B ch ${next.b}`);
-      } catch (err) {
-        setRgbError(err instanceof Error ? err.message : String(err));
-      }
-    },
-    [aladinReady],
-  );
-
-  const handleRgbMode = useCallback(
-    (enabled: boolean) => {
-      const viewer = viewerRef.current;
-      if (!viewer || !aladinReady) return;
-      setRgbMode(enabled);
-      if (enabled) {
-        applyRgb(rgb ?? presetChannels(channels, RGB_PRESETS[0]));
-        return;
-      }
-      // Back to the single channel: drop the overlays, restore the grey base layer.
-      setRgbError(null);
-      try {
-        clearRgbComposite(viewer);
-        channelRef.current = currentChannel;
-        setChannelImageLayer(viewer, channelVirtualHipsUrl(currentChannel, location.origin));
-        setTileStatus(`Loading channel ${currentChannel} tiles`);
-      } catch (err) {
-        setTileStatus(`Channel ${currentChannel} could not load: ${err instanceof Error ? err.message : String(err)}`);
-      }
-    },
-    [aladinReady, applyRgb, channels, currentChannel, rgb],
-  );
+  const { rgbMode, rgb, rgbError, applyRgb, setRgbMode } = useRgbComposite({
+    viewerRef,
+    ready: aladinReady,
+    channels,
+    currentChannel,
+    channelRef,
+    onStatus: setTileStatus,
+  });
 
   const channelLabel = useCallback(
     (index: number) => {
@@ -839,7 +801,7 @@ export function SkyWorkspace({
                 className={`dock-mode-btn ${rgbMode ? '' : 'active'}`}
                 aria-pressed={!rgbMode}
                 disabled={!aladinReady}
-                onClick={() => handleRgbMode(false)}
+                onClick={() => setRgbMode(false)}
               >
                 Single channel
               </button>
@@ -848,7 +810,7 @@ export function SkyWorkspace({
                 className={`dock-mode-btn ${rgbMode ? 'active' : ''}`}
                 aria-pressed={rgbMode}
                 disabled={!aladinReady}
-                onClick={() => handleRgbMode(true)}
+                onClick={() => setRgbMode(true)}
               >
                 RGB composite
               </button>
