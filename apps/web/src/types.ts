@@ -254,6 +254,7 @@ export interface SelectionSummary {
   mode: 'latest' | 'history';
   stretch: StretchMode;
   job_status: JobStatus;
+  job_error: string | null;
   hits: number;
   created_at: string;
   last_seen_at: string;

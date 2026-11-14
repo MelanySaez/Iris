@@ -18,3 +18,9 @@ export function canOpenInPlate(selection: SelectionSummary): boolean {
 export function removeSelection(list: SelectionSummary[], id: string): SelectionSummary[] {
   return list.filter((item) => item.id !== id);
 }
+
+/** Reason shown for a failed selection; null for any other status. */
+export function selectionError(selection: SelectionSummary): string | null {
+  if (selection.job_status !== 'failed') return null;
+  return selection.job_error ?? 'Failed without a recorded reason.';
+}

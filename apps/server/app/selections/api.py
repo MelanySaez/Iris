@@ -38,6 +38,7 @@ class SelectionSummary(BaseModel):
     mode: str
     stretch: str
     job_status: str
+    job_error: str | None
     hits: int
     created_at: datetime
     last_seen_at: datetime
@@ -86,6 +87,7 @@ def _summary_fields(sel: Selection) -> dict[str, Any]:
         "mode": sel.mode,
         "stretch": sel.stretch,
         "job_status": sel.job_status,
+        "job_error": sel.job_error,
         "hits": sel.hits,
         "created_at": sel.created_at,
         "last_seen_at": sel.last_seen_at,

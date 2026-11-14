@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api, ApiError } from '../../api';
-import { canOpenInPlate, describeSelectionRegion, RECORDS_PAGE_SIZE, removeSelection } from '../../records';
+import { canOpenInPlate, describeSelectionRegion, RECORDS_PAGE_SIZE, removeSelection, selectionError } from '../../records';
 import type { SelectionSummary } from '../../types';
 
 interface RecordsWorkspaceProps {
@@ -104,6 +104,9 @@ export function RecordsWorkspace({ onOpenPlate }: RecordsWorkspaceProps) {
                 <td>{selection.region.coverage}</td>
                 <td>
                   <span className={`records-status status-${selection.job_status}`}>{selection.job_status}</span>
+                  {selectionError(selection) && (
+                    <p className="records-status-error">{selectionError(selection)}</p>
+                  )}
                 </td>
                 <td className="records-mono">{selection.hits}</td>
                 <td className="records-actions">

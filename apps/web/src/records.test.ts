@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { canOpenInPlate, describeSelectionRegion, removeSelection } from './records';
+import { canOpenInPlate, describeSelectionRegion, removeSelection, selectionError } from './records';
 import type { SelectionSummary } from './types';
 
 function selection(overrides: Partial<SelectionSummary> = {}): SelectionSummary {
@@ -19,6 +19,7 @@ function selection(overrides: Partial<SelectionSummary> = {}): SelectionSummary 
     mode: 'latest',
     stretch: 'asinh',
     job_status: 'ready',
+    job_error: null,
     hits: 1,
     created_at: '2026-11-14T10:00:00Z',
     last_seen_at: '2026-11-14T10:00:00Z',
@@ -42,5 +43,13 @@ describe('records helpers', () => {
     const next = removeSelection(list, 'a');
     expect(next.map((s) => s.id)).toEqual(['b']);
     expect(list).toHaveLength(2);
+  });
+
+  it('shows the stored error only for failed selections', () => {
+    const reason = 'Coverage could not be determined: IRSA TAP discovery failed.';
+    expect(selectionError(selection({ job_status: 'failed', job_error: reason }))).toBe(reason);
+    expect(selectionError(selection({ job_status: 'failed', job_error: null }))).toBe('Failed without a recorded reason.');
+    expect(selectionError(selection({ job_status: 'ready', job_error: null }))).toBeNull();
+    expect(selectionError(selection({ job_status: 'queued', job_error: 'stale' }))).toBeNull();
   });
 });

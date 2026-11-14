@@ -2221,3 +2221,11 @@ button:disabled {
     justify-content: flex-start;
   }
 }
+
+.records-status-error {
+  margin: 4px 0 0;
+  max-width: 32ch;
+  color: var(--sky-muted);
+  font-size: 0.8rem;
+  line-height: 1.3;
+}

@@ -126,6 +126,7 @@ class Selection(Base):
     mode: Mapped[str] = mapped_column(Text)
     stretch: Mapped[str] = mapped_column(Text)
     job_status: Mapped[str] = mapped_column(Text)
+    job_error: Mapped[str | None] = mapped_column(Text)
     manifest: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     hits: Mapped[int] = mapped_column(server_default="1")
     created_at: Mapped[datetime] = mapped_column(

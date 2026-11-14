@@ -82,6 +82,8 @@ class SelectionStore:
                     "hits": Selection.hits + 1,
                     "last_seen_at": func.now(),
                     "job_status": stmt.excluded.job_status,
+                    # A new attempt (or a cache hit) starts without the old error.
+                    "job_error": None,
                 },
             )
             session.execute(stmt)
@@ -124,10 +126,14 @@ class SelectionStore:
                 session.execute(stmt)
 
     def record_outcome(
-        self, job_id: str, status: str, manifest: dict[str, Any] | None
+        self,
+        job_id: str,
+        status: str,
+        manifest: dict[str, Any] | None,
+        error: str | None,
     ) -> None:
-        """Store the final job status and, for ready jobs, the provenance manifest."""
-        values: dict[str, Any] = {"job_status": status}
+        """Store the final job status, its error and, when ready, the manifest."""
+        values: dict[str, Any] = {"job_status": status, "job_error": error}
         if manifest is not None:
             values["manifest"] = manifest
         with self._sessions.begin() as session:

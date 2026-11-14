@@ -146,6 +146,7 @@ def test_job_submission_is_saved_automatically(client):
 
     final = wait_for_outcome(client, saved["id"])
     assert final["job_status"] == "failed"
+    assert final["job_error"] == "No SPHEREx coverage found for this region."
     assert final["region"]["coverage"] == "none"
     assert final["manifest"] is None
 
@@ -353,8 +354,8 @@ def test_cached_terminal_job_records_its_outcome_on_submit():
         def record_submission(self, job_id, req, status):
             calls.append(("submission", job_id, status))
 
-        def record_outcome(self, job_id, status, manifest):
-            calls.append(("outcome", job_id, status, manifest))
+        def record_outcome(self, job_id, status, manifest, error):
+            calls.append(("outcome", job_id, status, manifest, error))
 
     job = JobState(id="cached-job", request=JobRequest(**region(20.5)), status="ready")
     manifest = {"job_id": "cached-job", "region": {}}
@@ -371,7 +372,7 @@ def test_cached_terminal_job_records_its_outcome_on_submit():
 
     assert calls == [
         ("submission", "cached-job", "ready"),
-        ("outcome", "cached-job", "ready", manifest),
+        ("outcome", "cached-job", "ready", manifest, None),
     ]
 
 
@@ -405,3 +406,50 @@ def test_invalid_database_url_is_never_logged_with_its_password(caplog):
     assert "invalid DATABASE_URL" in caplog.text
     logged = caplog.text + "".join(r.exc_text or "" for r in caplog.records)
     assert secret not in logged
+
+
+# -- job_error -------------------------------------------------------------------
+
+
+def test_failed_outcome_stores_the_job_error():
+    from app.jobs import JobState
+    from app.models import JobRequest
+    from app.selections.recorder import SelectionRecorder
+
+    calls: list[tuple] = []
+
+    class FakeStore:
+        def record_outcome(self, job_id, status, manifest, error):
+            calls.append((job_id, status, manifest, error))
+
+    job = JobState(
+        id="failed-job",
+        request=JobRequest(**region(21.5)),
+        status="failed",
+        error="Coverage could not be determined: IRSA TAP discovery failed.",
+    )
+    SelectionRecorder(FakeStore()).on_finished(job)
+    assert calls == [
+        (
+            "failed-job",
+            "failed",
+            None,
+            "Coverage could not be determined: IRSA TAP discovery failed.",
+        )
+    ]
+
+
+@requires_db
+def test_resubmission_clears_the_previous_error(client):
+    from app.models import JobRequest
+    from app.selections.api import get_store
+
+    payload = {**region(22.5), "channels": [44]}
+    job = client.post("/api/jobs", json=payload).json()
+    saved = find_by_job(client, job["id"])
+    assert wait_for_outcome(client, saved["id"])["job_error"] is not None
+
+    get_store().record_submission(job["id"], JobRequest(**payload), "queued")
+    detail = client.get(f"/api/selections/{saved['id']}").json()
+    assert detail["job_status"] == "queued"
+    assert detail["job_error"] is None
