@@ -52,6 +52,9 @@
           if pkgs.stdenv.hostPlatform.isLinux then
             pkgs.writeShellScript "iris-patch-uv-venv" ''
               venv_path="''${UV_PROJECT_ENVIRONMENT:-.venv}"
+              if [ -z "''${UV_PROJECT_ENVIRONMENT:-}" ] && [ ! -d "$venv_path" ] && [ -d apps/server/.venv ]; then
+                venv_path=apps/server/.venv
+              fi
               case "$venv_path" in
                 /*) ;;
                 *) venv_path="$PWD/$venv_path" ;;
@@ -80,6 +83,24 @@
                 fi
                 ${pkgs.patchelf}/bin/patchelf --set-rpath "$rpath" "$executable" 2>/dev/null || true
               done
+
+              # VS Code can launch the venv's Python without inheriting the
+              # dev shell's LD_LIBRARY_PATH. Give native Python extensions
+              # their own Nix library search path as well.
+              if [ -d "$venv_path/lib" ]; then
+                while IFS= read -r -d ''' library; do
+                  original_rpath="$(${pkgs.patchelf}/bin/patchelf --print-rpath "$library" 2>/dev/null)" || continue
+                  case ":$original_rpath:" in
+                    *":${libraryPath}:"*) continue ;;
+                  esac
+                  if [ -n "$original_rpath" ]; then
+                    rpath="$original_rpath:${libraryPath}"
+                  else
+                    rpath="${libraryPath}"
+                  fi
+                  ${pkgs.patchelf}/bin/patchelf --set-rpath "$rpath" "$library"
+                done < <(${pkgs.findutils}/bin/find "$venv_path/lib" -type f \( -name '*.so' -o -name '*.so.*' \) -print0)
+              fi
             ''
           else
             pkgs.writeShellScript "iris-patch-uv-venv" ''
@@ -133,8 +154,10 @@
               ${patchUvVenv}
               command uv "$@"
               uv_status=$?
-              if [ "$uv_status" -eq 0 ] && [ "$#" -gt 0 ] && [ "$1" = "sync" ]; then
-                ${patchUvVenv}
+              if [ "$uv_status" -eq 0 ] && [ "$#" -gt 0 ]; then
+                case "$1" in
+                  sync|add|remove) ${patchUvVenv} ;;
+                esac
               fi
               return "$uv_status"
             }

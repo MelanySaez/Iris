@@ -33,3 +33,10 @@ pnpm dev
 `uv` uses the Python 3.12 provided by Nix and creates the environment in
 `apps/server/.venv`. Python dependencies are resolved from `uv.lock`, and
 frontend dependencies are resolved from `apps/web/pnpm-lock.yaml`.
+
+For VS Code notebooks, select `apps/server/.venv/bin/python` as the kernel.
+Run `nix develop` from the repository root after `uv sync` if VS Code was
+started outside the Nix shell; this patches native Python extensions so the
+kernel can load Nix-provided shared libraries without inheriting the shell's
+`LD_LIBRARY_PATH`. Do not install packages into the immutable Nix Python;
+declare them in `apps/server/pyproject.toml` and run `uv sync` instead.
