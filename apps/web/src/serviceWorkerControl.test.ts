@@ -7,6 +7,7 @@ import {
 
 interface FakeWorld {
   env: ControlEnvironment;
+  listenerCount: () => number;
   posted: unknown[];
   reloads: number;
   store: Map<string, string>;
@@ -17,6 +18,7 @@ function makeWorld(options: { controlled?: boolean; claimWorks?: boolean; storag
   const listeners = new Set<() => void>();
   const store = new Map<string, string>();
   const world: FakeWorld = {
+    listenerCount: () => listeners.size,
     posted: [],
     reloads: 0,
     store,
@@ -69,11 +71,14 @@ describe('ensureServiceWorkerControl', () => {
 
   it('asks the active worker to claim a hard-reloaded page and waits for controllerchange', async () => {
     const world = makeWorld({ controlled: false, claimWorks: true });
+    world.store.set(SW_CONTROL_RELOAD_KEY, '1');
 
     // A long timeout makes the test hang if the listener is attached after posting CLAIM.
     await expect(ensureServiceWorkerControl(world.worker, world.env, 60_000)).resolves.toBe('controlled');
     expect(world.posted).toEqual([{ type: 'CLAIM' }]);
     expect(world.reloads).toBe(0);
+    expect(world.store.has(SW_CONTROL_RELOAD_KEY)).toBe(false);
+    expect(world.listenerCount()).toBe(0);
   });
 
   it('reloads once when the claim does not take control', async () => {
@@ -83,6 +88,7 @@ describe('ensureServiceWorkerControl', () => {
     expect(world.posted).toEqual([{ type: 'CLAIM' }]);
     expect(world.reloads).toBe(1);
     expect(world.store.get(SW_CONTROL_RELOAD_KEY)).toBe('1');
+    expect(world.listenerCount()).toBe(0);
   });
 
   it('does not reload again right after its own reload, so it can never loop', async () => {
