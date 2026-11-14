@@ -13,29 +13,37 @@ uv run uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 
 Every job submission is saved as a selection record in PostgreSQL (SQLAlchemy + Alembic). Storage is optional: when `DATABASE_URL` is unset or invalid, jobs still work and `/api/selections` answers 503. A driverless `postgresql://` URL is accepted and uses psycopg 3. Saving runs inside `POST /api/jobs`, so an unreachable database can delay a submission by up to 3 seconds (connect timeout).
 
-1. Start PostgreSQL with Docker from the repository root:
+1. Create the two environment files from their templates. The root `.env` configures the container (`DB_PORT`, 5433 by default so it does not clash with a system PostgreSQL, plus `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`). `apps/server/.env` configures the backend (`DATABASE_URL`, `TEST_DATABASE_URL`, optional `SPHEREX_SPECTRAL_FITS`); keep its credentials and port in sync with the root file:
 
    ```bash
-   docker compose up -d db
+   # from the repository root
+   cp .env.example .env
+   cp apps/server/.env.example apps/server/.env
    ```
 
-   Using a native PostgreSQL instead: `createuser -P iris && createdb -O iris iris`.
+2. Start PostgreSQL from the repository root (compose reads the root `.env` automatically):
 
-2. Point the server at it and apply the migrations:
+   ```bash
+   docker compose up -d db          # or: podman compose up -d db
+   ```
+
+   Using a native PostgreSQL instead: `createuser -P iris && createdb -O iris iris`, then point `DATABASE_URL` at its port.
+
+3. Export the backend variables and apply the migrations. The server does not load `.env` by itself, so source it in every shell that runs it:
 
    ```bash
    cd apps/server
-   export DATABASE_URL=postgresql+psycopg://iris:iris@127.0.0.1:5432/iris
+   set -a && source .env && set +a
    uv run alembic upgrade head
    ```
 
-3. Start the server in the same shell (it reads `DATABASE_URL`).
+4. Start the server in the same shell (it reads `DATABASE_URL`).
 
 Selection tests run against a disposable database and are skipped otherwise:
 
 ```bash
-createdb -O iris iris_test   # or: docker compose exec db createdb -U iris iris_test
-TEST_DATABASE_URL=postgresql+psycopg://iris:iris@127.0.0.1:5432/iris_test uv run pytest -q
+docker compose exec db createdb -U iris iris_test   # from the repository root (or: podman compose ...)
+uv run pytest -q                                    # in apps/server, uses TEST_DATABASE_URL from .env
 ```
 
 After changing the models in `app/selections/orm.py`, create a migration with `uv run alembic revision --autogenerate -m "<message>"` and review it before committing.
