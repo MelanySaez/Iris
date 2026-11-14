@@ -65,7 +65,18 @@ def test_catalog_endpoint():
     assert len(objects) >= 8
     obj_ids = [o["id"] for o in objects]
     assert "local-dr1-sample" in obj_ids
-    assert "m81-field" in obj_ids
+    by_id = {o["id"]: o for o in objects}
+    # The notebook demo field at (210.80227, 54.34895) is M101, not M81.
+    assert "m81-field" not in by_id
+    assert by_id["m101-field"]["name"] == "M101 field"
+    assert (by_id["m101-field"]["ra_deg"], by_id["m101-field"]["dec_deg"]) == (
+        210.80227,
+        54.34895,
+    )
+    # M81 itself, at its real J2000 position.
+    assert by_id["m81"]["name"] == "M81 (Bode's Galaxy)"
+    assert by_id["m81"]["ra_deg"] == pytest.approx(148.888221)
+    assert by_id["m81"]["dec_deg"] == pytest.approx(69.065294)
 
 
 def test_regions_resolve_endpoint():

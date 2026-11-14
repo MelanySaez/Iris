@@ -83,14 +83,14 @@ describe('SpectralLab', () => {
     getSpectrum.mockReturnValueOnce(pending.promise);
     render(<SpectralLab />);
 
-    fireEvent.click(catalogButton('M81 field'));
+    fireEvent.click(catalogButton('M101 field'));
     expect(screen.getByText('Reading cube tile…')).toBeTruthy();
-    expect(catalogButton('M81 field').hasAttribute('disabled')).toBe(true);
+    expect(catalogButton('M101 field').hasAttribute('disabled')).toBe(true);
 
     await act(async () => pending.resolve(spectrum([10, null, 30], 2858)));
 
     expect(screen.getByText('2/3 channels · tile 2858')).toBeTruthy();
-    expect(screen.getByRole('img', { name: /Spectra of M81 field/ })).toBeTruthy();
+    expect(screen.getByRole('img', { name: /Spectra of M101 field/ })).toBeTruthy();
     expect(getSpectrum).toHaveBeenCalledWith(210.80227, 54.34895);
   });
 
@@ -136,9 +136,9 @@ describe('SpectralLab', () => {
     getSpectrum.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
     render(<SpectralLab />);
 
-    fireEvent.click(catalogButton('M81 field'));
-    fireEvent.click(screen.getByRole('button', { name: 'Remove M81 field' }));
-    fireEvent.click(catalogButton('M81 field'));
+    fireEvent.click(catalogButton('M101 field'));
+    fireEvent.click(screen.getByRole('button', { name: 'Remove M101 field' }));
+    fireEvent.click(catalogButton('M101 field'));
 
     await act(async () => second.resolve(spectrum([4, 5], 2858)));
     await act(async () => first.reject(new Error('late failure from the first request')));
@@ -151,22 +151,22 @@ describe('SpectralLab', () => {
   it('hides and shows a spectrum, then removes it', async () => {
     getSpectrum.mockResolvedValue(spectrum([1, 2]));
     render(<SpectralLab />);
-    await act(async () => fireEvent.click(catalogButton('M81 field')));
+    await act(async () => fireEvent.click(catalogButton('M101 field')));
 
-    fireEvent.click(screen.getByRole('button', { name: 'Hide M81 field' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Hide M101 field' }));
     expect(screen.getByText('No spectrum plotted yet.')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Show M81 field' }));
-    expect(screen.getByRole('img', { name: /Spectra of M81 field/ })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Show M101 field' }));
+    expect(screen.getByRole('img', { name: /Spectra of M101 field/ })).toBeTruthy();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Remove M81 field' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Remove M101 field' }));
     expect(legendItems()).toHaveLength(0);
-    expect(catalogButton('M81 field').hasAttribute('disabled')).toBe(false);
+    expect(catalogButton('M101 field').hasAttribute('disabled')).toBe(false);
   });
 
   it('notes how many values the log axis cannot draw', async () => {
     getSpectrum.mockResolvedValue(spectrum([-2, 0, 5, 50]));
     render(<SpectralLab />);
-    await act(async () => fireEvent.click(catalogButton('M81 field')));
+    await act(async () => fireEvent.click(catalogButton('M101 field')));
 
     // Linear axis: only the quick-look disclaimer, no hidden-value note.
     const linearNotes = screen.getAllByRole('note').map((n) => n.textContent ?? '');

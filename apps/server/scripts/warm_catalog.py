@@ -29,7 +29,7 @@ def parse_args() -> argparse.Namespace:
         "--objects",
         type=str,
         default="",
-        help="Comma-separated list of object IDs (e.g. local-dr1-sample,m81-field).",
+        help="Comma-separated list of object IDs (e.g. local-dr1-sample,m101-field).",
     )
     parser.add_argument(
         "--channels",

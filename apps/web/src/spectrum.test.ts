@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { api, ApiError } from './api';
+import { api, ApiError, CURATED_CATALOG_FALLBACK } from './api';
 import { parseHash, routeToHash } from './router';
 import {
   MAX_SPECTRA,
@@ -280,5 +280,21 @@ describe('logarithmic y axis', () => {
 
   it('counts the points a log axis has to hide', () => {
     expect(countNonPositive([[point(0, 1, 0), point(1, 2, 5)], [point(0, 1, -2), point(1, 2, null)]])).toBe(2);
+  });
+});
+
+describe('curated catalog fallback', () => {
+  const byId = new Map(CURATED_CATALOG_FALLBACK.map((o) => [o.id, o]));
+
+  it('labels the notebook demo field as M101, where it really points', () => {
+    expect(byId.has('m81-field')).toBe(false);
+    expect(byId.get('m101-field')).toMatchObject({ name: 'M101 field', ra_deg: 210.80227, dec_deg: 54.34895 });
+  });
+
+  it('includes M81 at its real J2000 position', () => {
+    const m81 = byId.get('m81');
+    expect(m81?.name).toBe("M81 (Bode's Galaxy)");
+    expect(m81?.ra_deg).toBeCloseTo(148.888221, 6);
+    expect(m81?.dec_deg).toBeCloseTo(69.065294, 6);
   });
 });
