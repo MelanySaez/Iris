@@ -105,28 +105,36 @@ export function RecordsWorkspace({ onOpenPlate }: RecordsWorkspaceProps) {
                 <td>
                   <span className={`records-status status-${selection.job_status}`}>{selection.job_status}</span>
                   {selectionError(selection) && (
-                    <p className="records-status-error">{selectionError(selection)}</p>
+                    <details className="records-status-error">
+                      <summary>
+                        <span className="when-closed">Show reason</span>
+                        <span className="when-open">Hide reason</span>
+                      </summary>
+                      <p>{selectionError(selection)}</p>
+                    </details>
                   )}
                 </td>
                 <td className="records-mono">{selection.hits}</td>
                 <td className="records-actions">
-                  <button
-                    type="button"
-                    className="records-btn"
-                    disabled={!canOpenInPlate(selection)}
-                    title={canOpenInPlate(selection) ? 'Open in Plate' : 'Only ready jobs can be opened'}
-                    onClick={() => onOpenPlate(selection.job_id)}
-                  >
-                    Open
-                  </button>
-                  <button
-                    type="button"
-                    className="records-btn danger"
-                    disabled={deletingId === selection.id}
-                    onClick={() => void handleDelete(selection)}
-                  >
-                    {deletingId === selection.id ? 'Deleting…' : 'Delete'}
-                  </button>
+                  <div className="records-actions-inner">
+                    <button
+                      type="button"
+                      className="records-btn"
+                      disabled={!canOpenInPlate(selection)}
+                      title={canOpenInPlate(selection) ? 'Open in Plate' : 'Only ready jobs can be opened'}
+                      onClick={() => onOpenPlate(selection.job_id)}
+                    >
+                      Open
+                    </button>
+                    <button
+                      type="button"
+                      className="records-btn danger"
+                      disabled={deletingId === selection.id}
+                      onClick={() => void handleDelete(selection)}
+                    >
+                      {deletingId === selection.id ? 'Deleting…' : 'Delete'}
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}
