@@ -3,7 +3,11 @@
 from __future__ import annotations
 
 import io
+import json
 import re
+import time
+from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 
 import httpx
 import numpy as np
@@ -265,3 +269,73 @@ def test_network_failure_is_502_not_fabricated(cube_server, monkeypatch):
 def test_invalid_coordinates_are_422(cube_server, params):
     assert TestClient(app).get("/api/spectrum", params=params).status_code == 422
     assert cube_server.requests == 0
+
+
+# --- Robustness: concurrent cache writes, corrupt caches, unparseable tiles ---
+
+
+def spectrum_cache_file(tmp_dir: Path) -> Path:
+    return tmp_dir / f"5-1901-{PX}-{PY}.json"
+
+
+def test_corrupt_spectrum_cache_is_refetched(cube_server):
+    cache_file = spectrum_cache_file(cube.CUBE_SPECTRUM_CACHE_DIR)
+    cache_file.write_text('{"IMAGE": [1, 2', "utf-8")  # truncated by a crashed writer
+    resp = TestClient(app, raise_server_exceptions=False).get(
+        "/api/spectrum", params={"ra": RA, "dec": DEC}
+    )
+    assert resp.status_code == 200
+    assert resp.json()["points"][0]["value"] == pytest.approx(10.0)
+    assert len(json.loads(cache_file.read_text("utf-8"))["IMAGE"]) == DEPTH
+
+
+def test_cache_writes_do_not_share_a_fixed_temp_path(cube_server):
+    """Another writer's in-flight temp file must not break this request."""
+    (cube.CUBE_CACHE_DIR / "layout-5-1901.tmp").mkdir()
+    spectrum_cache_file(cube.CUBE_SPECTRUM_CACHE_DIR).with_suffix(".tmp").mkdir()
+    resp = TestClient(app, raise_server_exceptions=False).get(
+        "/api/spectrum", params={"ra": RA, "dec": DEC}
+    )
+    assert resp.status_code == 200
+    assert spectrum_cache_file(cube.CUBE_SPECTRUM_CACHE_DIR).is_file()
+
+
+def test_concurrent_cold_requests_discover_the_tile_once(cube_server, monkeypatch):
+    header_walks = []
+    original = cube.discover_layout
+
+    def slow_discover(client, npix):
+        header_walks.append(npix)
+        time.sleep(0.2)  # widen the window in which other requests arrive
+        return original(client, npix)
+
+    monkeypatch.setattr(cube, "discover_layout", slow_discover)
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        results = list(pool.map(lambda _: cube.get_cube_spectrum(RA, DEC), range(4)))
+
+    assert header_walks == [1901]
+    assert all(r["points"][0]["value"] == pytest.approx(10.0) for r in results)
+
+
+def test_unreadable_tile_header_is_502(cube_server):
+    blob = bytearray(cube_server.blob)
+    blob[200:203] = bytes([0xC3, 0xB1, 0xFF])  # non-ASCII bytes inside the primary header
+    cube_server.blob = bytes(blob)
+    resp = TestClient(app, raise_server_exceptions=False).get(
+        "/api/spectrum", params={"ra": RA, "dec": DEC}
+    )
+    assert resp.status_code == 502
+    assert "Unreadable All-Sky Cube tile" in resp.json()["detail"]
+
+
+def test_unsupported_plane_type_is_502(cube_server):
+    hdul = fits.open(io.BytesIO(cube_server.blob))
+    hdul["FLAGS"].data = hdul["FLAGS"].data.astype(np.uint8)  # BITPIX 8
+    buf = io.BytesIO()
+    hdul.writeto(buf)
+    cube_server.blob = buf.getvalue()
+    resp = TestClient(app, raise_server_exceptions=False).get(
+        "/api/spectrum", params={"ra": RA, "dec": DEC}
+    )
+    assert resp.status_code == 502
+    assert "Unreadable All-Sky Cube tile" in resp.json()["detail"]

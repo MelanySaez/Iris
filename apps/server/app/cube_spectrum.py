@@ -15,9 +15,12 @@ import io
 import json
 import logging
 import math
+import os
 import re
+import tempfile
 import threading
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 import astropy.units as u
@@ -53,6 +56,7 @@ _SPECTRAL_KEY = re.compile(
     r"^(CTYPE|CUNIT|CRPIX|CRVAL|CDELT|CNAME|CROTA)3$|^(PS|PV)3_\d+$|^PC(3_\d+|\d+_3)$"
 )
 _layout_lock = threading.Lock()
+_tile_locks: dict[int, threading.Lock] = {}
 
 
 @dataclass(frozen=True)
@@ -270,20 +274,63 @@ def discover_layout(client: httpx.Client, npix: int) -> CubeLayout:
     )
 
 
+def _tile_lock(npix: int) -> threading.Lock:
+    """One lock per tile, so concurrent cold requests walk its headers only once."""
+    with _layout_lock:
+        return _tile_locks.setdefault(npix, threading.Lock())
+
+
+def _read_json_cache(path: Path) -> Any | None:
+    """Return a cached JSON document, or None when it is missing or unreadable."""
+    try:
+        return json.loads(path.read_text("utf-8"))
+    except FileNotFoundError:
+        return None
+    except (OSError, ValueError):
+        logger.warning("Discarding unreadable cube cache file %s", path)
+        return None
+
+
+def _write_json_cache(path: Path, data: Any) -> None:
+    """Atomically publish a cache file through a temp file unique to this writer.
+
+    The cache is best-effort: when the final replace loses a race (for example
+    a Windows sharing violation while another request reads the file), the
+    response is still served and the other writer's identical copy remains.
+    """
+    fd, tmp_name = tempfile.mkstemp(
+        dir=path.parent, prefix=f".{path.stem}.", suffix=".tmp"
+    )
+    tmp = Path(tmp_name)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            json.dump(data, handle)
+        os.replace(tmp, path)
+    except OSError:
+        logger.warning("Could not publish cube cache file %s", path, exc_info=True)
+    finally:
+        tmp.unlink(missing_ok=True)
+
+
 def get_layout(client: httpx.Client, npix: int) -> CubeLayout:
     """Return the cached layout for a tile, discovering it on first use."""
     path = CUBE_CACHE_DIR / f"layout-{CUBE_ORDER}-{npix}.json"
-    with _layout_lock:
-        if path.is_file():
+    with _tile_lock(npix):
+        cached = _read_json_cache(path)
+        if cached is not None:
             try:
-                return CubeLayout.from_json(json.loads(path.read_text("utf-8")))
-            except (ValueError, TypeError, KeyError):
-                logger.warning("Discarding unreadable cube layout cache %s", path)
-    layout = discover_layout(client, npix)
-    tmp = path.with_suffix(".tmp")
-    tmp.write_text(json.dumps(layout.to_json()), "utf-8")
-    tmp.replace(path)
-    return layout
+                return CubeLayout.from_json(cached)
+            except (TypeError, KeyError):
+                logger.warning("Discarding incompatible cube layout cache %s", path)
+        layout = discover_layout(client, npix)
+        _write_json_cache(path, layout.to_json())
+        return layout
+
+
+def _valid_spectrum_cache(values: Any, depth: int) -> bool:
+    return isinstance(values, dict) and all(
+        isinstance(values.get(p), list) and len(values[p]) == depth for p in CUBE_PRODUCTS
+    )
 
 
 _DTYPES = {-64: ">f8", -32: ">f4", 16: ">i2", 32: ">i4", 64: ">i8"}
@@ -337,16 +384,20 @@ def get_cube_spectrum(ra_deg: float, dec_deg: float) -> dict[str, Any]:
                 )
 
             cache_path = CUBE_SPECTRUM_CACHE_DIR / f"{CUBE_ORDER}-{npix}-{x}-{y}.json"
-            if cache_path.is_file():
-                values = json.loads(cache_path.read_text("utf-8"))
-            else:
+            values = _read_json_cache(cache_path)
+            if not _valid_spectrum_cache(values, layout.depth):
                 values = read_pixel_spectrum(client, layout, x, y)
-                tmp = cache_path.with_suffix(".tmp")
-                tmp.write_text(json.dumps(values), "utf-8")
-                tmp.replace(cache_path)
+                _write_json_cache(cache_path, values)
     except httpx.HTTPError as exc:
         raise HTTPException(
             status_code=502, detail=f"All-Sky Cube tile request failed: {exc}"
+        ) from None
+    except (ValueError, KeyError, TypeError, IndexError) as exc:
+        # Malformed upstream bytes: non-ASCII headers, bad cards, unknown BITPIX.
+        logger.warning("Unreadable cube tile %s: %r", npix, exc)
+        raise HTTPException(
+            status_code=502,
+            detail=f"Unreadable All-Sky Cube tile {npix}: {type(exc).__name__}: {exc}",
         ) from None
 
     points = []
