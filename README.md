@@ -16,7 +16,9 @@ repository's `.envrc` will automatically load the same flake.
 
 ### Environment files
 
-Each part has its own template; copy them once (the `.env` copies are git-ignored):
+The root file configures `docker compose`; each service has its own file for
+local settings, so a local change touches only that service. Copy them once
+(the `.env` copies are git-ignored):
 
 | Template | Used by | Declares |
 |----------|---------|----------|
