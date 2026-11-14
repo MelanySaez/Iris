@@ -6,14 +6,18 @@ import {
   SERIES_COLORS,
   applyIfCurrent,
   computeDomain,
+  countNonPositive,
   lineSegments,
   linearScale,
+  logScale,
+  logTicks,
   nearestChannel,
   planAdd,
   niceTicks,
   parseCoordinates,
   spectrumKey,
 } from '../../spectrum';
+import type { YScaleMode } from '../../spectrum';
 import type { CatalogObject, CubeSpectrumResponse } from '../../types';
 
 interface SpectrumEntry {
@@ -44,6 +48,7 @@ export function SpectralLab() {
   const [raText, setRaText] = useState('');
   const [decText, setDecText] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
+  const [yMode, setYMode] = useState<YScaleMode>('linear');
   const requestCounter = useRef(0);
   // Source of truth for entries between renders: two clicks before React
   // re-renders must both see the first add (no duplicate key or colour slot).
@@ -232,7 +237,21 @@ export function SpectralLab() {
           SPHEREx Spectrophotometry Tool for science-grade spectra. Gaps are channels with no
           coverage at that pixel.
         </p>
-        <SpectrumChart entries={plotted} />
+        <div className="spectral-toolbar" role="group" aria-label="Brightness axis scale">
+          <span className="spectral-muted">Brightness axis</span>
+          {(['linear', 'log'] as const).map((mode) => (
+            <button
+              key={mode}
+              type="button"
+              className={`spectral-toggle ${yMode === mode ? 'active' : ''}`}
+              aria-pressed={yMode === mode}
+              onClick={() => setYMode(mode)}
+            >
+              {mode === 'linear' ? 'Linear' : 'Log'}
+            </button>
+          ))}
+        </div>
+        <SpectrumChart entries={plotted} mode={yMode} />
         {plotted.length > 0 && <SpectrumTable entries={plotted} />}
       </main>
     </div>
@@ -243,7 +262,7 @@ interface PlottedEntry extends SpectrumEntry {
   data: CubeSpectrumResponse;
 }
 
-function SpectrumChart({ entries }: { entries: PlottedEntry[] }) {
+function SpectrumChart({ entries, mode }: { entries: PlottedEntry[]; mode: YScaleMode }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(720);
   const [hoverChannel, setHoverChannel] = useState<number | null>(null);
@@ -258,13 +277,19 @@ function SpectrumChart({ entries }: { entries: PlottedEntry[] }) {
     return () => observer.disconnect();
   }, []);
 
-  const domain = useMemo(() => computeDomain(entries.map((e) => e.data.points)), [entries]);
+  const series = useMemo(() => entries.map((e) => e.data.points), [entries]);
+  const domain = useMemo(() => computeDomain(series, mode), [series, mode]);
+  const hiddenInLog = mode === 'log' ? countNonPositive(series) : 0;
   const unit = entries[0]?.data.unit ?? 'MJy/sr';
 
   if (!domain) {
     return (
       <div ref={containerRef} className="spectral-chart spectral-chart-empty">
-        <p className="spectral-muted">No spectrum plotted yet.</p>
+        <p className="spectral-muted">
+          {entries.length && mode === 'log'
+            ? 'No positive values to draw on a log axis; switch to Linear.'
+            : 'No spectrum plotted yet.'}
+        </p>
       </div>
     );
   }
@@ -272,9 +297,13 @@ function SpectrumChart({ entries }: { entries: PlottedEntry[] }) {
   const plotRight = width - MARGIN.right;
   const plotBottom = CHART_HEIGHT - MARGIN.bottom;
   const x = linearScale(domain.x, [MARGIN.left, plotRight]);
-  const y = linearScale(domain.y, [plotBottom, MARGIN.top]);
+  const y =
+    mode === 'log'
+      ? logScale(domain.y, [plotBottom, MARGIN.top])
+      : linearScale(domain.y, [plotBottom, MARGIN.top]);
   const xTicks = niceTicks(domain.x[0], domain.x[1], Math.max(4, Math.floor(width / 110)));
-  const yTicks = niceTicks(domain.y[0], domain.y[1], 5);
+  const yTicks =
+    mode === 'log' ? logTicks(domain.y[0], domain.y[1]) : niceTicks(domain.y[0], domain.y[1], 5);
   const reference = entries[0].data.points;
 
   const handleMove = (event: ReactPointerEvent<SVGSVGElement>) => {
@@ -291,7 +320,9 @@ function SpectrumChart({ entries }: { entries: PlottedEntry[] }) {
   // Direct labels at the last available point, nudged apart vertically.
   const labels = entries
     .map((e) => {
-      const last = [...e.data.points].reverse().find((p) => p.value !== null);
+      const last = [...e.data.points]
+        .reverse()
+        .find((p) => p.value !== null && Number.isFinite(y(p.value)));
       return last ? { key: e.key, text: e.label, y: y(last.value as number) } : null;
     })
     .filter((l): l is { key: string; text: string; y: number } => l !== null)
@@ -351,7 +382,7 @@ function SpectrumChart({ entries }: { entries: PlottedEntry[] }) {
             <line className="spectral-crosshair" x1={tooltipLeft} x2={tooltipLeft} y1={MARGIN.top} y2={plotBottom} />
             {entries.map((e) => {
               const p = e.data.points[hoverChannel as number];
-              return p && p.value !== null ? (
+              return p && p.value !== null && Number.isFinite(y(p.value)) ? (
                 <circle
                   key={e.key}
                   cx={x(p.wavelength_um)}
@@ -371,6 +402,12 @@ function SpectrumChart({ entries }: { entries: PlottedEntry[] }) {
           </text>
         ))}
       </svg>
+      {hiddenInLog > 0 && (
+        <p className="spectral-chart-note" role="note">
+          {hiddenInLog} value{hiddenInLog === 1 ? '' : 's'} ≤ 0 {hiddenInLog === 1 ? 'is' : 'are'} not
+          drawn on the log axis (shown as gaps); see the data table.
+        </p>
+      )}
 
       {hovered && (
         <div

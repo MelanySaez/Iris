@@ -10,6 +10,9 @@ import {
   nearestChannel,
   applyIfCurrent,
   planAdd,
+  logScale,
+  logTicks,
+  countNonPositive,
   nextColorSlot,
   niceTicks,
   parseCoordinates,
@@ -226,5 +229,50 @@ describe('planAdd', () => {
     expect(planAdd(full, 'new', 'X')).toEqual({
       error: 'Compare at most 8 spectra; remove one first.',
     });
+  });
+});
+
+describe('logarithmic y axis', () => {
+  it('spans whole decades around the positive values', () => {
+    const domain = computeDomain([[point(0, 1, 3), point(1, 2, 250)]], 'log');
+    expect(domain?.y).toEqual([1, 1000]);
+  });
+
+  it('ignores zero and negative values when sizing a log axis', () => {
+    const domain = computeDomain([[point(0, 1, -4), point(1, 2, 0), point(2, 3, 0.5), point(3, 4, 20)]], 'log');
+    expect(domain?.y).toEqual([0.1, 100]);
+  });
+
+  it('returns null for a log axis when nothing is positive', () => {
+    expect(computeDomain([[point(0, 1, -1), point(1, 2, 0)]], 'log')).toBeNull();
+  });
+
+  it('keeps the linear domain unchanged by default', () => {
+    expect(computeDomain([[point(0, 1, 50), point(1, 2, 100)]])?.y[0]).toBe(0);
+  });
+
+  it('maps decades evenly and non-positive values to NaN', () => {
+    const y = logScale([1, 100], [200, 0]);
+    expect(y(1)).toBe(200);
+    expect(y(10)).toBe(100);
+    expect(y(100)).toBe(0);
+    expect(y(0)).toBeNaN();
+    expect(y(-3)).toBeNaN();
+  });
+
+  it('puts ticks on powers of ten, adding 2 and 5 when the range is narrow', () => {
+    expect(logTicks(0.1, 1000)).toEqual([0.1, 1, 10, 100, 1000]);
+    expect(logTicks(1, 100)).toEqual([1, 2, 5, 10, 20, 50, 100]);
+  });
+
+  it('breaks the line where a value cannot be drawn on the log axis', () => {
+    const x = linearScale([0, 10], [0, 100]);
+    const y = logScale([1, 100], [100, 0]);
+    const segments = lineSegments([point(0, 1, 10), point(1, 2, 100), point(2, 3, -1), point(3, 4, 10)], x, y);
+    expect(segments).toEqual(['M10.00,50.00 L20.00,0.00', 'M40.00,50.00']);
+  });
+
+  it('counts the points a log axis has to hide', () => {
+    expect(countNonPositive([[point(0, 1, 0), point(1, 2, 5)], [point(0, 1, -2), point(1, 2, null)]])).toBe(2);
   });
 });

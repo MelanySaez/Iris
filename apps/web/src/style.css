@@ -2438,3 +2438,37 @@ button:disabled {
     padding: 5px 10px;
   }
 }
+
+.spectral-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.spectral-toolbar .spectral-muted {
+  margin-right: 4px;
+  font-size: 12px;
+}
+
+.spectral-toggle {
+  padding: 4px 12px;
+  border: 1px solid var(--sky-line-strong);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--sky-muted);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.spectral-toggle.active {
+  border-color: var(--sky-accent);
+  background: var(--sky-accent-soft);
+  color: var(--sky-accent-strong);
+}
+
+.spectral-chart-note {
+  margin: 0;
+  padding: 6px 12px 10px;
+  color: var(--sky-muted);
+  font-size: 12px;
+}

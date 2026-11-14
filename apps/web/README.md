@@ -35,7 +35,10 @@ Open **Spectral Lab** in the top bar (`#/spectral`). Add up to 8 spectra from th
 curated catalog or by typing RA/Dec in degrees; each is fetched from
 `GET /api/spectrum` and plotted as wavelength (µm) against surface brightness
 (MJy/sr) on one shared axis. Hover the chart for per-channel values and hit
-counts; hide or remove a spectrum from the sidebar (each keeps its colour);
+counts; switch the brightness axis between **Linear** and **Log** to compare
+bright and faint targets (values ≤ 0 cannot be drawn on a log axis: they
+appear as gaps and the chart says how many); hide or remove a spectrum from
+the sidebar (each keeps its colour);
 expand **Data table** for the numbers.
 
 These are quick-look profiles of a single All-Sky Cube mosaic pixel, not

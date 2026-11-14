@@ -52,28 +52,71 @@ export interface Domain {
   y: [number, number];
 }
 
+export type YScaleMode = 'linear' | 'log';
+
 /**
- * X covers every channel's band; Y starts at 0 (or below, for negative
- * surface brightness) and leaves 8% headroom above the highest value.
+ * X covers every channel's band. Linear Y starts at 0 (or below, for negative
+ * surface brightness) with 8% headroom; log Y spans whole decades around the
+ * positive values only, since zero and negative values have no logarithm.
  */
-export function computeDomain(series: CubeSpectrumPoint[][]): Domain | null {
+export function computeDomain(
+  series: CubeSpectrumPoint[][],
+  mode: YScaleMode = 'linear',
+): Domain | null {
   let xMin = Infinity;
   let xMax = -Infinity;
-  let yMin = 0;
+  let yMin = mode === 'log' ? Infinity : 0;
   let yMax = -Infinity;
   for (const points of series) {
     for (const p of points) {
       xMin = Math.min(xMin, p.wl_min_um);
       xMax = Math.max(xMax, p.wl_max_um);
-      if (p.value !== null) {
-        yMin = Math.min(yMin, p.value);
-        yMax = Math.max(yMax, p.value);
-      }
+      if (p.value === null || (mode === 'log' && p.value <= 0)) continue;
+      yMin = Math.min(yMin, p.value);
+      yMax = Math.max(yMax, p.value);
     }
   }
   if (!Number.isFinite(xMin) || !Number.isFinite(yMax)) return null;
+  if (mode === 'log') {
+    const low = 10 ** Math.floor(Math.log10(yMin));
+    const high = 10 ** Math.ceil(Math.log10(yMax));
+    return { x: [xMin, xMax], y: [low, high > low ? high : low * 10] };
+  }
   const headroom = (yMax - yMin || Math.abs(yMax) || 1) * 0.08;
   return { x: [xMin, xMax], y: [yMin, yMax + headroom] };
+}
+
+/** Log10 scale; values ≤ 0 map to NaN so the chart leaves a gap there. */
+export function logScale(domain: [number, number], range: [number, number]): Scale {
+  const l0 = Math.log10(domain[0]);
+  const l1 = Math.log10(domain[1]);
+  const span = l1 - l0 || 1;
+  const [r0, r1] = range;
+  return (value) => (value > 0 ? r0 + ((Math.log10(value) - l0) / span) * (r1 - r0) : NaN);
+}
+
+/** Ticks at powers of ten; adds ×2 and ×5 when the axis covers ≤ 2 decades. */
+export function logTicks(min: number, max: number): number[] {
+  if (!(min > 0) || !(max > min)) return [];
+  const first = Math.floor(Math.log10(min));
+  const last = Math.ceil(Math.log10(max));
+  const multipliers = last - first <= 2 ? [1, 2, 5] : [1];
+  const ticks: number[] = [];
+  for (let e = first; e <= last; e += 1) {
+    for (const m of multipliers) {
+      const v = Number((m * 10 ** e).toPrecision(12));
+      if (v >= min * (1 - 1e-9) && v <= max * (1 + 1e-9)) ticks.push(v);
+    }
+  }
+  return ticks;
+}
+
+/** Points with a value that a log axis cannot draw (zero or negative). */
+export function countNonPositive(series: CubeSpectrumPoint[][]): number {
+  return series.reduce(
+    (total, points) => total + points.filter((p) => p.value !== null && p.value <= 0).length,
+    0,
+  );
 }
 
 export type Scale = (value: number) => number;
@@ -86,21 +129,23 @@ export function linearScale(domain: [number, number], range: [number, number]): 
 }
 
 /**
- * SVG path data per contiguous run of channels with data. A channel without
- * coverage breaks the line instead of being interpolated across.
+ * SVG path data per contiguous run of drawable channels. A channel without
+ * coverage, or one the y scale cannot place (≤ 0 on a log axis), breaks the
+ * line instead of being interpolated across.
  */
 export function lineSegments(points: CubeSpectrumPoint[], x: Scale, y: Scale): string[] {
   const segments: string[] = [];
   let current: string[] = [];
   const ordered = [...points].sort((a, b) => a.wavelength_um - b.wavelength_um);
   for (const p of ordered) {
-    if (p.value === null) {
+    const py = p.value === null ? NaN : y(p.value);
+    if (!Number.isFinite(py)) {
       if (current.length) segments.push(current.join(' '));
       current = [];
       continue;
     }
     const cmd = current.length ? 'L' : 'M';
-    current.push(`${cmd}${x(p.wavelength_um).toFixed(2)},${y(p.value).toFixed(2)}`);
+    current.push(`${cmd}${x(p.wavelength_um).toFixed(2)},${py.toFixed(2)}`);
   }
   if (current.length) segments.push(current.join(' '));
   return segments;
