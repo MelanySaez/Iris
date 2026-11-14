@@ -20,7 +20,11 @@ Open the Vite localhost URL. The frontend needs IRSA network access for the offi
 
 ## Saved selections (Records)
 
-Every region selected in Sky creates a job, and the backend saves it as a selection record. Open **Records** in the top bar to list them, reopen a ready one in Plate, or delete it. Records need the backend database; see `apps/server/README.md` (Database). Without `DATABASE_URL`, the Records view shows the backend's 503 message.
+Every region selected in Sky creates a job, and the backend saves it as a selection record. Open **Records** in the top bar to list them, reopen a ready one in Plate, or delete it.
+
+**Show in Sky** rebuilds a record's selection box on the Sky map. When the region was selected in this browser, the map returns to the view it had then (centre, zoom, projection, channel or RGB composite), read from a plain-text entry in `localStorage` (`planetx_selection_view:<ra>,<dec>,<size>`). If there is no saved view, or it cannot be read, the box is rebuilt from the record's coordinates with the default framing.
+
+Records need the backend database; see `apps/server/README.md` (Database). Without `DATABASE_URL`, the Records view shows the backend's 503 message.
 
 ## Try the first real spectral-image slice
 

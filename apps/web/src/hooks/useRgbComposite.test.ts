@@ -57,6 +57,20 @@ describe('useRgbComposite', () => {
     );
   });
 
+  it('turns RGB on with the given channels instead of a preset', () => {
+    const viewer = fakeViewer();
+    const { result } = setup(viewer);
+    const saved = { r: 16, g: 32, b: 46 };
+    act(() => result.current.setRgbMode(true, saved));
+
+    expect(result.current.rgbMode).toBe(true);
+    expect(result.current.rgb).toEqual(saved);
+    expect(viewer.newImageSurvey).toHaveBeenCalledWith(
+      channelVirtualHipsUrl(16, location.origin),
+      expect.objectContaining({ colormap: 'red' }),
+    );
+  });
+
   it('keeps showing the drawn channels when a selection is invalid', () => {
     const viewer = fakeViewer();
     const { result } = setup(viewer);
