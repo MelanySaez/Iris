@@ -12,11 +12,15 @@ Branch: `feat/spectral-lab` · Delivery: ask-on-risk · Runners: `uv run pytest 
 
 | ID | Specs | Route | Status | Commit |
 |---|---|---|---|---|
-| T1 | S1, S2 | inline | pending | |
-| T2 | S3 | inline | pending | |
+| T1 | S1, S2 | inline | done | c7fdb25 |
+| T2 | S3 | inline | done | (this commit) |
 
 ## Log
 
 - L1 (2026-11-14) User request: "ambas" (explain LVF + build the missing spectral profile chart), then confirmed option C: "¿Arranco con C — perfil de un punto del cielo + comparación de varios objetos?" → "si". Context image: Spectral Lab = "Selector de bandas. Visualización espectral. Comparación de espectros. Composición RGB multibanda."
 - L2 Evidence: cube properties `custom_tile_format = fits-cube`, tile path `Norder5/Dir{d}/Npix{n}/Npix{n}_cube.fits`, 320,909,760 bytes, `Accept-Ranges: bytes`. HDUs: IMAGE (float32 512×512×102, MJy/sr, data_off 8640), NHITS (int32), FLAGS (int32), SPECTRAL_CHANNELS (bintable), WCS-WAVE (bintable). Celestial WCS is HPX; spectral axis WAVE-TAB must be stripped before `astropy.wcs.WCS`. Multipart range of 102×4 bytes returned 206 in ~1.1 s. M81 (148.888, 69.065) → tile 1901, pixel (349, 472), ~83–104 MJy/sr.
 - L3 Baseline: backend 11 failed / 15 passed (all failures need the absent local FITS `data/level2_*.fits`); web 66/66 passed.
+- L4 T1 verified: live IRSA M81 → tile 1901 (349, 472), 77/102 channels with data, 2.9 s cold / 0.34 s cached. 11 new tests; mutation checks (no WAVE-TAB strip, swapped x/y offset) fail them. Backend suite 26 pass / 11 baseline failures (missing local FITS). RED not observed first: tests written after the probe-driven implementation.
+- L5 T2 verified in headless Chrome against the updated backend: 3 spectra plotted, tooltip values, hide/remove, data table, no horizontal overflow at 390 px. Fixed coords-grid overflow and a top-bar overflow at 390 px caused by the new nav button. Web: 83/83 tests, typecheck clean, build OK. Console 404/ERR_NAME_NOT_RESOLVED originate in the Sky layer service worker, not /api/spectrum.
+- L6 Environment: an orphan process (PID 35928) still listens on :8000 serving the pre-change backend; inspection was denied, so verification used :8001. User must stop it before the :5174 dev server proxies to the new code.
+- L7 Follow-ups (not built): log/normalised y-scale for comparing bright vs faint targets; catalog "M81 field" coordinates (210.80, 54.35) match M101, not M81 — pre-existing data issue.

@@ -3,6 +3,7 @@ import { api, ApiError } from './api';
 import { TopBar } from './components/TopBar';
 import { PlateWorkspace } from './components/plate/PlateWorkspace';
 import { SkyWorkspace } from './components/sky/SkyWorkspace';
+import { SpectralLab } from './components/spectral/SpectralLab';
 import { useJobPoller } from './hooks/useJobPoller';
 import { useRoute } from './router';
 import type { JobCreateRequest } from './types';
@@ -80,6 +81,7 @@ export function App() {
 
   const isSky = route.type === 'sky';
   const isPlate = route.type === 'plate';
+  const isSpectral = route.type === 'spectral';
 
   return (
     <div className="planet-app-shell">
@@ -111,6 +113,14 @@ export function App() {
             onOpenPlate={handleOpenPlate}
             onRetryJob={handleRetryJob}
           />
+        </div>
+
+        {/* Spectral Lab - kept mounted so the comparison survives navigation */}
+        <div
+          className={`workspace-layer spectral-layer ${isSpectral ? 'layer-active' : 'layer-hidden'}`}
+          aria-hidden={!isSpectral}
+        >
+          <SpectralLab />
         </div>
 
         {/* Plate Workspace - rendered when route is plate and job is loaded */}

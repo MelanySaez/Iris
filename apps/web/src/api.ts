@@ -2,6 +2,7 @@ import type {
   CatalogObject,
   CatalogResponse,
   ChannelsResponse,
+  CubeSpectrumResponse,
   FrameRenderMode,
   HealthResponse,
   JobCreateRequest,
@@ -76,6 +77,11 @@ export const api = {
 
   async getCatalog(): Promise<CatalogResponse> {
     return request<CatalogResponse>('/api/catalog');
+  },
+
+  async getSpectrum(raDeg: number, decDeg: number): Promise<CubeSpectrumResponse> {
+    const query = new URLSearchParams({ ra: String(raDeg), dec: String(decDeg) });
+    return request<CubeSpectrumResponse>(`/api/spectrum?${query.toString()}`);
   },
 
   async resolveRegion(region: RegionRequest): Promise<RegionResolveResponse> {

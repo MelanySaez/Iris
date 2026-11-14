@@ -29,6 +29,19 @@ The per-pixel `WCS-WAVE` value is **visualization-only**, not calibrated CWAVE/C
 
 The mockup supplies layout direction only. Its generated stars, epochs, historical effects and catalog are not used. Arbitrary-region SIA discovery, calibrated per-pixel channel association, multi-FITS mosaics, precomputed object assets and real historical comparison remain pending. Regions outside the local FITS explicitly report unavailable coverage.
 
+## Spectral Lab
+
+Open **Spectral Lab** in the top bar (`#/spectral`). Add up to 8 spectra from the
+curated catalog or by typing RA/Dec in degrees; each is fetched from
+`GET /api/spectrum` and plotted as wavelength (µm) against surface brightness
+(MJy/sr) on one shared axis. Hover the chart for per-channel values and hit
+counts; hide or remove a spectrum from the sidebar (each keeps its colour);
+expand **Data table** for the numbers.
+
+These are quick-look profiles of a single All-Sky Cube mosaic pixel, not
+calibrated source photometry. Gaps are channels with no coverage at that pixel.
+Band selection, RGB composites and the SPHEREx Spectrophotometry Tool are pending.
+
 ## Checks
 
 ```bash
