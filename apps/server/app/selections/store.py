@@ -7,7 +7,7 @@ from datetime import datetime
 from decimal import ROUND_HALF_EVEN, Decimal
 from typing import Any
 
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import delete, func, literal_column, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session, selectinload, sessionmaker
 
@@ -61,8 +61,15 @@ class SelectionStore:
         session.execute(stmt)
         return session.execute(select(SkyRegion.id).filter_by(**key)).scalar_one()
 
-    def record_submission(self, job_id: str, req: JobRequest, status: str) -> None:
-        """Insert the selection or, when it already exists, count another hit."""
+    def record_submission(
+        self, job_id: str, req: JobRequest, status: str, *, new_attempt: bool
+    ) -> bool:
+        """Insert the selection or, when it already exists, count another hit.
+
+        Only a new attempt resets ``job_status`` and clears ``job_error``; a cache
+        hit never touches them, so a late duplicate write cannot overwrite a
+        recorded outcome. Returns True when the row was created by this call.
+        """
         with self._sessions.begin() as session:
             region_id = self._region_id(
                 session, normalize_region(req.ra_deg, req.dec_deg, req.size_arcmin)
@@ -76,17 +83,18 @@ class SelectionStore:
                 stretch=req.stretch,
                 job_status=status,
             )
+            changes: dict[str, Any] = {
+                "hits": Selection.hits + 1,
+                "last_seen_at": func.now(),
+            }
+            if new_attempt:
+                changes["job_status"] = stmt.excluded.job_status
+                changes["job_error"] = None
             stmt = stmt.on_conflict_do_update(
-                index_elements=[Selection.job_id],
-                set_={
-                    "hits": Selection.hits + 1,
-                    "last_seen_at": func.now(),
-                    "job_status": stmt.excluded.job_status,
-                    # A new attempt (or a cache hit) starts without the old error.
-                    "job_error": None,
-                },
-            )
-            session.execute(stmt)
+                index_elements=[Selection.job_id], set_=changes
+            ).returning(literal_column("(xmax = 0)"))
+            # PostgreSQL: xmax = 0 only for a freshly inserted row version.
+            return bool(session.execute(stmt).scalar_one())
 
     def record_discovery(self, req: JobRequest, discovery: dict[str, Any]) -> None:
         """Store the region coverage and its discovered products."""

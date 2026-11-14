@@ -20,10 +20,14 @@ class SelectionRecorder:
     def __init__(self, store: SelectionStore) -> None:
         self.store = store
 
-    def on_submitted(self, job: JobState) -> None:
-        self.store.record_submission(job.id, job.request, job.status)
-        if job.status in TERMINAL_STATUSES:
-            # Cache hit: the job will not run again, so store its outcome now.
+    def on_submitted(self, job: JobState, is_new: bool) -> None:
+        inserted = self.store.record_submission(
+            job.id, job.request, job.status, new_attempt=is_new
+        )
+        if not is_new and inserted and job.status in TERMINAL_STATUSES:
+            # Cache hit on a row that did not exist (e.g. it was deleted): the
+            # job will not run again, so store its outcome now. An existing row
+            # already holds it, so repeated hits skip the manifest rebuild.
             self.on_finished(job)
 
     def on_discovered(self, job: JobState, discovery: dict[str, Any]) -> None:

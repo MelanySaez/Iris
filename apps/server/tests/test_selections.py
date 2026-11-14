@@ -314,8 +314,8 @@ class _OrderObserver:
     def __init__(self) -> None:
         self.events: list[str] = []
 
-    def on_submitted(self, job) -> None:
-        self.events.append("submitted")
+    def on_submitted(self, job, is_new) -> None:
+        self.events.append("submitted" if is_new else "submitted-cached")
 
     def on_discovered(self, job, discovery) -> None:
         self.events.append("discovered")
@@ -342,24 +342,21 @@ def test_submission_is_notified_before_the_job_can_finish():
     assert observer.events == ["submitted", "discovered", "finished"]
 
 
-def test_cached_terminal_job_records_its_outcome_on_submit():
-    """A cache hit never runs the job again, so the submit must store the outcome."""
-    from app.jobs import JobState
-    from app.models import JobRequest
-    from app.selections.recorder import SelectionRecorder
+class _FakeStore:
+    def __init__(self, inserted: bool) -> None:
+        self.inserted = inserted
+        self.calls: list[tuple] = []
 
-    calls: list[tuple] = []
+    def record_submission(self, job_id, req, status, *, new_attempt):
+        self.calls.append(("submission", job_id, status, new_attempt))
+        return self.inserted
 
-    class FakeStore:
-        def record_submission(self, job_id, req, status):
-            calls.append(("submission", job_id, status))
+    def record_outcome(self, job_id, status, manifest, error):
+        self.calls.append(("outcome", job_id, status, manifest, error))
 
-        def record_outcome(self, job_id, status, manifest, error):
-            calls.append(("outcome", job_id, status, manifest, error))
 
-    job = JobState(id="cached-job", request=JobRequest(**region(20.5)), status="ready")
-    manifest = {"job_id": "cached-job", "region": {}}
-    with (
+def _fake_manifest(manifest):
+    return (
         patch("app.selections.recorder.get_job_manifest", return_value=manifest),
         patch(
             "app.selections.recorder.ManifestResponse",
@@ -367,13 +364,53 @@ def test_cached_terminal_job_records_its_outcome_on_submit():
                 "M", (), {"model_dump": lambda self, mode: kw}
             )(),
         ),
-    ):
-        SelectionRecorder(FakeStore()).on_submitted(job)
+    )
 
-    assert calls == [
-        ("submission", "cached-job", "ready"),
+
+def test_cached_terminal_job_records_its_outcome_when_its_row_is_new():
+    """A cache hit never runs again: a freshly created row needs the outcome now."""
+    from app.jobs import JobState
+    from app.models import JobRequest
+    from app.selections.recorder import SelectionRecorder
+
+    store = _FakeStore(inserted=True)
+    job = JobState(id="cached-job", request=JobRequest(**region(20.5)), status="ready")
+    manifest = {"job_id": "cached-job", "region": {}}
+    p1, p2 = _fake_manifest(manifest)
+    with p1, p2:
+        SelectionRecorder(store).on_submitted(job, False)
+
+    assert store.calls == [
+        ("submission", "cached-job", "ready", False),
         ("outcome", "cached-job", "ready", manifest, None),
     ]
+
+
+def test_repeated_cache_hit_does_not_rebuild_the_outcome():
+    """An existing row already holds the outcome: only the hit is counted."""
+    from app.jobs import JobState
+    from app.models import JobRequest
+    from app.selections.recorder import SelectionRecorder
+
+    store = _FakeStore(inserted=False)
+    job = JobState(id="cached-job", request=JobRequest(**region(20.5)), status="ready")
+    p1, p2 = _fake_manifest({"job_id": "cached-job"})
+    with p1 as manifest_mock, p2:
+        SelectionRecorder(store).on_submitted(job, False)
+
+    assert store.calls == [("submission", "cached-job", "ready", False)]
+    manifest_mock.assert_not_called()
+
+
+def test_new_attempt_is_submitted_as_a_reset():
+    from app.jobs import JobState
+    from app.models import JobRequest
+    from app.selections.recorder import SelectionRecorder
+
+    store = _FakeStore(inserted=False)
+    job = JobState(id="new-job", request=JobRequest(**region(20.5)))
+    SelectionRecorder(store).on_submitted(job, True)
+    assert store.calls == [("submission", "new-job", "queued", True)]
 
 
 # -- single database: tests never touch the developer's data ------------------
@@ -449,7 +486,43 @@ def test_resubmission_clears_the_previous_error(client):
     saved = find_by_job(client, job["id"])
     assert wait_for_outcome(client, saved["id"])["job_error"] is not None
 
-    get_store().record_submission(job["id"], JobRequest(**payload), "queued")
+    inserted = get_store().record_submission(
+        job["id"], JobRequest(**payload), "queued", new_attempt=True
+    )
+    assert inserted is False
     detail = client.get(f"/api/selections/{saved['id']}").json()
     assert detail["job_status"] == "queued"
     assert detail["job_error"] is None
+
+
+@requires_db
+def test_cache_hit_never_overwrites_a_recorded_outcome(client):
+    """A late cache-hit write (e.g. a duplicate submit) keeps status and error."""
+    from app.models import JobRequest
+    from app.selections.api import get_store
+
+    payload = {**region(23.5), "channels": [44]}
+    job = client.post("/api/jobs", json=payload).json()
+    saved = find_by_job(client, job["id"])
+    final = wait_for_outcome(client, saved["id"])
+
+    get_store().record_submission(
+        job["id"], JobRequest(**payload), "discovering", new_attempt=False
+    )
+    detail = client.get(f"/api/selections/{saved['id']}").json()
+    assert detail["job_status"] == final["job_status"] == "failed"
+    assert detail["job_error"] == final["job_error"]
+    assert detail["hits"] == 2
+
+
+@requires_db
+def test_record_submission_reports_whether_the_row_was_created(client):
+    from app.models import JobRequest
+    from app.selections.api import get_store
+
+    req = JobRequest(**region(24.5), channels=[44])
+    store = get_store()
+    assert store.record_submission("fresh-row-000000001", req, "ready", new_attempt=False)
+    assert not store.record_submission(
+        "fresh-row-000000001", req, "ready", new_attempt=False
+    )
