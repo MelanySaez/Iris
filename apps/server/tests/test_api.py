@@ -104,3 +104,46 @@ def test_trace_and_expanded_region_contract():
     assert client.get("/api/health").headers["x-request-id"]
     assert JobRequest(**{**SAMPLE, "size_arcmin": 60}).size_arcmin == 60
     assert client.post("/api/jobs", json={**SAMPLE, "size_arcmin": 61}).status_code == 422
+
+
+NO_COVERAGE = {"ra_deg": 10.25, "dec_deg": -30.0, "size_arcmin": 4.0}
+
+
+def test_api_error_paths():
+    client = TestClient(app)
+
+    # Unknown job: 404
+    assert client.get("/api/jobs/nonexistent-job-id").status_code == 404
+    assert (
+        client.get("/api/jobs/nonexistent-job-id/frames/20/image.png").status_code == 404
+    )
+
+    # Region larger than 60 arcmin: 422
+    assert (
+        client.post("/api/jobs", json={**NO_COVERAGE, "size_arcmin": 75.0}).status_code
+        == 422
+    )
+
+    # More than 8 channels: 422
+    too_many = {**NO_COVERAGE, "channels": [1, 2, 3, 4, 5, 6, 7, 8, 9]}
+    assert client.post("/api/jobs", json=too_many).status_code == 422
+
+
+def test_failed_job_is_replaced_and_rerun_on_resubmit():
+    from app.jobs import JobState, job_manager
+    from app.models import JobRequest
+
+    req = JobRequest(**NO_COVERAGE, channels=[20], products=["image"])
+    job_id = job_manager.compute_job_id(req)
+    stale = JobState(id=job_id, request=req, status="failed", error="transient")
+    with job_manager.lock:
+        job_manager.jobs[job_id] = stale
+
+    retried = job_manager.submit(JobRequest(**req.model_dump()))
+    assert retried is not stale
+    assert retried.id == job_id
+
+    snapshot = wait_until_ready(TestClient(app), retried.id)
+    assert snapshot["status"] == "failed"
+    assert snapshot["error"] == "No SPHEREx coverage found for this region."
+    assert any(e["stage"] == "Discovering products" for e in snapshot["events"])

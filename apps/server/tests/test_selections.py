@@ -390,3 +390,18 @@ def test_other_tests_do_not_record_selections_by_default():
     from app.selections.recorder import SelectionRecorder
 
     assert not any(isinstance(o, SelectionRecorder) for o in job_manager.observers)
+
+
+def test_invalid_database_url_is_never_logged_with_its_password(caplog):
+    caplog.set_level("DEBUG")
+    secret = "s3cretPW"
+    try:
+        store = configure_selections(
+            f"postgresql+psycopg//iris:{secret}@h/iris", job_manager
+        )
+    finally:
+        configure_selections(None, job_manager)
+    assert store is None
+    assert "invalid DATABASE_URL" in caplog.text
+    logged = caplog.text + "".join(r.exc_text or "" for r in caplog.records)
+    assert secret not in logged

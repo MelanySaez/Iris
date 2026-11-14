@@ -125,9 +125,14 @@ def configure_selections(url: str | None, manager: JobManager) -> SelectionStore
     if url:
         try:
             store = SelectionStore(make_session_factory(normalize_database_url(url)))
-        except Exception:
+        except Exception as exc:
             # A malformed URL must never stop the server; records stay disabled.
-            logger.exception("selection records disabled: invalid DATABASE_URL")
+            # Log only the error type: the message or traceback could carry the
+            # raw URL, password included.
+            logger.error(
+                "selection records disabled: invalid DATABASE_URL (%s)",
+                type(exc).__name__,
+            )
             return None
         _store = store
         _recorder = SelectionRecorder(_store)
