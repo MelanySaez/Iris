@@ -806,12 +806,27 @@ button:disabled {
 }
 
 /* Channel Slider Dock (Bottom-Center) */
-.sky-channel-dock {
+.sky-bottom-stack {
   position: absolute;
   bottom: 16px;
   left: 50%;
   transform: translateX(-50%);
   width: min(520px, calc(100% - 32px));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  z-index: 30;
+  pointer-events: none;
+}
+
+.sky-bottom-stack > * {
+  pointer-events: auto;
+}
+
+.sky-channel-dock {
+  position: relative;
+  width: 100%;
   padding: 10px 18px;
   display: flex;
   flex-direction: column;
@@ -2035,7 +2050,7 @@ button:disabled {
     display: none;
   }
 
-  .sky-channel-dock {
+  .sky-bottom-stack {
     width: calc(100% - 20px);
     bottom: 10px;
   }
@@ -2160,12 +2175,15 @@ button:disabled {
 .persistent-region .region-handle { fill: #09111b; stroke: #9db2ff; stroke-width: 2; pointer-events: all; touch-action: none; }
 .persistent-region .handle-nwse { cursor: nwse-resize; }
 .persistent-region .handle-nesw { cursor: nesw-resize; }
-.region-confirm-bar { position: absolute; left: 50%; bottom: 72px; transform: translateX(-50%); z-index: 32; display: flex; align-items: center; gap: 12px; padding: 8px 12px; background: var(--sky-panel); border: 1px solid var(--sky-border); font-size: 12px; white-space: nowrap; }
-.region-confirm-hint { opacity: 0.7; }
-.region-confirm-btn { padding: 6px 12px; border: 1px solid #9db2ff; background: #9db2ff; color: #09111b; font-weight: 700; cursor: pointer; }
+/* Blur, shadow and radius come from .float; the panel fill and border keep the bar's own glass tint. */
+.region-confirm-bar { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 12px; max-width: 100%; padding: 8px 8px 8px 18px; background: var(--sky-panel); border: 1px solid var(--sky-border); font-size: 12px; color: var(--sky-ink); }
+.region-confirm-hint { color: var(--sky-muted); }
+.region-confirm-btn { padding: 5px 14px; border: 1px solid var(--sky-accent); border-radius: var(--radius-md); background: var(--sky-accent); color: var(--sky-bg); font-size: 11px; font-weight: 700; cursor: pointer; transition: filter 0.15s; }
+.region-confirm-btn:hover, .region-confirm-btn:focus-visible { filter: brightness(1.12); }
 @media (max-width: 640px) { .region-confirm-hint { display: none; } }
 
-/* ===================================================================   Spectral Lab
+/* ==========================================================================
+   Spectral Lab
    ========================================================================== */
 
 .spectral-layer.layer-active {
@@ -2657,8 +2675,7 @@ button:disabled {
   .dock-rgb-selects {
     grid-template-columns: 1fr;
   }
-=======
-.persistent-region button { width: 36px; height: 36px; border: 2px solid #fff; border-radius: 50%; background: #09111b; color: #fff; font-size: 23px; font-weight: 700; }
+}
 
 /* ==========================================================================
    Records workspace (saved selections)
