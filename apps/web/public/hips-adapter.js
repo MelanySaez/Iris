@@ -96,6 +96,12 @@ self.addEventListener('activate', (event) => event.waitUntil(self.clients.claim(
 
 self.addEventListener('message', (event) => {
   const message = event.data;
+  if (message?.type === 'CLAIM') {
+    // A hard reload (Ctrl+Shift+R) starts the page uncontrolled, and an already
+    // active worker never re-runs its activate-time claim, so pages ask for it.
+    event.waitUntil(self.clients.claim().catch(() => {}));
+    return;
+  }
   if (message?.type === 'CANCEL_PREFETCH') { warming?.abort(); return; }
   if (message?.type === 'WARM_NEIGHBOURS' && isValidChannel(message.channel)) {
     warming?.abort();

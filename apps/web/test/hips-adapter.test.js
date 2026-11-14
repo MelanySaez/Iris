@@ -41,7 +41,40 @@ async function request(listener, channel, path) {
   return responsePromise;
 }
 
+function makeClaimWorker(claim) {
+  const listeners = new Map();
+  const worker = {
+    addEventListener: (type, listener) => listeners.set(type, listener),
+    clients: { claim, matchAll: async () => [] },
+    location: { origin: 'https://app.example.test' },
+  };
+  runInNewContext(adapterSource, { self: worker, URL, Response, Headers, fetch });
+  return listeners;
+}
+
+function sendClaim(listeners) {
+  let pending;
+  listeners.get('message')({ data: { type: 'CLAIM' }, waitUntil: (promise) => { pending = promise; } });
+  return pending;
+}
+
 describe('SPHEREx HiPS service worker adapter', () => {
+  it('claims uncontrolled pages on request, e.g. after a hard reload', async () => {
+    let claims = 0;
+    const listeners = makeClaimWorker(async () => { claims += 1; });
+
+    const pending = sendClaim(listeners);
+    expect(pending).toBeInstanceOf(Promise);
+    await pending;
+    expect(claims).toBe(1);
+  });
+
+  it('swallows a rejected claim so the message handler never fails', async () => {
+    const listeners = makeClaimWorker(() => Promise.reject(new Error('InvalidStateError')));
+
+    await expect(sendClaim(listeners)).resolves.toBeUndefined();
+  });
+
   it('acknowledges metadata setup and serves channel-specific properties', async () => {
     const { listeners } = makeWorker();
     expect(syncProperties(listeners.get('message'))).toEqual([{ ok: true }]);
