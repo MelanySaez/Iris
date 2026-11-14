@@ -1,7 +1,9 @@
 node_modules/
+.venv/
 apps/server/data/.cache/spherex_mosaic/
 apps/server/data/cache/
 apps/server/data/derived/spherex_mosaic/
+.direnv/
 
 # IA related
 .atl/
