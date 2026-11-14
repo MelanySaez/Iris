@@ -41,7 +41,7 @@ Selection records need PostgreSQL. Start it and apply the migrations once
 (details in `apps/server/README.md`):
 
 ```bash
-docker compose up -d db          # or: podman compose up -d db
+docker compose up -d --wait db   # or: podman compose up -d --wait db
 cd apps/server
 set -a && source .env && set +a  # export DATABASE_URL and TEST_DATABASE_URL
 uv run alembic upgrade head

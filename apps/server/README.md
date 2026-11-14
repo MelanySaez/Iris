@@ -21,10 +21,10 @@ Every job submission is saved as a selection record in PostgreSQL (SQLAlchemy + 
    cp apps/server/.env.example apps/server/.env
    ```
 
-2. Start PostgreSQL from the repository root (compose reads the root `.env` automatically):
+2. Start PostgreSQL from the repository root (compose reads the root `.env` automatically). `--wait` returns only once the healthcheck reports the database as ready, so the next commands never hit it while it is still initializing:
 
    ```bash
-   docker compose up -d db          # or: podman compose up -d db
+   docker compose up -d --wait db   # or: podman compose up -d --wait db
    ```
 
    Using a native PostgreSQL instead: `createuser -P iris && createdb -O iris iris`, then point `DATABASE_URL` at its port.
