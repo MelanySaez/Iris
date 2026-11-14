@@ -17,8 +17,8 @@ Branch: `feat/selection-records` · Delivery: ask-on-risk · Runners: `uv run py
 
 | ID | Specs | Route | Status | Commit |
 |----|-------|-------|--------|--------|
-| T1 | S1, S2, S6 | inline | pending | |
-| T2 | S3, S4, S7 | inline | pending | |
+| T1 | S1, S2, S6 | inline | done | 5f18541 |
+| T2 | S3, S4, S7 | inline | done | (this commit) |
 | T3 | S5 | inline | pending | |
 
 Route evidence: one sequential feature (T3 depends on T2's API contract); no parallel independent units, so no writer trigger.
@@ -28,3 +28,6 @@ Route evidence: one sequential feature (T3 depends on T2's API contract); no par
 - **L1** (2026-11-14) — User request: "Adelante, implementalo, al igual dime los pasos para crear la db en local"
 - **L2** (2026-11-14) — User correction: "en este caso necesito que se use sqlalchemy  y postgres"
 - **L3** — Design history agreed in conversation: auto-save always, hard delete, 3-table schema after de-normalizing 2-column tables.
+- **L4** — T1: teammate commit 2919865 already scaffolded Alembic in `app/alembic`; reused it (env.py reads `DATABASE_URL`, `prepend_sys_path = .`). Migration 0001 upgrade/downgrade round-trip and `alembic check` (no drift) verified on Postgres 18.
+- **L5** — Known environmental failures (also on base): 11 tests in `test_api.py`/`test_fits_assets.py` need the missing local FITS sample.
+- **L6** — T2: `JobObserver` port in `jobs.py`; `SelectionRecorder` saves submit/discovery/outcome; failures logged, never raised. `tests/test_selections.py`: 9 tests (6 need `TEST_DATABASE_URL`), all pass against Postgres. Note: tests were written after the code (no RED observed first). Differential check of `POST /api/jobs` vs base: identical output.

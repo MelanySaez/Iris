@@ -31,6 +31,13 @@ Every job submission is saved as a selection record in PostgreSQL (SQLAlchemy + 
 
 3. Start the server in the same shell (it reads `DATABASE_URL`).
 
+Selection tests run against a disposable database and are skipped otherwise:
+
+```bash
+createdb -O iris iris_test   # or: podman compose exec db createdb -U iris iris_test
+TEST_DATABASE_URL=postgresql+psycopg://iris:iris@127.0.0.1:5432/iris_test uv run pytest -q
+```
+
 After changing the models in `app/selections/orm.py`, create a migration with `uv run alembic revision --autogenerate -m "<message>"` and review it before committing.
 
 To run with a custom local spectral asset:
@@ -52,6 +59,9 @@ All endpoints are mounted under `/api`:
 - `GET /api/jobs/{id}/frames/{channel}/{product}.npy`: Export raw float32/int32 NumPy array (`image`, `variance`, `flags`, `wavelengths`, `bandwidths`).
 - `GET /api/jobs/{id}/pixel?x=&y=&channel=&epoch=`: Per-pixel probe returning calibrated units, raw values, exact LVF wavelength/bandwidth, channel window inclusion, and set `MP_*` flag bit names.
 - `GET /api/jobs/{id}/manifest`: Complete scientific provenance document for the plate inspector.
+- `GET /api/selections?limit=&before=`: Saved selections (one per job request), most recently seen first. `next_before` is the cursor for the next page.
+- `GET /api/selections/{id}`: One saved selection with its discovered spectral products and, for ready jobs, the provenance manifest.
+- `DELETE /api/selections/{id}`: Delete one saved selection (204). Shared region data is kept. All selection endpoints answer 503 when `DATABASE_URL` is unset.
 
 ## Provenance & Scientific Limitations
 

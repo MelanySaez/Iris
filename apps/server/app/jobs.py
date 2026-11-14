@@ -10,7 +10,7 @@ import time
 from collections import OrderedDict
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Protocol
 
 import numpy as np
 from fastapi import HTTPException
@@ -106,6 +106,20 @@ class JobState:
         }
 
 
+class JobObserver(Protocol):
+    """Port notified about job lifecycle events (e.g. selection persistence).
+
+    Observers must not influence job processing: any exception they raise is
+    logged and swallowed by the manager.
+    """
+
+    def on_submitted(self, job: JobState) -> None: ...
+
+    def on_discovered(self, job: JobState, discovery: dict[str, Any]) -> None: ...
+
+    def on_finished(self, job: JobState) -> None: ...
+
+
 class JobManager:
     """Thread-safe manager for job lifecycle, LRU snapshots, and pool workers."""
 
@@ -118,6 +132,24 @@ class JobManager:
         self.download_pool = ThreadPoolExecutor(
             max_workers=MAX_DOWNLOAD_WORKERS, thread_name_prefix="cutout-dl"
         )
+        self.observers: list[JobObserver] = []
+
+    def add_observer(self, observer: JobObserver) -> None:
+        """Register an observer for job lifecycle events."""
+        self.observers.append(observer)
+
+    def remove_observer(self, observer: JobObserver) -> None:
+        """Unregister a previously added observer (no-op when absent)."""
+        if observer in self.observers:
+            self.observers.remove(observer)
+
+    def _notify(self, event: str, *args: Any) -> None:
+        """Deliver an event to every observer; failures never affect the job."""
+        for observer in list(self.observers):
+            try:
+                getattr(observer, event)(*args)
+            except Exception:
+                logger.exception("job observer %s failed on %s", observer, event)
 
     def compute_job_id(self, req: JobRequest) -> str:
         """Deterministic hash for deduplicating identical requests."""
@@ -184,6 +216,12 @@ class JobManager:
             req.products.append("image")
 
     def submit(self, req: JobRequest) -> JobState:
+        """Submit a job or retrieve an active/cached one, notifying observers."""
+        job = self._submit(req)
+        self._notify("on_submitted", job)
+        return job
+
+    def _submit(self, req: JobRequest) -> JobState:
         """Submit a job or retrieve an active/cached one."""
         self.validate_request(req)
         job_id = self.compute_job_id(req)
@@ -332,6 +370,7 @@ class JobManager:
             logger.info("job=%s stage=%s progress=%s", job.id, job.stage, job.progress)
 
             discovery = resolve_region(ra, dec, size)
+            self._notify("on_discovered", job, discovery)
             if discovery["coverage"] == "none":
                 job.status = "failed"
                 job.progress = 100
@@ -564,6 +603,8 @@ class JobManager:
             logger.info("job=%s stage=%s progress=%s", job.id, job.stage, job.progress)
             job.error = f"{type(exc).__name__}: {exc}"
             self._save_snapshot_to_disk(job)
+        finally:
+            self._notify("on_finished", job)
 
 
 job_manager = JobManager()

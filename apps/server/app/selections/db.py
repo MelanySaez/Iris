@@ -9,6 +9,7 @@ from sqlalchemy import Engine, create_engine
 from sqlalchemy.orm import sessionmaker
 
 DATABASE_URL_ENV = "DATABASE_URL"
+CONNECT_TIMEOUT_SECONDS = 3
 
 
 def get_database_url() -> str | None:
@@ -19,8 +20,16 @@ def get_database_url() -> str | None:
 
 @lru_cache(maxsize=4)
 def get_engine(url: str) -> Engine:
-    """Create (once per URL) a pooled engine that validates stale connections."""
-    return create_engine(url, pool_pre_ping=True, future=True)
+    """Create (once per URL) a pooled engine that validates stale connections.
+
+    A short connect timeout keeps job submission responsive when the database
+    is unreachable; persistence failures are logged, never raised to clients.
+    """
+    return create_engine(
+        url,
+        pool_pre_ping=True,
+        connect_args={"connect_timeout": CONNECT_TIMEOUT_SECONDS},
+    )
 
 
 def make_session_factory(url: str) -> sessionmaker:

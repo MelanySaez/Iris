@@ -38,6 +38,9 @@ from app.models import (
     ResolveResponse,
 )
 from app.render import compute_cutout_percentiles, render_frame_product
+from app.selections.api import configure_selections
+from app.selections.api import router as selections_router
+from app.selections.db import get_database_url
 
 app = FastAPI(title="Planet X v3 Spectral Service", version="0.2.0")
 
@@ -48,6 +51,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+configure_selections(get_database_url(), job_manager)
+app.include_router(selections_router)
 
 
 @app.middleware("http")

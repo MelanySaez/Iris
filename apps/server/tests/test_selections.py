@@ -1,0 +1,278 @@
+"""Selection records persisted in PostgreSQL.
+
+Requires a disposable database: set ``TEST_DATABASE_URL`` (for example
+``postgresql+psycopg://iris:iris@127.0.0.1:5432/iris_test``). The schema is
+created with the real Alembic migrations; every table is truncated per test.
+"""
+
+from __future__ import annotations
+
+import os
+import time
+import uuid
+from decimal import Decimal
+from unittest.mock import patch
+
+import pytest
+from alembic import command
+from alembic.config import Config
+from fastapi.testclient import TestClient
+from sqlalchemy import text
+
+from app.jobs import job_manager
+from app.main import app
+from app.selections.api import configure_selections
+from app.selections.db import get_engine
+from app.selections.store import normalize_region
+
+TEST_DATABASE_URL = os.environ.get("TEST_DATABASE_URL", "").strip()
+SERVER_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+requires_db = pytest.mark.skipif(
+    not TEST_DATABASE_URL, reason="TEST_DATABASE_URL is not set"
+)
+
+
+@pytest.fixture(autouse=True)
+def mock_external_network():
+    """Never call IRSA TAP or download cutouts over the network."""
+    with (
+        patch("app.discovery.query_irsa_tap", return_value=([], None)),
+        patch("app.fits_assets.download_cutout", side_effect=RuntimeError("No network")),
+        patch("app.jobs.download_cutout", side_effect=RuntimeError("No network")),
+    ):
+        yield
+
+
+@pytest.fixture(scope="session")
+def migrated_db():
+    """Apply the Alembic migrations once to the test database."""
+    previous = os.environ.get("DATABASE_URL")
+    os.environ["DATABASE_URL"] = TEST_DATABASE_URL
+    try:
+        cfg = Config(os.path.join(SERVER_DIR, "alembic.ini"))
+        cfg.set_main_option("script_location", os.path.join(SERVER_DIR, "app/alembic"))
+        command.upgrade(cfg, "head")
+    finally:
+        if previous is None:
+            os.environ.pop("DATABASE_URL", None)
+        else:
+            os.environ["DATABASE_URL"] = previous
+    return TEST_DATABASE_URL
+
+
+@pytest.fixture
+def client(migrated_db):
+    with get_engine(migrated_db).begin() as conn:
+        conn.execute(text("TRUNCATE selection, spectral_product, sky_region CASCADE"))
+    configure_selections(migrated_db, job_manager)
+    try:
+        yield TestClient(app)
+    finally:
+        configure_selections(None, job_manager)
+
+
+def region(ra: float, dec: float = -20.0, size: float = 4.0) -> dict:
+    """Unique coordinates per test avoid the shared in-memory job cache."""
+    return {"ra_deg": ra, "dec_deg": dec, "size_arcmin": size}
+
+
+def wait_for_outcome(client: TestClient, selection_id: str, timeout: float = 10.0):
+    start = time.time()
+    while time.time() - start < timeout:
+        body = client.get(f"/api/selections/{selection_id}").json()
+        if body["job_status"] in ("ready", "failed"):
+            return body
+        time.sleep(0.02)
+    raise TimeoutError(f"selection {selection_id} never reached a final status")
+
+
+def find_by_job(client: TestClient, job_id: str) -> dict:
+    items = client.get("/api/selections").json()["items"]
+    matches = [item for item in items if item["job_id"] == job_id]
+    assert len(matches) == 1
+    return matches[0]
+
+
+# -- pure normalization ------------------------------------------------------
+
+
+def test_normalize_region_wraps_ra_and_fixes_precision():
+    key = normalize_region(-10.0, 12.3456789, 4.00049)
+    assert key == {
+        "ra_deg": Decimal("350.00000"),
+        "dec_deg": Decimal("12.34568"),
+        "size_arcmin": Decimal("4.000"),
+    }
+    assert normalize_region(360.0, 0.0, 1.0)["ra_deg"] == Decimal("0.00000")
+
+
+# -- automatic saving --------------------------------------------------------
+
+
+@requires_db
+def test_job_submission_is_saved_automatically(client):
+    resp = client.post(
+        "/api/jobs",
+        json={**region(10.5), "channels": [44, 12], "products": ["variance"]},
+    )
+    assert resp.status_code == 202
+    job = resp.json()
+
+    saved = find_by_job(client, job["id"])
+    assert saved["channels"] == [12, 44]
+    assert saved["products"] == ["image", "variance"]
+    assert saved["mode"] == "latest"
+    assert saved["stretch"] == "asinh"
+    assert saved["hits"] == 1
+    assert saved["region"]["ra_deg"] == 10.5
+    assert saved["region"]["dec_deg"] == -20.0
+    assert saved["region"]["size_arcmin"] == 4.0
+    assert saved["region"]["fov_deg"] == round(4.0 / 60.0, 4)
+
+    final = wait_for_outcome(client, saved["id"])
+    assert final["job_status"] == "failed"
+    assert final["region"]["coverage"] == "none"
+    assert final["manifest"] is None
+
+
+@requires_db
+def test_repeated_selection_counts_hits_instead_of_duplicating(client):
+    payload = {**region(11.5), "channels": [44]}
+    first = client.post("/api/jobs", json=payload).json()
+    saved = find_by_job(client, first["id"])
+    wait_for_outcome(client, saved["id"])
+
+    second = client.post("/api/jobs", json=payload).json()
+    assert second["id"] == first["id"]
+
+    items = client.get("/api/selections").json()["items"]
+    assert len(items) == 1
+    assert items[0]["hits"] == 2
+    assert items[0]["last_seen_at"] >= items[0]["created_at"]
+
+
+@requires_db
+def test_discovered_products_are_stored_with_derived_fields(client):
+    discovery = {
+        "coverage": "available",
+        "products": [
+            {
+                "id": "prod-1",
+                "source": "remote",
+                "detector": 3,
+                "band": "SPHEREx-D3",
+                "obs_id": "obs-1",
+                "uri": "https://example.invalid/prod-1.fits",
+                "date_mjd": 60800.5,
+                "date_iso": "2025-05-08T12:00:00Z",
+            }
+        ],
+        "detectors": [],
+        "notes": [],
+    }
+    with patch("app.jobs.resolve_region", return_value=discovery):
+        job = client.post("/api/jobs", json={**region(12.5), "channels": [44]}).json()
+        saved = find_by_job(client, job["id"])
+        detail = wait_for_outcome(client, saved["id"])
+
+    assert detail["region"]["coverage"] == "available"
+    assert detail["spectral_products"] == [
+        {
+            "product_id": "prod-1",
+            "detector": 3,
+            "band": "SPHEREx-D3",
+            "source": "remote",
+            "obs_id": "obs-1",
+            "uri": "https://example.invalid/prod-1.fits",
+            "date_mjd": 60800.5,
+            "date_iso": "2025-05-05T12:00:00.000Z",
+        }
+    ]
+
+
+# -- listing -----------------------------------------------------------------
+
+
+@requires_db
+def test_list_is_paginated_by_last_seen(client):
+    for ra in (13.5, 14.5, 15.5):
+        client.post("/api/jobs", json={**region(ra), "channels": [44]})
+
+    page1 = client.get("/api/selections", params={"limit": 2}).json()
+    assert len(page1["items"]) == 2
+    assert page1["next_before"] is not None
+
+    page2 = client.get(
+        "/api/selections", params={"limit": 2, "before": page1["next_before"]}
+    ).json()
+    assert len(page2["items"]) == 1
+    assert page2["next_before"] is None
+    seen = {i["id"] for i in page1["items"]} | {i["id"] for i in page2["items"]}
+    assert len(seen) == 3
+
+
+# -- deletion ----------------------------------------------------------------
+
+
+@requires_db
+def test_delete_removes_only_the_selection(client, migrated_db):
+    job = client.post("/api/jobs", json={**region(16.5), "channels": [44]}).json()
+    saved = find_by_job(client, job["id"])
+    wait_for_outcome(client, saved["id"])
+
+    resp = client.delete(f"/api/selections/{saved['id']}")
+    assert resp.status_code == 204
+    assert resp.content == b""
+
+    assert client.get(f"/api/selections/{saved['id']}").status_code == 404
+    assert client.delete(f"/api/selections/{saved['id']}").status_code == 404
+    assert client.get("/api/selections").json()["items"] == []
+
+    with get_engine(migrated_db).connect() as conn:
+        regions = conn.execute(text("SELECT count(*) FROM sky_region")).scalar_one()
+    assert regions == 1
+
+
+@requires_db
+def test_unknown_or_malformed_ids(client):
+    assert client.get(f"/api/selections/{uuid.uuid4()}").status_code == 404
+    assert client.get("/api/selections/not-a-uuid").status_code == 422
+    assert client.delete("/api/selections/not-a-uuid").status_code == 422
+
+
+# -- storage disabled or failing never breaks jobs ----------------------------
+
+
+def test_endpoints_answer_503_when_storage_is_disabled():
+    configure_selections(None, job_manager)
+    client = TestClient(app)
+    for method, path in (
+        ("get", "/api/selections"),
+        ("get", f"/api/selections/{uuid.uuid4()}"),
+        ("delete", f"/api/selections/{uuid.uuid4()}"),
+    ):
+        resp = getattr(client, method)(path)
+        assert resp.status_code == 503
+        assert "DATABASE_URL" in resp.json()["detail"]
+
+    resp = client.post("/api/jobs", json={**region(17.5), "channels": [44]})
+    assert resp.status_code == 202
+
+
+def test_unreachable_database_does_not_break_job_submission():
+    configure_selections("postgresql+psycopg://nobody@127.0.0.1:1/missing", job_manager)
+    try:
+        client = TestClient(app)
+        resp = client.post("/api/jobs", json={**region(18.5), "channels": [44]})
+        assert resp.status_code == 202
+        job_id = resp.json()["id"]
+        start = time.time()
+        while time.time() - start < 10:
+            status = client.get(f"/api/jobs/{job_id}").json()["status"]
+            if status in ("ready", "failed"):
+                break
+            time.sleep(0.02)
+        assert status in ("ready", "failed")
+    finally:
+        configure_selections(None, job_manager)
