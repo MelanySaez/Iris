@@ -2,6 +2,7 @@ import type {
   CatalogObject,
   CatalogResponse,
   ChannelsResponse,
+  CubeSpectrumResponse,
   FrameRenderMode,
   HealthResponse,
   JobCreateRequest,
@@ -76,6 +77,11 @@ export const api = {
 
   async getCatalog(): Promise<CatalogResponse> {
     return request<CatalogResponse>('/api/catalog');
+  },
+
+  async getSpectrum(raDeg: number, decDeg: number): Promise<CubeSpectrumResponse> {
+    const query = new URLSearchParams({ ra: String(raDeg), dec: String(decDeg) });
+    return request<CubeSpectrumResponse>(`/api/spectrum?${query.toString()}`);
   },
 
   async resolveRegion(region: RegionRequest): Promise<RegionResolveResponse> {
@@ -155,13 +161,23 @@ export const CURATED_CATALOG_FALLBACK: CatalogObject[] = [
     precomputed: true,
   },
   {
-    id: 'm81-field',
-    name: 'M81 field',
+    id: 'm101-field',
+    name: 'M101 field',
     ra_deg: 210.80227,
     dec_deg: 54.34895,
     type: 'Galaxy field',
     default_size_arcmin: 6,
-    description: 'Notebook TAP demo field',
+    description: 'Notebook TAP demo field (Pinwheel Galaxy)',
+    precomputed: false,
+  },
+  {
+    id: 'm81',
+    name: "M81 (Bode's Galaxy)",
+    ra_deg: 148.888221,
+    dec_deg: 69.065294,
+    type: 'Galaxy',
+    default_size_arcmin: 6,
+    description: 'Core of M81 at its J2000 position',
     precomputed: false,
   },
   {

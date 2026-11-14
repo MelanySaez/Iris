@@ -40,8 +40,8 @@ describe('api client', () => {
     const mockCatalog = {
       objects: [
         {
-          id: 'm81-field',
-          name: 'M81 field',
+          id: 'm101-field',
+          name: 'M101 field',
           ra_deg: 210.80227,
           dec_deg: 54.34895,
           type: 'Galaxy field',

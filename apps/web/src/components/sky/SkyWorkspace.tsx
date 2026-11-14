@@ -19,6 +19,8 @@ import {
   type SpectralChannel,
 } from '../../hips';
 import { setChannelImageLayer } from '../../aladinView';
+import { useRgbComposite } from '../../hooks/useRgbComposite';
+import { RgbControls } from './RgbControls';
 import {
   computeRegionFromPoints,
   REGION_EXCEEDS_LIMIT_MESSAGE,
@@ -301,6 +303,16 @@ export function SkyWorkspace({
     },
     [aladinReady],
   );
+
+  // RGB composite: three channels painted red/green/blue and blended additively.
+  const { rgbMode, rgb, rgbError, applyRgb, setRgbMode } = useRgbComposite({
+    viewerRef,
+    ready: aladinReady,
+    channels,
+    currentChannel,
+    channelRef,
+    onStatus: setTileStatus,
+  });
 
   // Go to coordinates
   const handleGoto = useCallback(
@@ -756,9 +768,16 @@ export function SkyWorkspace({
               <span className="card-val num">{formatAngle(currentFov)}</span>
             </div>
             <div className="data-card-row">
-              <span className="card-label">Channel λ</span>
+              <span className="card-label">{rgbMode && rgb ? 'RGB λ' : 'Channel λ'}</span>
               <span className="card-val num highlight-lambda">
-                {formatWavelength(channelWavelength)}
+                {rgbMode && rgb
+                  ? (['r', 'g', 'b'] as const)
+                      .map((band) => {
+                        const um = channels.find((c) => c.index === rgb[band])?.wavelengthMicrometres;
+                        return um === undefined ? `ch ${rgb[band]}` : `${um.toFixed(2)}`;
+                      })
+                      .join(' / ') + ' µm'
+                  : formatWavelength(channelWavelength)}
               </span>
             </div>
             <div className="status-caption">{aladinStatus} · {tileStatus}</div>
@@ -768,6 +787,15 @@ export function SkyWorkspace({
 
           {/* Bottom-Center Channel Dock */}
           <div className="sky-channel-dock float" aria-label="Channel slider dock">
+            <RgbControls
+              ready={aladinReady}
+              rgbMode={rgbMode}
+              rgb={rgb}
+              rgbError={rgbError}
+              channels={channels}
+              onModeChange={setRgbMode}
+              onApply={applyRgb}
+            >
             <div className="dock-header">
               <div className="dock-channel-info">
                 <span className="dock-badge num">channel {currentChannel}</span>
@@ -819,6 +847,7 @@ export function SkyWorkspace({
               />
               <span className="slider-edge num">5.00 µm</span>
             </div>
+            </RgbControls>
           </div>
         </div>
       </main>

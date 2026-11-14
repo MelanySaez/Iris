@@ -10,6 +10,7 @@ interface TopBarProps {
 export function TopBar({ currentRoute, activeJobId, onNavigate }: TopBarProps) {
   const isSky = currentRoute.type === 'sky';
   const isPlate = currentRoute.type === 'plate';
+  const isSpectral = currentRoute.type === 'spectral';
 
   return (
     <header className="app-topbar">
@@ -46,6 +47,15 @@ export function TopBar({ currentRoute, activeJobId, onNavigate }: TopBarProps) {
           }}
         >
           Plate
+        </button>
+        <button
+          type="button"
+          className={`switch-btn ${isSpectral ? 'active' : ''}`}
+          aria-pressed={isSpectral}
+          title="Compare quick-look spectra from the All-Sky Cube"
+          onClick={() => onNavigate('#/spectral')}
+        >
+          <span className="switch-label-long">Spectral </span>Lab
         </button>
       </nav>
 

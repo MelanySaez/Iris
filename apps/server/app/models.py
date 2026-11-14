@@ -233,3 +233,39 @@ class ManifestResponse(BaseModel):
     collection: str = "SPHEREx DR1 Level-2 spectral image cutouts"
     cutouts: list[ManifestCutout]
     notes: list[str]
+
+
+class CubeSpectrumPoint(BaseModel):
+    channel: int
+    detector: int
+    subchannel: int
+    wavelength_um: float
+    bandwidth_um: float
+    wl_min_um: float
+    wl_max_um: float
+    value: float | None
+    nhits: int
+    flags: int
+    available: bool
+
+
+class CubeTile(BaseModel):
+    order: int
+    npix: int
+    x: int
+    y: int
+    url: str
+
+
+class CubeSpectrumResponse(BaseModel):
+    ra_deg: float
+    dec_deg: float
+    unit: str
+    source: str
+    tile: CubeTile
+    date_beg: str
+    date_end: str
+    quick_look: bool = True
+    calibrated: bool = False
+    notes: list[str]
+    points: list[CubeSpectrumPoint]

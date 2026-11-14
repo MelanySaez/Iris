@@ -235,3 +235,31 @@ export interface JobManifest {
   cutouts: ManifestCutout[];
   notes: string[];
 }
+
+export interface CubeSpectrumPoint {
+  channel: number;
+  detector: number;
+  subchannel: number;
+  wavelength_um: number;
+  bandwidth_um: number;
+  wl_min_um: number;
+  wl_max_um: number;
+  value: number | null;
+  nhits: number;
+  flags: number;
+  available: boolean;
+}
+
+export interface CubeSpectrumResponse {
+  ra_deg: number;
+  dec_deg: number;
+  unit: string;
+  source: string;
+  tile: { order: number; npix: number; x: number; y: number; url: string };
+  date_beg: string;
+  date_end: string;
+  quick_look: boolean;
+  calibrated: boolean;
+  notes: string[];
+  points: CubeSpectrumPoint[];
+}

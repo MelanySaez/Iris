@@ -19,6 +19,7 @@ from app.config import (
     MIN_REGION_SIZE_ARCMIN,
     WAVELENGTH_STATUS,
 )
+from app.cube_spectrum import get_cube_spectrum
 from app.discovery import resolve_region
 from app.jobs import (
     get_job_manifest,
@@ -29,6 +30,7 @@ from app.jobs import (
 from app.models import (
     CatalogResponse,
     ChannelsResponse,
+    CubeSpectrumResponse,
     HealthResponse,
     JobRequest,
     JobSnapshot,
@@ -90,6 +92,15 @@ def channels(refresh: bool = False) -> ChannelsResponse:
 def catalog() -> CatalogResponse:
     """Return curated objects list with precomputed cache indicators."""
     return CatalogResponse(**get_catalog())
+
+
+@app.get("/api/spectrum", response_model=CubeSpectrumResponse)
+def cube_spectrum(
+    ra: float = Query(..., description="ICRS right ascension in degrees"),
+    dec: float = Query(..., ge=-90.0, le=90.0, description="ICRS declination in degrees"),
+) -> CubeSpectrumResponse:
+    """Return the 102-channel quick-look spectrum sampled from the All-Sky Cube."""
+    return CubeSpectrumResponse(**get_cube_spectrum(ra, dec))
 
 
 @app.post("/api/regions/resolve", response_model=ResolveResponse)
