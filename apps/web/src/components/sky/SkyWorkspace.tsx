@@ -1,6 +1,19 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import Aladin, { type AladinViewer } from 'aladin-lite';
+import Aladin, { type AladinCatalog, type AladinLayer, type AladinSource, type AladinViewer } from 'aladin-lite';
 import { api, CURATED_CATALOG_FALLBACK } from '../../api';
+import {
+  FEATURED_OBJECTS,
+  featuredObjectPopup,
+  HIPS_CATALOG_PROVIDERS,
+  isDuplicateRemoteSource,
+  LOCAL_CATALOG_STYLE,
+} from '../../catalogs';
+import { TocatsCatalogClient, TocatsViewportCache, TOCATS_CATALOGS, type TocatsCatalogId } from '../../tocats';
+import {
+  type TocatsCatalogLayerRefs,
+  type TocatsLayerState,
+  useTocatsCatalogViewport,
+} from '../../hooks/useTocatsCatalogViewport';
 import {
   channelToBand,
   channelToDetector,
@@ -41,6 +54,19 @@ interface RecentSelection {
   size_arcmin: number;
   timestamp: number;
 }
+
+const INITIAL_TOCATS_LAYER_STATES: Record<TocatsCatalogId, TocatsLayerState> = {
+  gaia: {
+    visible: false,
+    phase: 'idle',
+    message: 'Enable to query Gaia DR3 sources for the visible sky region.',
+  },
+  catwise: {
+    visible: false,
+    phase: 'idle',
+    message: 'Enable to query CatWISE2020 sources for the visible sky region.',
+  },
+};
 
 const RECENT_KEY = 'planetx_recent_selections';
 
@@ -96,6 +122,23 @@ export function SkyWorkspace({
 }: SkyWorkspaceProps) {
   const mapRef = useRef<HTMLDivElement>(null);
   const viewerRef = useRef<AladinViewer | null>(null);
+  const localCatalogRef = useRef<AladinCatalog | null>(null);
+  const simbadCatalogRef = useRef<AladinLayer | null>(null);
+  const tocatsLayerRefs = useRef<TocatsCatalogLayerRefs | null>(null);
+  if (!tocatsLayerRefs.current) {
+    tocatsLayerRefs.current = {
+      catalogs: { gaia: null, catwise: null },
+      densityCatalogs: { gaia: null, catwise: null },
+      markers: {
+        gaia: { sources: new Map(), density: new Map() },
+        catwise: { sources: new Map(), density: new Map() },
+      },
+      caches: { gaia: new TocatsViewportCache(), catwise: new TocatsViewportCache() },
+      mode: { gaia: null, catwise: null },
+      requests: { gaia: null, catwise: null },
+      client: new TocatsCatalogClient(),
+    };
+  }
 
   const [aladinReady, setAladinReady] = useState(false);
   const [aladinStatus, setAladinStatus] = useState('Loading DR1 All-Sky Cube HiPS metadata...');
@@ -105,16 +148,197 @@ export function SkyWorkspace({
 
   const [centerCoords, setCenterCoords] = useState<[number, number]>([0, 0]);
   const [currentFov, setCurrentFov] = useState<number>(180);
+  const [currentFovHeight, setCurrentFovHeight] = useState<number>(180);
   const [projection, setProjection] = useState('SIN');
   const [cursorCoords, setCursorCoords] = useState<[number, number] | null>(null);
   const lastCursorUpdate = useRef(0);
   const channelRef = useRef(DEFAULT_CHANNEL_INDEX);
   const [tileStatus, setTileStatus] = useState('Loading tiles');
+  const [localCatalogVisible, setLocalCatalogVisible] = useState(true);
+  const [localCatalogStatus, setLocalCatalogStatus] = useState('Loads with the viewer and works offline.');
+  const [simbadCatalogVisible, setSimbadCatalogVisible] = useState(false);
+  const [simbadCatalogLoading, setSimbadCatalogLoading] = useState(false);
+  const [simbadCatalogStatus, setSimbadCatalogStatus] = useState(
+    'Enable to load SIMBAD sources progressively for the current view.',
+  );
+  const [tocatsLayerStates, setTocatsLayerStates] = useState<Record<TocatsCatalogId, TocatsLayerState>>(
+    () => ({ ...INITIAL_TOCATS_LAYER_STATES }),
+  );
 
   // Catalog & Search
   const [catalog, setCatalog] = useState<CatalogObject[]>(CURATED_CATALOG_FALLBACK);
   const [searchQuery, setSearchQuery] = useState('');
   const [recentSelections, setRecentSelections] = useState<RecentSelection[]>(getRecentSelections());
+  const simbadRequestRef = useRef<AbortController | null>(null);
+
+  const handleLocalCatalogVisibility = useCallback((visible: boolean) => {
+    const catalogLayer = localCatalogRef.current;
+    if (!catalogLayer) return;
+
+    if (visible) catalogLayer.show();
+    else catalogLayer.hide();
+    setLocalCatalogVisible(visible);
+  }, []);
+
+  const handleSimbadCatalogVisibility = useCallback(async (visible: boolean) => {
+    const provider = HIPS_CATALOG_PROVIDERS.simbad;
+    const viewer = viewerRef.current;
+    if (!viewer) return;
+
+    if (!visible) {
+      simbadRequestRef.current?.abort();
+      simbadRequestRef.current = null;
+      simbadCatalogRef.current?.hide();
+      setSimbadCatalogLoading(false);
+      setSimbadCatalogVisible(false);
+      setSimbadCatalogStatus('SIMBAD catalog hidden.');
+      return;
+    }
+
+    const existingCatalog = simbadCatalogRef.current;
+    if (existingCatalog) {
+      existingCatalog.show();
+      setSimbadCatalogVisible(true);
+      setSimbadCatalogStatus('SIMBAD HiPS is active; Aladin loads sources for the visible sky tiles.');
+      return;
+    }
+
+    const controller = new AbortController();
+    simbadRequestRef.current = controller;
+    const timeout = window.setTimeout(() => controller.abort(), 8000);
+    setSimbadCatalogVisible(true);
+    setSimbadCatalogLoading(true);
+    setSimbadCatalogStatus('Checking the SIMBAD HiPS catalog…');
+
+    try {
+      const response = await fetch(`${provider.url}/properties`, { signal: controller.signal });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const properties = await response.text();
+      if (!properties.toLowerCase().includes('hips_frame=')) {
+        throw new Error('The service did not return HiPS catalog metadata.');
+      }
+
+      const catalogLayer = Aladin.catalogHiPS(provider.url, {
+        name: provider.name,
+        color: provider.color,
+        sourceSize: provider.sourceSize,
+        onClick: 'showTable',
+        filter: (source: AladinSource) => !isDuplicateRemoteSource(source),
+      });
+      viewer.addCatalog(catalogLayer);
+      simbadCatalogRef.current = catalogLayer;
+      setSimbadCatalogStatus('SIMBAD HiPS is active; Aladin loads sources for the visible sky tiles.');
+    } catch {
+      setSimbadCatalogVisible(false);
+      setSimbadCatalogStatus(
+        'SIMBAD HiPS could not be reached (network or CORS). Enable the layer to retry; featured objects remain available.',
+      );
+    } finally {
+      window.clearTimeout(timeout);
+      if (simbadRequestRef.current === controller) simbadRequestRef.current = null;
+      setSimbadCatalogLoading(false);
+    }
+  }, []);
+
+  const updateTocatsLayerState = useCallback((catalogId: TocatsCatalogId, patch: Partial<TocatsLayerState>) => {
+    setTocatsLayerStates((current) => {
+      const previous = current[catalogId];
+      const next = { ...previous, ...patch };
+      if (next.visible === previous.visible && next.phase === previous.phase && next.message === previous.message) {
+        return current;
+      }
+      return { ...current, [catalogId]: next };
+    });
+  }, []);
+
+  useTocatsCatalogViewport({
+    catalogId: 'gaia',
+    visible: tocatsLayerStates.gaia.visible,
+    aladinReady,
+    centerCoords,
+    fovWidth: currentFov,
+    fovHeight: currentFovHeight,
+    refs: tocatsLayerRefs,
+    updateState: updateTocatsLayerState,
+  });
+
+  useTocatsCatalogViewport({
+    catalogId: 'catwise',
+    visible: tocatsLayerStates.catwise.visible,
+    aladinReady,
+    centerCoords,
+    fovWidth: currentFov,
+    fovHeight: currentFovHeight,
+    refs: tocatsLayerRefs,
+    updateState: updateTocatsLayerState,
+  });
+
+  const handleTocatsLayerVisibility = useCallback((catalogId: TocatsCatalogId, visible: boolean) => {
+    const viewer = viewerRef.current;
+    if (!viewer) return;
+    const tocatsRefs = tocatsLayerRefs.current;
+    if (!tocatsRefs) return;
+
+    const provider = TOCATS_CATALOGS[catalogId];
+    if (!visible) {
+      tocatsRefs.requests[catalogId]?.abort();
+      tocatsRefs.requests[catalogId] = null;
+      tocatsRefs.catalogs[catalogId]?.hide();
+      tocatsRefs.densityCatalogs[catalogId]?.hide();
+      updateTocatsLayerState(catalogId, {
+        visible: false,
+        phase: 'idle',
+        message: `${provider.label} layer hidden.`,
+      });
+      return;
+    }
+
+    try {
+      let catalogLayer = tocatsRefs.catalogs[catalogId];
+      if (!catalogLayer) {
+        catalogLayer = Aladin.catalog({
+          name: provider.label,
+          color: provider.color,
+          sourceSize: provider.sourceSize,
+          shape: catalogId === 'gaia' ? 'circle' : 'diamond',
+          onClick: 'showPopup',
+        });
+        viewer.addCatalog(catalogLayer);
+        tocatsRefs.catalogs[catalogId] = catalogLayer;
+      }
+      let densityLayer = tocatsRefs.densityCatalogs[catalogId];
+      if (!densityLayer) {
+        densityLayer = Aladin.catalog({
+          name: `${provider.label} density tiles`,
+          color: catalogId === 'gaia' ? '#78995c' : '#af789d',
+          sourceSize: 10,
+          shape: 'circle',
+          onClick: 'showPopup',
+        });
+        viewer.addCatalog(densityLayer);
+        tocatsRefs.densityCatalogs[catalogId] = densityLayer;
+      }
+      if (tocatsRefs.mode[catalogId] === 'density') {
+        densityLayer.show();
+        catalogLayer.hide();
+      } else {
+        catalogLayer.show();
+        densityLayer.hide();
+      }
+      updateTocatsLayerState(catalogId, {
+        visible: true,
+        phase: 'waiting',
+        message: 'Waiting for the map to settle before querying TOCats…',
+      });
+    } catch (error) {
+      updateTocatsLayerState(catalogId, {
+        visible: false,
+        phase: 'error',
+        message: `${provider.label} layer could not be initialized.`,
+      });
+      console.error(`Failed to create the ${provider.label} layer:`, error);
+    }
+  }, [updateTocatsLayerState]);
 
   // Coordinate form
   const [raInput, setRaInput] = useState('270.69303');
@@ -253,6 +477,27 @@ export function SkyWorkspace({
         setChannelImageLayer(viewer, channelVirtualHipsUrl(DEFAULT_CHANNEL_INDEX, location.origin));
         setCurrentChannel(DEFAULT_CHANNEL_INDEX);
 
+        try {
+          const localCatalog = Aladin.catalog({
+            ...LOCAL_CATALOG_STYLE,
+            onClick: 'showPopup',
+          });
+          localCatalog.addSources(FEATURED_OBJECTS.map((object) => Aladin.marker(
+            object.ra_deg,
+            object.dec_deg,
+            {
+              popupTitle: object.name,
+              popupDesc: featuredObjectPopup(object),
+            },
+          )));
+          viewer.addCatalog(localCatalog);
+          localCatalogRef.current = localCatalog;
+          setLocalCatalogStatus('Five featured objects are available offline.');
+        } catch (err) {
+          setLocalCatalogStatus('Featured objects could not be added to the map.');
+          console.error('Failed to create the local featured-object layer:', err);
+        }
+
         setAladinReady(true);
         setAladinStatus('SPHEREx DR1 All-Sky Cube HiPS loaded');
 
@@ -266,6 +511,7 @@ export function SkyWorkspace({
           const fovArr = viewerRef.current.getFoV?.();
           if (fovArr?.length && Number.isFinite(fovArr[0])) {
             setCurrentFov(fovArr[0]);
+            if (Number.isFinite(fovArr[1])) setCurrentFovHeight(fovArr[1]);
           }
         }, 600);
       } catch (err) {
@@ -279,6 +525,7 @@ export function SkyWorkspace({
 
     return () => {
       active = false;
+      simbadRequestRef.current?.abort();
       if (timer) window.clearInterval(timer);
     };
   }, []);
@@ -497,6 +744,93 @@ export function SkyWorkspace({
 
       {/* Left Rail (280px) */}
       <aside className={`sky-rail ${isRailOpen ? 'open' : ''}`} aria-label="Explore and Search">
+        <section className="rail-section catalog-layers-section" aria-label="Catalog layers">
+          <h3 className="rail-label">Catalog layers</h3>
+          <label className="catalog-layer-toggle">
+            <input
+              type="checkbox"
+              checked={localCatalogVisible}
+              disabled={!aladinReady}
+              onChange={(event) => handleLocalCatalogVisibility(event.target.checked)}
+              aria-describedby="featured-catalog-status"
+            />
+            <span className="catalog-layer-swatch featured" aria-hidden="true" />
+            <span className="catalog-layer-copy">
+              <span>Featured objects</span>
+              <small>5 local objects</small>
+            </span>
+          </label>
+          <p id="featured-catalog-status" className="catalog-layer-status" role="status">
+            {localCatalogStatus}
+          </p>
+
+          <label className="catalog-layer-toggle">
+            <input
+              type="checkbox"
+              checked={simbadCatalogVisible}
+              disabled={!aladinReady || simbadCatalogLoading}
+              onChange={(event) => void handleSimbadCatalogVisibility(event.target.checked)}
+              aria-describedby="simbad-catalog-status"
+            />
+            <span className="catalog-layer-swatch simbad" aria-hidden="true" />
+            <span className="catalog-layer-copy">
+              <span>SIMBAD HiPS</span>
+              <small>Progressive catalog</small>
+            </span>
+          </label>
+          <p id="simbad-catalog-status" className="catalog-layer-status" role="status" aria-live="polite">
+            {simbadCatalogStatus}
+          </p>
+
+          <label className="catalog-layer-toggle">
+            <input
+              type="checkbox"
+              checked={tocatsLayerStates.gaia.visible}
+              disabled={!aladinReady}
+              onChange={(event) => handleTocatsLayerVisibility('gaia', event.target.checked)}
+              aria-describedby="gaia-catalog-status"
+            />
+            <span className="catalog-layer-swatch gaia" aria-hidden="true" />
+            <span className="catalog-layer-copy">
+              <span>Gaia DR3</span>
+              <small>Regional TOCats query</small>
+            </span>
+          </label>
+          <p
+            id="gaia-catalog-status"
+            className="catalog-layer-status"
+            role="status"
+            aria-live="polite"
+            aria-busy={tocatsLayerStates.gaia.phase === 'waiting' || tocatsLayerStates.gaia.phase === 'loading'}
+          >
+            {tocatsLayerStates.gaia.message}
+          </p>
+
+          <label className="catalog-layer-toggle">
+            <input
+              type="checkbox"
+              checked={tocatsLayerStates.catwise.visible}
+              disabled={!aladinReady}
+              onChange={(event) => handleTocatsLayerVisibility('catwise', event.target.checked)}
+              aria-describedby="catwise-catalog-status"
+            />
+            <span className="catalog-layer-swatch catwise" aria-hidden="true" />
+            <span className="catalog-layer-copy">
+              <span>CatWISE2020</span>
+              <small>Regional TOCats query</small>
+            </span>
+          </label>
+          <p
+            id="catwise-catalog-status"
+            className="catalog-layer-status"
+            role="status"
+            aria-live="polite"
+            aria-busy={tocatsLayerStates.catwise.phase === 'waiting' || tocatsLayerStates.catwise.phase === 'loading'}
+          >
+            {tocatsLayerStates.catwise.message}
+          </p>
+        </section>
+
         {/* Search */}
         <section className="rail-section">
           <label className="rail-label" htmlFor="catalog-search">

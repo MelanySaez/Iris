@@ -1,4 +1,20 @@
 declare module 'aladin-lite' {
+  export type AladinLayer = {
+    show: () => void;
+    hide: () => void;
+  };
+
+  export type AladinCatalog = AladinLayer & {
+    addSources: (sources: unknown[]) => void;
+    remove: (source: unknown) => void;
+  };
+
+  export type AladinSource = {
+    ra?: number;
+    dec?: number;
+    data?: Record<string, unknown>;
+  };
+
   export type AladinViewer = {
     getRaDec?: () => number[];
     getSize?: () => number[];
@@ -12,11 +28,15 @@ declare module 'aladin-lite' {
     setImageLayer?: (layer: unknown) => void;
     setProjection?: (projection: string) => void;
     addOverlay?: (overlay: unknown) => void;
+    addCatalog: (catalog: AladinLayer) => void;
   };
 
   const A: {
     init: Promise<unknown>;
     aladin: (selector: string, options: Record<string, unknown>) => AladinViewer;
+    catalog: (options: Record<string, unknown>) => AladinCatalog;
+    catalogHiPS: (url: string, options: Record<string, unknown>) => AladinLayer;
+    marker: (ra: number, dec: number, options: Record<string, unknown>) => unknown;
     graphicOverlay?: (options: Record<string, unknown>) => { addFootprints?: (items: unknown[]) => void };
     polygon?: (vertices: number[][]) => unknown;
   };

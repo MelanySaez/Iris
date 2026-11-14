@@ -1,0 +1,62 @@
+[
+  {
+    "id": "barnards-star",
+    "name": "Barnard's Star",
+    "ra_deg": 269.4520769586,
+    "dec_deg": 4.6933649666,
+    "type": "BY Draconis variable · M4V",
+    "description": "SIMBAD classifies Barnard's Star as a BY Draconis variable (M4V).",
+    "coordinateFrame": "ICRS",
+    "referenceEpoch": "J2000",
+    "positionSource": "SIMBAD (Gaia DR3, 2020yCat.1350....0G)",
+    "positionSourceUrl": "https://simbad.cds.unistra.fr/simbad/sim-id?Ident=Barnard%27s+Star"
+  },
+  {
+    "id": "wise-0855-0714",
+    "name": "WISE 0855−0714",
+    "ra_deg": 133.81890825,
+    "dec_deg": -7.247048,
+    "type": "Brown dwarf · Y2",
+    "description": "SIMBAD classifies WISE 0855−0714 as a Y2 brown dwarf.",
+    "coordinateFrame": "ICRS",
+    "referenceEpoch": "J2000",
+    "positionSource": "SIMBAD (2021ApJS..253....7K)",
+    "positionSourceUrl": "https://simbad.cds.unistra.fr/simbad/sim-id?Ident=WISEA+J085510.74-071442.5"
+  },
+  {
+    "id": "epsilon-indi-b",
+    "name": "Epsilon Indi B",
+    "ra_deg": 331.0441465885,
+    "dec_deg": -56.7828441951,
+    "type": "Brown dwarf",
+    "description": "SIMBAD classifies Epsilon Indi B as a brown dwarf.",
+    "coordinateFrame": "ICRS",
+    "referenceEpoch": "J2000",
+    "positionSource": "SIMBAD (Gaia DR3, 2020yCat.1350....0G)",
+    "positionSourceUrl": "https://simbad.cds.unistra.fr/simbad/sim-id?Ident=Epsilon+Indi+B"
+  },
+  {
+    "id": "rw-aurigae",
+    "name": "RW Aurigae",
+    "ra_deg": 76.956526035,
+    "dec_deg": 30.401438174,
+    "type": "T Tauri star",
+    "description": "SIMBAD classifies RW Aur as a T Tauri star.",
+    "coordinateFrame": "ICRS",
+    "referenceEpoch": "J2000",
+    "positionSource": "SIMBAD (2007A&A...474..653V)",
+    "positionSourceUrl": "https://simbad.cds.unistra.fr/simbad/sim-id?Ident=RW+Aur"
+  },
+  {
+    "id": "r-draconis",
+    "name": "R Draconis",
+    "ra_deg": 248.167610833,
+    "dec_deg": 66.7549794172,
+    "type": "Mira variable",
+    "description": "SIMBAD classifies R Dra as a Mira variable.",
+    "coordinateFrame": "ICRS",
+    "referenceEpoch": "J2000",
+    "positionSource": "SIMBAD (Gaia DR3, 2020yCat.1350....0G)",
+    "positionSourceUrl": "https://simbad.cds.unistra.fr/simbad/sim-id?Ident=V%2A+R+Dra"
+  }
+]
