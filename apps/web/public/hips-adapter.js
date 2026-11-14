@@ -2,6 +2,32 @@ const HIPS_ROOT = 'https://irsa.ipac.caltech.edu/data/hips/SPHEREx/spherex_allsk
 const PREFIX = '/spherex-virtual-hips/channel/';
 let propertiesText = '';
 const TILE_CACHE = 'spherex-dr1-tiles-v1';
+// The browser stops an idle service worker and restarts it on the next request,
+// wiping in-memory state. The synced HiPS properties are therefore also kept in
+// Cache Storage, so layers created after the restart (e.g. RGB) still load.
+const META_CACHE = 'spherex-dr1-meta-v1';
+const PROPERTIES_KEY = 'https://spherex-virtual-hips.invalid/properties';
+
+async function persistProperties(text) {
+  if (typeof caches === 'undefined') return;
+  try {
+    const cache = await caches.open(META_CACHE);
+    await cache.put(PROPERTIES_KEY, new Response(text, { headers: { 'Content-Type': 'text/plain' } }));
+  } catch {
+    // Persistence is best-effort; the in-memory copy still serves this worker's lifetime.
+  }
+}
+
+async function loadProperties() {
+  if (propertiesText || typeof caches === 'undefined') return propertiesText;
+  try {
+    const hit = await (await caches.open(META_CACHE)).match(PROPERTIES_KEY);
+    if (hit) propertiesText = await hit.text();
+  } catch {
+    // Treat an unreadable cache like a never-synced worker (503 below).
+  }
+  return propertiesText;
+}
 const MAX_BYTES = 64 * 1024 * 1024;
 const MAX_ENTRIES = 128;
 const observed = new Map();
@@ -69,7 +95,10 @@ self.addEventListener('message', (event) => {
   }
   if (message?.type === 'SYNC_PROPERTIES' && typeof message.properties === 'string') {
     propertiesText = message.properties;
+    // Ack immediately (memory already serves requests); persist in the background.
     event.ports[0]?.postMessage({ ok: true });
+    const saved = persistProperties(message.properties);
+    if (typeof event.waitUntil === 'function') event.waitUntil(saved);
     return;
   }
 });
@@ -119,9 +148,10 @@ async function proxyBinary(event, upstreamUrl, channel) {
 
 async function handleVirtualRequest(event, requestUrl, channel, relativePath) {
   if (relativePath === 'properties') {
-    if (!propertiesText) return new Response('Live SPHEREx properties have not been loaded.', { status: 503 });
+    const text = await loadProperties();
+    if (!text) return new Response('Live SPHEREx properties have not been loaded.', { status: 503 });
     const serviceUrl = new URL(`${PREFIX}${channel}`, requestUrl.origin).href;
-    const channelProperties = propertiesText.replace(/^hips_service_url=.*$/m, `hips_service_url=${serviceUrl}`);
+    const channelProperties = text.replace(/^hips_service_url=.*$/m, `hips_service_url=${serviceUrl}`);
     return new Response(channelProperties, {
       status: 200,
       headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Access-Control-Allow-Origin': '*' },

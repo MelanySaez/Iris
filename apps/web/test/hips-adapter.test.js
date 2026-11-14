@@ -104,3 +104,51 @@ it('reuses cached tiles and warms only valid adjacent channels', async () => {
   await request(listeners.get('fetch'), 52, 'Norder3/Dir0/Npix7.png');
   expect(urls).toHaveLength(3);
 });
+
+it('keeps serving properties after the browser restarts an idle service worker', async () => {
+  // Cache Storage outlives the worker; its in-memory variables do not.
+  const stores = new Map();
+  const caches = {
+    open: async (name) => {
+      if (!stores.has(name)) stores.set(name, new Map());
+      const entries = stores.get(name);
+      return {
+        match: async (key) => entries.get(String(key))?.clone(),
+        put: async (key, response) => { entries.set(String(key), response.clone()); },
+        keys: async () => [...entries.keys()],
+        delete: async (key) => entries.delete(String(key)),
+      };
+    },
+  };
+  const boot = () => {
+    const listeners = new Map();
+    const worker = { addEventListener: (type, cb) => listeners.set(type, cb), location: { origin: 'https://app.example.test' }, clients: { matchAll: async () => [] } };
+    runInNewContext(adapterSource, { self: worker, URL, Response, Headers, AbortController, caches, fetch });
+    return listeners;
+  };
+
+  const first = boot();
+  let persisted;
+  const acks = [];
+  first.get('message')({
+    data: { type: 'SYNC_PROPERTIES', properties: 'dataproduct_type=image\nhips_service_url=https://app.example.test/spherex-virtual-hips/channel/0\n' },
+    ports: [{ postMessage: (message) => acks.push(message) }],
+    waitUntil: (promise) => { persisted = promise; },
+  });
+  await persisted;
+  expect(acks).toEqual([{ ok: true }]);
+
+  const restarted = boot(); // idle stop + restart: propertiesText is empty again
+  const response = await request(restarted.get('fetch'), 46, 'properties');
+  expect(response.status).toBe(200);
+  expect(await response.text()).toContain('hips_service_url=https://app.example.test/spherex-virtual-hips/channel/46');
+});
+
+it('still reports 503 when properties were never synced', async () => {
+  const listeners = new Map();
+  const worker = { addEventListener: (type, cb) => listeners.set(type, cb), location: { origin: 'https://app.example.test' }, clients: { matchAll: async () => [] } };
+  const empty = { open: async () => ({ match: async () => undefined, put: async () => {}, keys: async () => [], delete: async () => false }) };
+  runInNewContext(adapterSource, { self: worker, URL, Response, Headers, AbortController, caches: empty, fetch });
+  const response = await request(listeners.get('fetch'), 46, 'properties');
+  expect(response.status).toBe(503);
+});
