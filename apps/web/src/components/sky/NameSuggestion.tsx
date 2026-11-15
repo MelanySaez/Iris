@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ApiError } from '../../api';
+import type { SubmitResult } from '../../searchEnter';
 import type { ResolvedName } from '../../types';
 
 export interface ResolvedTarget {
@@ -8,14 +9,14 @@ export interface ResolvedTarget {
   name: string;
 }
 
-/** Called by the search box on Enter; resolves to whether the map was moved. */
-export type SubmitLookup = () => Promise<boolean>;
+/** Called by the search box on Enter; reports what the lookup found. */
+export type SubmitLookup = () => Promise<SubmitResult>;
 
 interface NameSuggestionProps {
   /** Text typed in the Search objects box. */
   query: string;
   /** Backend name resolution (`api.resolveName`), injectable for tests. */
-  resolve: (name: string) => Promise<ResolvedName>;
+  resolve: (name: string, signal?: AbortSignal) => Promise<ResolvedName>;
   /** Moves the map to the chosen object. */
   onSelect: (target: ResolvedTarget) => void;
   /** Receives the Enter handler for the search box. */
@@ -68,25 +69,33 @@ export function NameSuggestion({
   // Each new query or Enter gets a sequence number; older answers are dropped.
   const seq = useRef(0);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Request of the current lookup; aborted when the user moves on.
+  const inFlight = useRef<AbortController | null>(null);
 
   const cancelPending = () => {
     if (timer.current !== null) clearTimeout(timer.current);
     timer.current = null;
+    inFlight.current?.abort();
+    inFlight.current = null;
   };
 
   const lookUp = useCallback(
-    async (target: string): Promise<ResolvedName | null> => {
+    async (target: string): Promise<SubmitResult> => {
+      inFlight.current?.abort();
+      const controller = new AbortController();
+      inFlight.current = controller;
       seq.current += 1;
       const id = seq.current;
       setState({ kind: 'loading', name: target });
       try {
-        const result = await resolve(target);
-        if (id !== seq.current) return null;
+        const result = await resolve(target, controller.signal);
+        if (id !== seq.current) return { kind: 'stale' };
         setState({ kind: 'found', name: target, result });
-        return result;
+        return { kind: 'found', target: toTarget(result) };
       } catch (err) {
-        if (id === seq.current) setState({ kind: 'error', name: target, message: errorMessage(err) });
-        return null;
+        if (id !== seq.current || controller.signal.aborted) return { kind: 'stale' };
+        setState({ kind: 'error', name: target, message: errorMessage(err) });
+        return { kind: 'missed' };
       }
     },
     [resolve],
@@ -107,18 +116,14 @@ export function NameSuggestion({
 
   // Enter: use the suggestion if it is ready, otherwise resolve right now.
   const submit = useCallback<SubmitLookup>(async () => {
-    if (!name) return false;
+    if (!name) return { kind: 'missed' };
     const current = stateRef.current;
     if (current.kind === 'found' && current.name === name) {
-      onSelect(toTarget(current.result));
-      return true;
+      return { kind: 'found', target: toTarget(current.result) };
     }
     cancelPending();
-    const result = await lookUp(name);
-    if (!result) return false;
-    onSelect(toTarget(result));
-    return true;
-  }, [name, lookUp, onSelect]);
+    return lookUp(name);
+  }, [name, lookUp]);
 
   useEffect(() => {
     if (!submitRef) return undefined;

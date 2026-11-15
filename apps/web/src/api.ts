@@ -86,9 +86,9 @@ export const api = {
     return request<CatalogResponse>('/api/catalog');
   },
 
-  async resolveName(name: string): Promise<ResolvedName> {
+  async resolveName(name: string, signal?: AbortSignal): Promise<ResolvedName> {
     const query = new URLSearchParams({ name });
-    return request<ResolvedName>(`/api/resolve?${query.toString()}`);
+    return request<ResolvedName>(`/api/resolve?${query.toString()}`, { signal });
   },
 
   async getSpectrum(raDeg: number, decDeg: number): Promise<CubeSpectrumResponse> {

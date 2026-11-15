@@ -52,7 +52,7 @@ describe('NameSuggestion', () => {
     const { resolve, onSelect } = setup(' M31 ');
     expect(resolve).not.toHaveBeenCalled(); // still waiting for the pause
     await settle();
-    expect(resolve).toHaveBeenCalledWith('M31');
+    expect(resolve).toHaveBeenCalledWith('M31', expect.anything());
 
     const option = screen.getByRole('button', { name: /M 31/ });
     expect(option.textContent).toBe('M 31AGN · 10.6847°, +41.2687°SIMBAD');
@@ -68,7 +68,7 @@ describe('NameSuggestion', () => {
     retype('M31');
     await settle();
     expect(resolve).toHaveBeenCalledTimes(1);
-    expect(resolve).toHaveBeenCalledWith('M31');
+    expect(resolve).toHaveBeenCalledWith('M31', expect.anything());
   });
 
   it('never shows the answer to an older query', async () => {
@@ -102,37 +102,66 @@ describe('NameSuggestion', () => {
     expect(screen.queryByRole('button')).toBeNull();
   });
 
-  it('Enter before the pause resolves immediately and moves the map', async () => {
+  it('Enter before the pause resolves immediately and reports the target', async () => {
     const { resolve, onSelect, submitRef } = setup('M31');
-    let handled: boolean | undefined;
+    let outcome: Awaited<ReturnType<SubmitLookup>> | undefined;
     await act(async () => {
-      handled = await submitRef.current!();
+      outcome = await submitRef.current!();
     });
-    expect(handled).toBe(true);
+    expect(outcome).toEqual({
+      kind: 'found',
+      target: { ra_deg: 10.684708, dec_deg: 41.26875, name: 'M 31' },
+    });
     expect(resolve).toHaveBeenCalledTimes(1);
-    expect(onSelect).toHaveBeenCalledWith({ ra_deg: 10.684708, dec_deg: 41.26875, name: 'M 31' });
+    expect(onSelect).not.toHaveBeenCalled(); // the search box decides whether to move
     await settle(); // the pending debounce must not ask again
     expect(resolve).toHaveBeenCalledTimes(1);
   });
 
   it('Enter after a suggestion appeared reuses it without asking again', async () => {
-    const { resolve, onSelect, submitRef } = setup('M31');
+    const { resolve, submitRef } = setup('M31');
     await settle();
+    let outcome: Awaited<ReturnType<SubmitLookup>> | undefined;
     await act(async () => {
-      await submitRef.current!();
+      outcome = await submitRef.current!();
     });
+    expect(outcome?.kind).toBe('found');
     expect(resolve).toHaveBeenCalledTimes(1);
-    expect(onSelect).toHaveBeenCalledTimes(1);
   });
 
-  it('Enter on an unknown name reports it was not handled', async () => {
+  it('Enter on an unknown name reports a miss', async () => {
     const resolve = vi.fn().mockRejectedValue(new ApiError('HTTP 404', 404, 'not found'));
-    const { onSelect, submitRef } = setup('zzq', resolve);
-    let handled: boolean | undefined;
+    const { submitRef } = setup('zzq', resolve);
+    let outcome: Awaited<ReturnType<SubmitLookup>> | undefined;
     await act(async () => {
-      handled = await submitRef.current!();
+      outcome = await submitRef.current!();
     });
-    expect(handled).toBe(false);
-    expect(onSelect).not.toHaveBeenCalled();
+    expect(outcome).toEqual({ kind: 'missed' });
+  });
+
+  it('an Enter overtaken by more typing reports stale, not a miss', async () => {
+    let finish!: (r: ResolvedName) => void;
+    const resolve = vi.fn().mockImplementationOnce(() => new Promise<ResolvedName>((r) => (finish = r)));
+    const { submitRef, retype } = setup('M3', resolve);
+    let pending!: ReturnType<SubmitLookup>;
+    act(() => {
+      pending = submitRef.current!();
+    });
+    retype('M31');
+    await act(async () => finish(m31));
+    expect(await pending).toEqual({ kind: 'stale' });
+  });
+
+  it('cancels the request of a query the user moved away from', async () => {
+    const signals: AbortSignal[] = [];
+    const resolve = vi.fn((_name: string, signal?: AbortSignal) => {
+      if (signal) signals.push(signal);
+      return new Promise<ResolvedName>(() => {});
+    });
+    const { retype } = setup('M3', resolve);
+    await settle();
+    retype('M31');
+    expect(signals[0].aborted).toBe(true);
   });
 });
+

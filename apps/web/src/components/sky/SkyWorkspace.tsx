@@ -36,6 +36,7 @@ import { useRgbComposite } from '../../hooks/useRgbComposite';
 import { RgbControls } from './RgbControls';
 import { SelectionActions, type SpectrumTarget } from './SelectionActions';
 import { NameSuggestion, type ResolvedTarget, type SubmitLookup } from './NameSuggestion';
+import { runEnterLookup } from '../../searchEnter';
 import { contextFovDeg, resolveSelectionView, saveSelectionView } from '../../selectionView';
 import { ensureServiceWorkerControl } from '../../serviceWorkerControl';
 import {
@@ -46,6 +47,9 @@ import {
   validateCoordinates,
 } from '../../region';
 import type { CatalogObject, JobCreateRequest, JobSnapshot, JobView, RegionRequest } from '../../types';
+
+/** Field of view after a name lookup: wide enough to see the object in context. */
+const NAME_LOOKUP_FOV_DEG = 1;
 
 interface SkyWorkspaceProps {
   activeJob: JobSnapshot | null;
@@ -174,6 +178,10 @@ export function SkyWorkspace({
   const [catalog, setCatalog] = useState<CatalogObject[]>(CURATED_CATALOG_FALLBACK);
   const [searchQuery, setSearchQuery] = useState('');
   const nameSubmitRef = useRef<SubmitLookup | null>(null);
+  // Bumped on every navigation, so a late name lookup cannot pull the map back.
+  const navigationSeqRef = useRef(0);
+  const searchQueryRef = useRef('');
+  searchQueryRef.current = searchQuery;
   const [recentSelections, setRecentSelections] = useState<RecentSelection[]>(getRecentSelections());
   const simbadRequestRef = useRef<AbortController | null>(null);
 
@@ -599,7 +607,8 @@ export function SkyWorkspace({
 
   // Go to coordinates
   const handleGoto = useCallback(
-    (target: RegionRequest, name?: string) => {
+    (target: RegionRequest, name?: string, options?: { fovDeg?: number }) => {
+      navigationSeqRef.current += 1;
       const val = validateCoordinates(target.ra_deg, target.dec_deg, target.size_arcmin);
       if (!val.valid) {
         setCoordError(val.error);
@@ -613,7 +622,7 @@ export function SkyWorkspace({
       if (viewerRef.current) {
         viewerRef.current.gotoRaDec?.(target.ra_deg, target.dec_deg);
         // Set FOV slightly larger than region to provide context
-        const fovDeg = contextFovDeg(target.size_arcmin);
+        const fovDeg = options?.fovDeg ?? contextFovDeg(target.size_arcmin);
         viewerRef.current.setFoV?.(fovDeg);
         setCurrentFov(fovDeg);
         setCenterCoords([target.ra_deg, target.dec_deg]);
@@ -857,7 +866,10 @@ export function SkyWorkspace({
   // Expert lookup: a resolved name moves the map like a curated object does.
   const handleResolvedName = useCallback(
     (target: ResolvedTarget) => {
-      handleGoto({ ra_deg: target.ra_deg, dec_deg: target.dec_deg, size_arcmin: 6 }, target.name);
+      // A wide view (1°) around the object, instead of the tight 2× region zoom.
+      handleGoto({ ra_deg: target.ra_deg, dec_deg: target.dec_deg, size_arcmin: 6 }, target.name, {
+        fovDeg: NAME_LOOKUP_FOV_DEG,
+      });
     },
     [handleGoto],
   );
@@ -1017,17 +1029,22 @@ export function SkyWorkspace({
               onChange={(e) => setSearchQuery(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key !== 'Enter') return;
-                // Enter picks the first suggestion: the resolved object, else the first featured match.
-                void (async () => {
-                  const moved = (await nameSubmitRef.current?.()) ?? false;
-                  const local = filteredCatalog[0];
-                  if (!moved && local) {
-                    handleGoto(
-                      { ra_deg: local.ra_deg, dec_deg: local.dec_deg, size_arcmin: local.default_size_arcmin },
-                      local.name,
-                    );
-                  }
-                })();
+                const local = filteredCatalog[0] ?? null;
+                void runEnterLookup({
+                  typed: searchQuery,
+                  submit: () => nameSubmitRef.current?.() ?? Promise.resolve({ kind: 'missed' as const }),
+                  currentQuery: () => searchQueryRef.current,
+                  navigationSeq: () => navigationSeqRef.current,
+                  firstFeatured: local && {
+                    ra_deg: local.ra_deg,
+                    dec_deg: local.dec_deg,
+                    size_arcmin: local.default_size_arcmin,
+                    name: local.name,
+                  },
+                  goToResolved: handleResolvedName,
+                  goToFeatured: (f) =>
+                    handleGoto({ ra_deg: f.ra_deg, dec_deg: f.dec_deg, size_arcmin: f.size_arcmin }, f.name),
+                });
               }}
             />
           </div>
