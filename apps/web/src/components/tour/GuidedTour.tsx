@@ -1,0 +1,79 @@
+import { useMemo } from 'react';
+import { ACTIONS, Joyride, STATUS, type EventData } from 'react-joyride';
+import { TOUR_STEPS } from './tourSteps';
+
+export const TOUR_SEEN_KEY = 'iris_tour_seen';
+
+/** True once the visitor finished or skipped the tour on this browser. */
+export function hasSeenTour(): boolean {
+  try {
+    return localStorage.getItem(TOUR_SEEN_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function rememberTour() {
+  try {
+    localStorage.setItem(TOUR_SEEN_KEY, '1');
+  } catch {
+    // Private mode or blocked storage: the tour still works, it is just not remembered.
+  }
+}
+
+/** A step is offered only when its anchor is on screen (e.g. the rail is a closed drawer on phones). */
+function isOnScreen(selector: string): boolean {
+  if (selector === 'body') return true;
+  const element = document.querySelector<HTMLElement>(selector);
+  return Boolean(element && element.getClientRects().length > 0);
+}
+
+interface GuidedTourProps {
+  run: boolean;
+  /** Called when the tour is finished or skipped. */
+  onEnd: () => void;
+}
+
+/** React Joyride tour over the viewer, styled with the Iris palette. */
+export function GuidedTour({ run, onEnd }: GuidedTourProps) {
+  // Re-evaluated each time the tour starts, so it adapts to the current layout.
+  const steps = useMemo(
+    () => (run ? TOUR_STEPS.filter((step) => isOnScreen(String(step.target))) : TOUR_STEPS),
+    [run],
+  );
+
+  const handleEvent = (data: EventData) => {
+    // Joyride's "close" (Escape, close button) only advances a step and keeps the
+    // tour running; treating it as the end keeps the app's state in sync.
+    const ended =
+      data.status === STATUS.FINISHED || data.status === STATUS.SKIPPED || data.action === ACTIONS.CLOSE;
+    if (ended) {
+      rememberTour();
+      onEnd();
+    }
+  };
+
+  return (
+    <Joyride
+      steps={steps}
+      run={run}
+      continuous
+      onEvent={handleEvent}
+      locale={{ back: 'Back', close: 'Close', last: 'Done', next: 'Next', skip: 'Skip tour', nextWithProgress: 'Next ({current}/{total})' }}
+      options={{
+        showProgress: true,
+        skipBeacon: true,
+        buttons: ['back', 'skip', 'primary'],
+        overlayClickAction: false,
+        primaryColor: '#f5b041',
+        backgroundColor: '#18181b',
+        textColor: '#f4f4f5',
+        arrowColor: '#18181b',
+        overlayColor: 'rgba(0, 0, 0, 0.6)',
+        spotlightRadius: 6,
+        zIndex: 400,
+        width: 360,
+      }}
+    />
+  );
+}

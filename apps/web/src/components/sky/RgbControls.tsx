@@ -67,17 +67,23 @@ export function RgbControls({
       {rgbMode && rgb ? (
         <div className="dock-rgb" aria-label="RGB band selector">
           <div className="dock-rgb-presets">
-            {RGB_PRESETS.map((preset) => (
-              <button
-                key={preset.id}
-                type="button"
-                className="dock-preset-btn"
-                title={preset.description}
-                onClick={() => onApply(presetChannels(channels, preset))}
-              >
-                {preset.label}
-              </button>
-            ))}
+            {RGB_PRESETS.map((preset) => {
+              const target = presetChannels(channels, preset);
+              // Derived from the map, so editing a channel by hand clears the mark.
+              const active = target.r === rgb.r && target.g === rgb.g && target.b === rgb.b;
+              return (
+                <button
+                  key={preset.id}
+                  type="button"
+                  className={`dock-preset-btn${active ? ' active' : ''}`}
+                  aria-pressed={active}
+                  title={preset.description}
+                  onClick={() => onApply(target)}
+                >
+                  {preset.label}
+                </button>
+              );
+            })}
           </div>
           <div className="dock-rgb-selects">
             {(['r', 'g', 'b'] as const).map((band) => (

@@ -35,7 +35,9 @@ The round button in the bottom-right corner opens the Planet X assistant (any Op
 
 ## Saved selections (Records)
 
-Every region selected in Sky creates a job, and the backend saves it as a selection record. Open **Records** in the top bar to list them, open a ready plate, inspect a pending or failed job in Plate, or delete it. Plate shows discovery attempts and retry timing in the spectral rail; failed jobs offer an explicit retry.
+Every region selected in Sky creates a job. There are no accounts, so records are kept per browser through a cookie: a footer bar asks for consent with **Accept necessary**, **Accept all** or **Reject all** (`src/components/consent/ConsentBar.tsx`). The records cookie counts as necessary, so both acceptances save selections; with **Reject all**, or before choosing, jobs still run but nothing is saved and Records says that selections cannot be saved without cookies (its **Cookie settings** button reopens the bar). Jobs submitted before accepting are remembered in memory for the current visit and recovered as saved selections when the visitor accepts (`src/hooks/useRecordsConsent.ts`, backend `POST /api/selections/claim`), including a job whose request was still in flight at that moment; reloading the page before accepting forgets them. Choosing **Reject all** after accepting hides the browser's records without deleting them: accepting again shows them.
+
+Once cookies are accepted, the backend saves each selection for this browser. Open **Records** in the top bar to list them, open a ready plate, inspect a pending or failed job in Plate, or delete it. Plate shows discovery attempts and retry timing in the spectral rail; failed jobs offer an explicit retry.
 
 The **Name** column labels a selection: click the name or **Untitled** (or press **✎**), then edit in place without resizing the grid. Press **Enter** or leave the field to save; **Escape** discards the draft, and an empty name removes it. Names are stored by the backend (up to 80 characters), so every browser sees them.
 
@@ -58,7 +60,11 @@ The mockup supplies layout direction only. Its generated stars, epochs, historic
 
 ## Landing page
 
-The app opens on a landing page (`#/`): a full-screen star field, **Explore the Sky** (opens the viewer at `#/sky`), a short "A little context before you explore" block and links to the official SPHEREx and IRSA sources. **Guided Tour** is shown as coming soon. Deep links such as `#/sky` or `#/plate/<id>` open the viewer directly. The star field stays still when the system asks for reduced motion.
+The app opens on a landing page (`#/`): a full-screen star field, **Explore the Sky** (opens the viewer at `#/sky`), a short "A little context before you explore" block and links to the official SPHEREx and IRSA sources. **Guided Tour** opens the viewer and starts the tour. Deep links such as `#/sky` or `#/plate/<id>` open the viewer directly. The star field stays still when the system asks for reduced motion.
+
+## Guided tour
+
+A seven-step tour (React Joyride) walks through the viewer: welcome, **Find objects**, the map, the channel dock, the region tool, the workspace tabs and how to replay it. Start it from **Guided Tour** on the landing page or the **?** button in the top bar. It can be skipped at any step; finishing or skipping is remembered in `localStorage` (`iris_tour_seen`). Steps point at `data-tour` attributes, and a step whose anchor is not on screen (for example the rail on a phone) is left out.
 
 ## Search by name or catalogue code
 
@@ -83,8 +89,8 @@ the blank channels 50/51 are not offered. This is false colour built from the
 
 ## Spectral Lab
 
-Open **Spectral Lab** in the top bar (`#/spectral`), or select a region in Sky
-and press **View spectrum →** to open the Lab with the spectrum at the centre of
+Open **Spectral Lab** in the top bar (`#/spectral`), or select and confirm a region in Sky
+and press **Visualize spectrum** to open the Lab with the spectrum at the centre of
 the selection already added. Add up to 8 spectra from the
 curated catalog or by typing RA/Dec in degrees; each is fetched from
 `GET /api/spectrum` and plotted as wavelength (µm) against surface brightness

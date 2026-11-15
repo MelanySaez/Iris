@@ -14,8 +14,8 @@ APP_NAME = "Planet X v3 Spectral Service"
 APP_VERSION = "0.2.0"
 CORS_ALLOWED_ORIGINS = ["http://localhost:5173", "http://127.0.0.1:5173"]
 
-# Base directories
-APP_DIR = Path(__file__).resolve().parent
+# Base directories (this module lives in app/core/, so the app package is one level up)
+APP_DIR = Path(__file__).resolve().parent.parent
 SERVER_DIR = APP_DIR.parent
 DATA_DIR = SERVER_DIR / "data"
 CACHE_DIR = DATA_DIR / "cache"
@@ -49,6 +49,10 @@ class Settings(BaseSettings):
     )
 
     DATABASE_URL: str | None = None
+    # Secure flag of the consent cookies: unset follows the request scheme
+    # (behind a TLS proxy, run uvicorn with --forwarded-allow-ips so the scheme
+    # is the original https); true/false force it.
+    COOKIE_SECURE: bool | None = None
     CORS_ORIGINS: CommaSeparated = Field(
         default_factory=lambda: ["http://localhost:5173", "http://127.0.0.1:5173"]
     )

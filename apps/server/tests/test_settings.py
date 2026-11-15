@@ -2,7 +2,14 @@
 
 from __future__ import annotations
 
-from app.core.config import Settings
+from app.core.config import APP_DIR, DATA_DIR, SERVER_DIR, Settings
+
+
+def test_runtime_data_lives_in_the_server_directory():
+    # apps/server/data is git-ignored; a data dir under app/ would leak cache into git.
+    assert (SERVER_DIR / "pyproject.toml").is_file()
+    assert APP_DIR == SERVER_DIR / "app"
+    assert DATA_DIR == SERVER_DIR / "data"
 
 
 def test_settings_parse_comma_separated_cors_origins(monkeypatch):

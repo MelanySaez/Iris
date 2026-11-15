@@ -18,9 +18,12 @@ SAMPLE = {"ra_deg": 270.693033497, "dec_deg": 61.876515912, "size_arcmin": 4.0}
 @pytest.fixture(autouse=True)
 def mock_external_network():
     """Guarantee that tests never call IRSA TAP or download cutouts over network."""
+    no_network = RuntimeError("No network")
     with (
         patch("app.services.discovery.query_irsa_tap", return_value=([], None)),
-        patch("app.services.fits.download_cutout", side_effect=RuntimeError("No network")),
+        patch("app.services.fits.download_cutout", side_effect=no_network),
+        # jobs.py imports download_cutout by name, so patch its reference too.
+        patch("app.services.jobs.download_cutout", side_effect=no_network),
     ):
         yield
 
@@ -331,6 +334,8 @@ def test_extraction_crash_is_classified():
     client = TestClient(app)
     with (
         patch("app.services.jobs.resolve_region", return_value=_discovery_with(3, "remote")),
+        # Remote products are downloaded first; let that stage succeed.
+        patch("app.services.jobs.download_cutout", return_value=None),
         patch("app.services.jobs.get_or_extract_derived", side_effect=ValueError("bad WCS")),
     ):
         _, snap = _submit_and_wait(
@@ -346,6 +351,7 @@ def test_render_crash_is_classified():
     client = TestClient(app)
     with (
         patch("app.services.jobs.resolve_region", return_value=_discovery_with(3, "remote")),
+        patch("app.services.jobs.download_cutout", return_value=None),
         patch("app.services.jobs.get_or_extract_derived", return_value=cutout),
         patch(
             "app.services.jobs.compute_cutout_percentiles", side_effect=RuntimeError("no pixels")

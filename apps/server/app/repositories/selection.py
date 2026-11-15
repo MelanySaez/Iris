@@ -88,9 +88,15 @@ class SelectionRepository:
         return session.execute(select(SkyRegion.id).filter_by(**key)).scalar_one()
 
     def record_submission(
-        self, job_id: str, req: JobRequest, status: str, *, new_attempt: bool
+        self,
+        owner_id: uuid.UUID,
+        job_id: str,
+        req: JobRequest,
+        status: str,
+        *,
+        new_attempt: bool,
     ) -> SubmissionResult:
-        """Insert the selection or, when it already exists, count another hit.
+        """Insert the owner's selection or, when it already exists, count another hit.
 
         Only a new attempt resets ``job_status`` and clears ``job_error``; a cache
         hit never touches them, so a late duplicate write cannot overwrite a
@@ -102,6 +108,7 @@ class SelectionRepository:
                 session, normalize_region(req.ra_deg, req.dec_deg, req.size_arcmin)
             )
             stmt = insert(Selection).values(
+                owner_id=owner_id,
                 region_id=region_id,
                 job_id=job_id,
                 channels=sorted(set(req.channels)),
@@ -124,11 +131,43 @@ class SelectionRepository:
                 changes["job_status"] = stmt.excluded.job_status
                 changes.update(dict.fromkeys(OUTCOME_DETAIL_COLUMNS))
             stmt = stmt.on_conflict_do_update(
-                index_elements=[Selection.job_id], set_=changes
+                index_elements=[Selection.owner_id, Selection.job_id], set_=changes
             ).returning(literal_column("(xmax = 0)"), Selection.job_status)
             # PostgreSQL: xmax = 0 only for a freshly inserted row version.
             inserted, stored_status = session.execute(stmt).one()
             return SubmissionResult(inserted=bool(inserted), stored_status=stored_status)
+
+    def claim_submission(
+        self, owner_id: uuid.UUID, job_id: str, req: JobRequest, status: str
+    ) -> bool:
+        """Save a job as the owner's selection unless the owner already has it.
+
+        Unlike ``record_submission`` an existing row is left untouched (no hit is
+        counted). Returns whether a row was created.
+        """
+        with self._sessions.begin() as session:
+            region_id = self._region_id(
+                session, normalize_region(req.ra_deg, req.dec_deg, req.size_arcmin)
+            )
+            stmt = (
+                insert(Selection)
+                .values(
+                    owner_id=owner_id,
+                    region_id=region_id,
+                    job_id=job_id,
+                    channels=sorted(set(req.channels)),
+                    products=sorted(set(req.products)),
+                    mode=req.mode,
+                    stretch=req.stretch,
+                    job_status=status,
+                    **_view_columns(req),
+                )
+                .on_conflict_do_nothing(
+                    index_elements=[Selection.owner_id, Selection.job_id]
+                )
+                .returning(Selection.id)
+            )
+            return session.execute(stmt).scalar_one_or_none() is not None
 
     def record_discovery(self, req: JobRequest, discovery: dict[str, Any]) -> None:
         """Store the region coverage and its discovered products."""
@@ -179,7 +218,10 @@ class SelectionRepository:
         error_trace: str | None = None,
         events: list[dict[str, Any]] | None = None,
     ) -> None:
-        """Store the final status, its failure details and, when ready, the manifest."""
+        """Store the final status, its failure details and, when ready, the manifest.
+
+        The job is shared, so the outcome reaches every owner's row of ``job_id``.
+        """
         values: dict[str, Any] = {
             "job_status": status,
             "job_error": error,
@@ -197,10 +239,13 @@ class SelectionRepository:
 
     # -- reads / delete -------------------------------------------------------
 
-    def list(self, limit: int, before: datetime | None = None) -> list[Selection]:
-        """Most recently seen selections first; ``before`` paginates by last_seen_at."""
+    def list(
+        self, owner_id: uuid.UUID, limit: int, before: datetime | None = None
+    ) -> list[Selection]:
+        """The owner's most recently seen selections first; ``before`` paginates."""
         stmt = (
             select(Selection)
+            .where(Selection.owner_id == owner_id)
             .options(selectinload(Selection.region))
             .order_by(Selection.last_seen_at.desc(), Selection.id)
             .limit(limit)
@@ -210,31 +255,35 @@ class SelectionRepository:
         with self._sessions() as session:
             return list(session.execute(stmt).scalars())
 
-    def get(self, selection_id: uuid.UUID) -> Selection | None:
-        """One selection with its region and the region's products."""
+    def get(self, owner_id: uuid.UUID, selection_id: uuid.UUID) -> Selection | None:
+        """One of the owner's selections with its region and the region's products."""
         stmt = (
             select(Selection)
-            .where(Selection.id == selection_id)
+            .where(Selection.id == selection_id, Selection.owner_id == owner_id)
             .options(selectinload(Selection.region).selectinload(SkyRegion.products))
         )
         with self._sessions() as session:
             return session.execute(stmt).scalar_one_or_none()
 
-    def rename(self, selection_id: uuid.UUID, name: str | None) -> Selection | None:
-        """Set or clear the selection's name; None when the selection does not exist."""
+    def rename(
+        self, owner_id: uuid.UUID, selection_id: uuid.UUID, name: str | None
+    ) -> Selection | None:
+        """Set or clear the name; None when the owner has no such selection."""
         with self._sessions.begin() as session:
             updated = session.execute(
                 update(Selection)
-                .where(Selection.id == selection_id)
+                .where(Selection.id == selection_id, Selection.owner_id == owner_id)
                 .values(name=name)
                 .returning(Selection.id)
             ).scalar_one_or_none()
-        return None if updated is None else self.get(selection_id)
+        return None if updated is None else self.get(owner_id, selection_id)
 
-    def delete(self, selection_id: uuid.UUID) -> bool:
-        """Hard-delete one selection; its shared region and products remain."""
+    def delete(self, owner_id: uuid.UUID, selection_id: uuid.UUID) -> bool:
+        """Hard-delete one of the owner's selections; shared region data remains."""
         with self._sessions.begin() as session:
             result = session.execute(
-                delete(Selection).where(Selection.id == selection_id)
+                delete(Selection).where(
+                    Selection.id == selection_id, Selection.owner_id == owner_id
+                )
             )
             return result.rowcount > 0

@@ -682,6 +682,55 @@ def test_answers_with_saved_records_are_not_cached(api):
     assert len(fake.calls) == 3
 
 
+@pytest.mark.parametrize(
+    ("owner", "consent", "reads"),
+    [
+        (None, None, False),
+        ("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", None, False),
+        ("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", "none", False),
+        ("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", "necessary", True),
+    ],
+)
+def test_saved_selections_tool_reads_only_the_asking_browsers_records(
+    api, owner, consent, reads
+):
+    import uuid
+    from unittest.mock import patch
+
+    class FakeService:
+        def __init__(self) -> None:
+            self.owners: list[Any] = []
+
+        def list_recent(self, owner_id, limit):
+            self.owners.append(owner_id)
+            return []
+
+    service = FakeService()
+    client, _, fake = api(
+        [
+            reply(
+                tool_block("list_saved_selections", {"limit": 3}, "t1"), stop="tool_use"
+            ),
+            reply(text_block("Done.")),
+        ]
+    )
+    if owner is not None:
+        client.cookies.set("iris_owner", owner)
+    if consent is not None:
+        client.cookies.set("iris_consent", consent)
+    with patch(
+        "app.services.assistant.tools.current_selection_service", return_value=service
+    ):
+        chat(client, "list my saved selections")
+
+    [tool_result] = tool_messages(fake.calls[1])
+    if reads:
+        assert service.owners == [uuid.UUID(owner)]
+    else:
+        assert service.owners == []
+        assert "has not accepted cookies" in tool_result["content"]
+
+
 def test_query_normalization():
     assert normalize_query("  ¿Qué  canal es ÉSTE?? ") == "que canal es este"
     assert normalize_query("Go to RA 10.5, Dec -3.") == "go to ra 10.5 dec -3"

@@ -11,10 +11,13 @@ import {
 } from './components/sky/SkyWorkspace';
 import { AssistantWidget, type ActionResult } from './components/assistant/AssistantWidget';
 import { Landing } from './components/landing/Landing';
+import { GuidedTour } from './components/tour/GuidedTour';
+import { ConsentBar } from './components/consent/ConsentBar';
 import type { AssistantAction, AssistantUiContext } from './assistant';
 import { SpectralLab, type SpectrumRequest } from './components/spectral/SpectralLab';
 import type { SpectrumTarget } from './components/sky/SelectionActions';
 import { useJobPoller } from './hooks/useJobPoller';
+import { useRecordsConsent } from './hooks/useRecordsConsent';
 import { useRoute } from './router';
 import type { JobCreateRequest, RegionRequest } from './types';
 
@@ -25,6 +28,27 @@ export function App() {
   // After "Explore the Sky" the landing stays on top while it fades into the viewer.
   const [landingExit, setLandingExit] = useState(false);
   const endLandingExit = useCallback(() => setLandingExit(false), []);
+  // Guided tour: runs over Sky. Starting it waits for the viewer to be on screen.
+  const [tourRun, setTourRun] = useState(false);
+  // A new key per start remounts Joyride, so every press begins a fresh tour
+  // even if an earlier one was left half-way (paused by a tab change, closed, …).
+  const [tourKey, setTourKey] = useState(0);
+  const tourTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const startTour = useCallback(
+    (delayMs: number) => {
+      navigate('#/sky');
+      if (tourTimer.current) clearTimeout(tourTimer.current);
+      setTourRun(false);
+      setTourKey((key) => key + 1);
+      tourTimer.current = setTimeout(() => setTourRun(true), delayMs);
+    },
+    [navigate],
+  );
+  useEffect(() => () => {
+    if (tourTimer.current) clearTimeout(tourTimer.current);
+  }, []);
+  const endTour = useCallback(() => setTourRun(false), []);
+
   // The viewer's own arrival (900 ms) outlasts the landing fade, so it has its own timer.
   const [appArriving, setAppArriving] = useState(false);
   useEffect(() => {
@@ -49,6 +73,8 @@ export function App() {
   const [jobCreateError, setJobCreateError] = useState<string | null>(null);
 
   const { snapshot: activeJob, updateSnapshot, pollError, pollRetry, retryPoll } = useJobPoller(activeJobId);
+  const consent = useRecordsConsent();
+  const { beginJob } = consent;
 
   // Track the live route so job creation can follow the current workspace
   // without re-creating the callback on every navigation.
@@ -65,8 +91,11 @@ export function App() {
   // Create job from sky or plate
   const handleStartJob = useCallback(
     async (req: JobCreateRequest) => {
+      // Without cookies the backend saves nothing; the job is recovered on acceptance.
+      const finishJob = beginJob();
       try {
         const snap = await api.createJob(req);
+        finishJob(snap.id);
         updateSnapshot(snap);
         setActiveJobId(snap.id);
         setJobCreateError(null);
@@ -84,7 +113,7 @@ export function App() {
         throw err;
       }
     },
-    [updateSnapshot, navigate],
+    [updateSnapshot, navigate, beginJob],
   );
 
   // Sky selection → Spectral Lab: each click is a new request id, consumed once.
@@ -181,10 +210,16 @@ export function App() {
             setAppArriving(true);
             navigate('#/sky');
           }}
+          onTour={() => {
+            setLandingExit(true);
+            setAppArriving(true);
+            startTour(1100); // after the viewer has come out of the dark
+          }}
           onExited={endLandingExit}
         />
       )}
-      <TopBar currentRoute={route} activeJobId={activeJobId} onNavigate={navigate} />
+      <TopBar currentRoute={route} activeJobId={activeJobId} onNavigate={navigate} onStartTour={() => startTour(250)} />
+      <GuidedTour key={tourKey} run={tourRun && route.type === 'sky'} onEnd={endTour} />
 
       {contractError && <p role="alert">{contractError}</p>}
       {jobCreateError && (
@@ -228,7 +263,13 @@ export function App() {
 
         {isRecords && (
           <div className="workspace-layer records-layer layer-active" aria-hidden={false}>
-            <RecordsWorkspace onOpenPlate={handleOpenPlate} onShowInSky={handleShowInSky} />
+            <RecordsWorkspace
+              key={consent.recordsVersion}
+              onOpenPlate={handleOpenPlate}
+              onShowInSky={handleShowInSky}
+              recordsEnabled={consent.recordsEnabled}
+              onOpenCookieSettings={consent.openBar}
+            />
           </div>
         )}
 
@@ -258,6 +299,9 @@ export function App() {
       </div>
 
       {!isLanding && <AssistantWidget getContext={getAssistantContext} onAction={handleAssistantAction} />}
+      {consent.barOpen && (
+        <ConsentBar onChoose={(level) => void consent.choose(level)} saving={consent.saving} error={consent.error} />
+      )}
     </div>
   );
 }
