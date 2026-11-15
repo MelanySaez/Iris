@@ -61,6 +61,19 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
         ),
     },
     {
+        "name": "show_object",
+        "description": (
+            "Show a named sky object in Sky in one step: looks it up in the Planet X "
+            "catalog, then in SIMBAD and NED (Andromeda, M31, NGC 224, Orion "
+            "Nebula...), and draws a draft region on it. Use it whenever the person "
+            "asks to see, find, locate or go to an object."
+        ),
+        "strict": True,
+        "input_schema": _schema(
+            {"name": {"type": "string", "description": "Object name or code."}}
+        ),
+    },
+    {
         "name": "resolve_object_name",
         "description": (
             "Resolve any astronomical object name or catalogue code (e.g. Andromeda, "
@@ -137,7 +150,12 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
     },
 ]
 
-SERVER_TOOLS = {"search_catalog", "resolve_object_name", "list_saved_selections"}
+SERVER_TOOLS = {
+    "search_catalog",
+    "show_object",
+    "resolve_object_name",
+    "list_saved_selections",
+}
 UI_TOOLS = set(UI_ACTION_TYPES)
 
 _FIELDS = {d["name"]: set(d["input_schema"]["properties"]) for d in TOOL_DEFINITIONS}
@@ -280,6 +298,40 @@ def resolve_object_name(tool_input: Any) -> dict[str, Any]:
     }
 
 
+def _catalog_object(name: str) -> dict[str, Any] | None:
+    """The curated object whose id or name contains every word of ``name``."""
+    words = _fold(name).split()
+    for obj in get_catalog()["objects"]:
+        haystack = _fold(f"{obj['id']} {obj['name']}")
+        if words and all(word in haystack for word in words):
+            return obj
+    return None
+
+
+def show_object(tool_input: Any) -> dict[str, Any]:
+    """Locate a named object (catalog first, then SIMBAD/NED) for show_region."""
+    name = _check_fields("show_object", tool_input)["name"]
+    if not isinstance(name, str) or not name.strip():
+        raise ToolInputError("name must be a non-empty string")
+    obj = _catalog_object(name)
+    if obj is not None:
+        return {
+            "name": obj["name"],
+            "ra_deg": float(obj["ra_deg"]),
+            "dec_deg": float(obj["dec_deg"]),
+            "size_arcmin": float(obj["default_size_arcmin"]),
+            "source": "catalog",
+        }
+    found = resolve_object_name({"name": name})
+    return {
+        "name": found["name"],
+        "ra_deg": found["ra_deg"],
+        "dec_deg": found["dec_deg"],
+        "size_arcmin": found["suggested_size_arcmin"],
+        "source": found["source"],
+    }
+
+
 def list_saved_selections(tool_input: Any) -> dict[str, Any]:
     limit = _check_fields("list_saved_selections", tool_input)["limit"]
     if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 10:
@@ -313,6 +365,7 @@ def list_saved_selections(tool_input: Any) -> dict[str, Any]:
 SERVER_EXECUTORS = {
     "search_catalog": search_catalog,
     "resolve_object_name": resolve_object_name,
+    "show_object": show_object,
     "list_saved_selections": list_saved_selections,
 }
 

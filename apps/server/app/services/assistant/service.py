@@ -29,6 +29,7 @@ from app.services.assistant.tools import (
 from app.core.config import ASSISTANT_MAX_TOKENS, ASSISTANT_MAX_TOOL_ROUNDS
 from app.exceptions.domain import (
     AssistantModelUnavailableError,
+    AssistantProviderRateLimitedError,
     AssistantRateLimitedError,
 )
 
@@ -39,6 +40,11 @@ BLOCKED_REQUEST_REPLY = (
     "Start a new conversation if an earlier message triggered this block."
 )
 LEAK_REPLY = "I can't share my internal instructions."
+# Longest provider-requested wait the server sleeps through before one retry.
+MAX_RETRY_WAIT_S = 5.0
+# Wait before the retry when the provider gives no Retry-After hint.
+DEFAULT_RETRY_WAIT_S = 1.0
+SHOW_OBJECT = "show_object"
 EMPTY_REPLY = "I don't have an answer for that."
 ACTIONS_ONLY_REPLY = "Done."
 ROUND_LIMIT_REPLY = (
@@ -148,6 +154,23 @@ class Assistant:
 
         try:
             reply, actions, cacheable = self._run(ids, messages, context)
+        except openai.RateLimitError as exc:
+            retry_after = _retry_after(exc)
+            self.log.write(
+                "error",
+                **ids,
+                kind=type(exc).__name__,
+                status=exc.status_code,
+                message=str(exc)[:300],
+                retry_after=retry_after,
+            )
+            when = (
+                f"in about {retry_after:g} seconds" if retry_after else "in a moment"
+            )
+            raise AssistantProviderRateLimitedError(
+                "The model provider is limiting requests right now. "
+                f"Try again {when}."
+            ) from exc
         except (openai.APIError, MalformedResponse) as exc:
             status = getattr(exc, "status_code", None)
             self.log.write("error", **ids, kind=type(exc).__name__, status=status)
@@ -228,7 +251,7 @@ class Assistant:
 
         for round_no in range(1, self.max_tool_rounds + 1):
             started = time.perf_counter()
-            response = self.client.chat.completions.create(**params, messages=convo)
+            response = self._create(ids, params, convo)
             # Some OpenAI-compatible gateways return no choices on upstream errors.
             choices = getattr(response, "choices", None) or []
             message = getattr(choices[0], "message", None) if choices else None
@@ -271,6 +294,7 @@ class Assistant:
                         ],
                     }
                 )
+                shown: list[dict[str, Any]] = []
                 for call in tool_calls:
                     if call.function.name in UNCACHEABLE_TOOLS:
                         cacheable = False
@@ -279,9 +303,19 @@ class Assistant:
                         # A failed tool (e.g. a resolver that is down for a
                         # moment) must not have its answer reused from the cache.
                         cacheable = False
+                    elif call.function.name == SHOW_OBJECT:
+                        shown.append(_tool_payload(content))
                     convo.append(
                         {"role": "tool", "tool_call_id": call.id, "content": content}
                     )
+                # Every requested object was shown and nothing else is left to
+                # read: answer without a second model call (saves latency and
+                # provider rate limit).
+                names = [call.function.name for call in tool_calls]
+                only_display = all(n in UI_TOOLS or n == SHOW_OBJECT for n in names)
+                if shown and only_display and len(shown) == names.count(SHOW_OBJECT):
+                    text = (message.content or "").strip()
+                    return text or _shown_reply(shown), actions, cacheable
                 continue
 
             text = (message.content or "").strip()
@@ -297,6 +331,21 @@ class Assistant:
             "guardrail", **ids, kind="tool_round_limit", rounds=self.max_tool_rounds
         )
         return ROUND_LIMIT_REPLY, actions, False
+
+    def _create(
+        self, ids: dict[str, str], params: dict[str, Any], convo: list[dict[str, Any]]
+    ) -> Any:
+        """One model call, retried once when the provider rate-limits it briefly."""
+        try:
+            return self.client.chat.completions.create(**params, messages=convo)
+        except openai.RateLimitError as exc:
+            retry_after = _retry_after(exc)
+            wait = DEFAULT_RETRY_WAIT_S if retry_after is None else retry_after
+            if wait > MAX_RETRY_WAIT_S:
+                raise
+            self.log.write("model_retry", **ids, wait_s=wait, retry_after=retry_after)
+            time.sleep(wait)
+            return self.client.chat.completions.create(**params, messages=convo)
 
     def _execute_tool(
         self, ids: dict[str, str], call: Any, actions: list[dict[str, Any]]
@@ -321,6 +370,13 @@ class Assistant:
             if name in SERVER_EXECUTORS:
                 payload = SERVER_EXECUTORS[name](tool_input)
                 self.log.write("tool_call", **ids, name=name, input=tool_input, ok=True)
+                if name == SHOW_OBJECT:
+                    action = validate_ui_tool(
+                        "show_region",
+                        {k: payload[k] for k in ("ra_deg", "dec_deg", "size_arcmin")},
+                    )
+                    actions.append(action)
+                    self.log.write("ui_action", **ids, action=action)
                 content = as_tool_data(payload)
                 # Scan the payload itself: the <tool_data> wrapper would always match.
                 patterns = detect_injection(json.dumps(payload, ensure_ascii=False))
@@ -354,3 +410,31 @@ class Assistant:
                 error=type(exc).__name__,
             )
             return "Error: the tool failed; tell the person it could not be completed."
+
+
+def _retry_after(exc: openai.APIStatusError) -> float | None:
+    """Seconds the provider asks to wait (Retry-After headers), when it says."""
+    headers = exc.response.headers
+    for header, scale in (("retry-after-ms", 1000.0), ("retry-after", 1.0)):
+        try:
+            value = float(headers.get(header, ""))
+        except ValueError:
+            continue
+        if value >= 0:
+            return value / scale
+    return None
+
+
+def _tool_payload(content: str) -> dict[str, Any]:
+    return json.loads(content.removeprefix("<tool_data>").removesuffix("</tool_data>"))
+
+
+def _shown_reply(shown: list[dict[str, Any]]) -> str:
+    lines = [
+        f"Showing **{obj['name']}** in Sky: RA {obj['ra_deg']:.3f}°, "
+        f"Dec {obj['dec_deg']:.3f}°, {obj['size_arcmin']:g}′ region."
+        for obj in shown
+    ]
+    lines.append('Press "Confirm region" if you want to prepare its spectral plate.')
+    return "\n\n".join(lines)
+
