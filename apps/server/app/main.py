@@ -36,9 +36,11 @@ from app.models import (
     JobSnapshot,
     ManifestResponse,
     PixelResponse,
+    ResolveNameResponse,
     ResolveRequest,
     ResolveResponse,
 )
+from app.name_resolver import resolve_name
 from app.render import compute_cutout_percentiles, render_frame_product
 from app.selections.api import configure_selections
 from app.selections.api import router as selections_router
@@ -112,6 +114,14 @@ def cube_spectrum(
 ) -> CubeSpectrumResponse:
     """Return the 102-channel quick-look spectrum sampled from the All-Sky Cube."""
     return CubeSpectrumResponse(**get_cube_spectrum(ra, dec))
+
+
+@app.get("/api/resolve", response_model=ResolveNameResponse)
+def resolve_object_name(
+    name: str = Query(..., description="Object name or catalogue code, e.g. M31"),
+) -> ResolveNameResponse:
+    """Position of a named object: SIMBAD mirror, then NED; J designations offline."""
+    return ResolveNameResponse(**resolve_name(name))
 
 
 @app.post("/api/regions/resolve", response_model=ResolveResponse)
