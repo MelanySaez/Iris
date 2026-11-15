@@ -1845,14 +1845,78 @@ button:disabled {
 
 /* Epoch Strip (Bottom of center stage) */
 .stage-epoch-strip {
-  height: 48px;
   min-height: 48px;
+  flex-shrink: 0;
+  gap: 12px;
   background: #1b1b1e;
   border-top: 1px solid #2d2d32;
   display: flex;
   align-items: center;
-  padding: 0 16px;
+  padding: 12px 16px;
   z-index: 10;
+}
+
+.epoch-timeline {
+  flex: 1;
+  min-width: 0;
+}
+
+.epoch-timeline .epoch-multi-controls {
+  flex-wrap: wrap;
+}
+
+.epoch-timeline .epoch-chips-list {
+  overflow-x: auto;
+  padding-block: 2px;
+  min-width: 120px;
+}
+
+.epoch-timeline .epoch-chip {
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.epoch-timeline .epoch-actions {
+  flex-wrap: wrap;
+}
+
+.epoch-timeline .epoch-single-note {
+  margin: 8px 0 0;
+  color: #b4b4bd;
+}
+
+.stage-epoch-strip .btn-epoch-toggle:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.stage-epoch-strip .btn-epoch-toggle:focus-visible,
+.stage-epoch-strip .epoch-chip:focus-visible {
+  outline: 2px solid var(--sky-accent);
+  outline-offset: 2px;
+}
+
+.provider-trace {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--plate-rule);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--plate-text, #e0e0e5);
+  overflow-wrap: anywhere;
+}
+
+.provider-trace summary {
+  cursor: pointer;
+}
+
+.provider-trace ul {
+  padding-left: 16px;
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.provider-trace li + li {
+  margin-top: 8px;
 }
 
 .epoch-single-note {

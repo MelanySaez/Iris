@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, ApiError } from '../../api';
 import { PreparingPlateCard } from '../PreparingPlateCard';
+import { EpochTimeline, ProviderTrace } from './EpochTimeline';
 import {
   BLANK_CHANNELS,
   channelToBand,
@@ -68,9 +69,6 @@ export function PlateWorkspace({
 
   // Multi-epoch state
   const [epochA, setEpochA] = useState<number>(0);
-  const [epochB] = useState<number>(1);
-  const [isBlinking, setIsBlinking] = useState(false);
-  const [blinkActiveEpoch, setBlinkActiveEpoch] = useState<number>(0);
   const [isSplit, setIsSplit] = useState(false);
   const [splitPos, setSplitPos] = useState<number>(50); // percentage 0..100
 
@@ -97,15 +95,18 @@ export function PlateWorkspace({
 
   // Cutouts for the current detector only. Never fall back to another
   // detector's cutout, which would mislabel the plate.
-  const detectorCutouts = job.cutouts?.filter((c) => c.detector === currentDetectorNum) ?? [];
+  const detectorCutouts = job.cutouts?.filter((c) => c.detector === currentDetectorNum && (c.channel === undefined || c.channel === selectedChannel)) ?? [];
   const hasCutout = detectorCutouts.length > 0;
   const activeCutout =
     detectorCutouts.find((c) => c.epoch === epochA) ?? detectorCutouts[0] ?? null;
 
   // Available epochs for current detector
-  const availableEpochs = detectorCutouts.map((c) => c.epoch);
-  const currentEpoch =
-    isBlinking && availableEpochs.length >= 2 ? blinkActiveEpoch : epochA;
+  const channelFrames = job.frames?.filter(f => f.channel === selectedChannel && f.product === activeProduct) ?? [];
+  const imageFrames = job.frames?.filter(f => f.channel === selectedChannel && f.product === 'image') ?? [];
+  const timelineFrames = imageFrames.length ? imageFrames : channelFrames;
+  const availableEpochs = [...new Set(channelFrames.map(f => f.epoch))];
+  const currentEpoch = availableEpochs.includes(epochA) ? epochA : availableEpochs[0] ?? 0;
+  const epochB = availableEpochs.find(epoch => epoch !== currentEpoch) ?? currentEpoch;
 
   // Frame descriptor behind the rendered image, used for exact dimensions and
   // the LVF channel window.
@@ -160,20 +161,16 @@ export function PlateWorkspace({
     setHoverPixel(null);
     setChannelError(null);
     setEpochA(0);
-    setIsBlinking(false);
     setIsSplit(false);
     const first = job.channels?.[0]?.index;
     if (first !== undefined) setSelectedChannel(first);
   }, [job.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Blink timer
+  // Epoch ids belong to the selected channel; never request a nonexistent epoch 1.
   useEffect(() => {
-    if (!isBlinking || availableEpochs.length < 2) return;
-    const interval = window.setInterval(() => {
-      setBlinkActiveEpoch((curr) => (curr === epochA ? epochB : epochA));
-    }, 900);
-    return () => window.clearInterval(interval);
-  }, [isBlinking, epochA, epochB, availableEpochs.length]);
+    setEpochA(availableEpochs[0] ?? 0);
+    setIsSplit(false);
+  }, [selectedChannel, job.id]);
 
   // Load manifest when accordion opens
   useEffect(() => {
@@ -841,68 +838,14 @@ export function PlateWorkspace({
             )}
           </div>
 
-          {/* Epoch Strip (Bottom of center stage) */}
+          {/* Chronological, channel-specific comparison controls. */}
           <div className="stage-epoch-strip">
-            {!hasCutout ? (
-              <span className="epoch-single-note">
-                No epochs loaded for {currentDetectorStr}
-              </span>
-            ) : availableEpochs.length <= 1 ? (
-              <span className="epoch-single-note">
-                One epoch discovered — no comparison available
-              </span>
-            ) : (
-              <div className="epoch-multi-controls">
-                <span className="epoch-strip-label">Epochs:</span>
-                <div className="epoch-chips-list">
-                  {detectorCutouts.map((cutout) => (
-                    <button
-                      key={cutout.epoch}
-                      type="button"
-                      className={`epoch-chip num ${
-                        (isBlinking && blinkActiveEpoch === cutout.epoch) ||
-                        (!isBlinking && epochA === cutout.epoch)
-                          ? 'active'
-                          : ''
-                      }`}
-                      onClick={() => {
-                        setIsBlinking(false);
-                        setEpochA(cutout.epoch);
-                      }}
-                    >
-                      Epoch {cutout.epoch} · {formatDateIso(cutout.date_iso)}
-                    </button>
-                  ))}
-                </div>
-
-                <div className="epoch-actions">
-                  <button
-                    type="button"
-                    className={`btn-epoch-toggle ${isBlinking ? 'active' : ''}`}
-                    aria-pressed={isBlinking}
-                    title="Alternate two epochs every 900 ms"
-                    onClick={() => {
-                      setIsSplit(false);
-                      setIsBlinking((b) => !b);
-                    }}
-                  >
-                    Blink (900ms)
-                  </button>
-                  <button
-                    type="button"
-                    className={`btn-epoch-toggle ${isSplit ? 'active' : ''}`}
-                    aria-pressed={isSplit}
-                    title="Split view with divider between Epoch A and B"
-                    onClick={() => {
-                      setIsBlinking(false);
-                      setIsSplit((s) => !s);
-                    }}
-                  >
-                    Split View
-                  </button>
-                </div>
-              </div>
-            )}
+            <EpochTimeline jobId={job.id} channel={selectedChannel} frames={timelineFrames}
+              ready={job.status === 'ready'} epoch={currentEpoch} onSelect={setEpochA}
+              onPlaybackStart={() => setIsSplit(false)} reason={job.animation_reason} paused={isSplit} />
+            {availableEpochs.length >= 2 && <button type="button"
+              className={`btn-epoch-toggle ${isSplit ? 'active' : ''}`} aria-pressed={isSplit}
+              onClick={() => setIsSplit(s => !s)}>Split View</button>}
           </div>
         </main>
 
@@ -930,6 +873,7 @@ export function PlateWorkspace({
               onRetry={() => void onRequestNewJob(job.request)}
             />
           )}
+          <ProviderTrace events={job.events ?? []} />
           <div className="rail-header">
             <h2 className="rail-title">Spectral Channels</h2>
             <span className="rail-instructions">Use ↑ / ↓ arrow keys</span>
@@ -1054,7 +998,7 @@ export function PlateWorkspace({
             )}
 
             <div className="readout-footer-note">
-              WCS-WAVE is approximate; calibrated CWAVE/CBAND is not loaded.
+              {activeFrame?.calibrated ? 'Verified CWAVE/CBAND calibration · channel-specific mosaic.' : 'WCS-WAVE is approximate; calibrated CWAVE/CBAND is not loaded.'}
             </div>
           </div>
         </aside>

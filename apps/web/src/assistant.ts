@@ -68,8 +68,8 @@ export function validateAssistantAction(raw: unknown): Validation {
       const { ra_deg, dec_deg, size_arcmin } = data;
       if (!isNumber(ra_deg) || ra_deg < 0 || ra_deg >= 360) return { error: 'ra_deg must be in [0, 360)' };
       if (!isNumber(dec_deg) || dec_deg < -90 || dec_deg > 90) return { error: 'dec_deg must be in [-90, 90]' };
-      if (!isNumber(size_arcmin) || size_arcmin < 1 || size_arcmin > 60) {
-        return { error: 'size_arcmin must be in [1, 60]' };
+      if (!isNumber(size_arcmin) || size_arcmin < 1 || size_arcmin > 180) {
+        return { error: 'size_arcmin must be in [1, 180]' };
       }
       return { action: { type, ra_deg, dec_deg, size_arcmin } };
     }

@@ -74,7 +74,7 @@ export interface RegionResolveResponse {
   warning: string | null;
   products: Array<{
     id: string;
-    source: 'remote';
+    source: 'remote' | 's3' | 'mixed';
     detector: number;
     band: string;
     obs_id: string;
@@ -116,11 +116,16 @@ export interface FlagBit {
 }
 
 export interface JobCutout {
+  channel?: number;
+  calibrated?: boolean;
+  wavelength_status?: string;
+  provenance?: Array<Record<string, unknown>>;
+  epoch_id?: string;
   detector: number;
   epoch: number;
   obs_id: string;
   date_iso: string;
-  source: 'remote';
+  source: 'remote' | 's3' | 'mixed';
   uri?: string;
   version?: string;
   shape: [number, number];
@@ -135,13 +140,17 @@ export interface JobCutout {
 }
 
 export interface JobFrame {
+  calibrated?: boolean;
+  wavelength_status?: string;
+  provenance?: Array<Record<string, unknown>>;
+  epoch_id?: string;
   channel: number;
   product: ProductType;
   detector: number;
   epoch: number;
   obs_id: string;
   date_iso: string;
-  source: 'remote';
+  source: 'remote' | 's3' | 'mixed';
   width: number;
   height: number;
   url: string;
@@ -182,9 +191,15 @@ export interface JobSnapshot {
   wavelength_status: string;
   calibrated: boolean;
   multi_product_mosaic: string;
+  discovery?: Record<string, unknown>;
+  animation_reason?: string | null;
 }
 
 export interface JobEvent {
+  message?: string;
+  error_kind?: string;
+  fallback?: boolean;
+  coverage_state?: string;
   stage: string;
   at: number;
   event_type?: string;

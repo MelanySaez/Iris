@@ -1,10 +1,10 @@
 import type { RegionRequest } from './types';
 
 export const MIN_REGION_SIZE_ARCMIN = 1;
-export const MAX_REGION_SIZE_ARCMIN = 60;
+export const MAX_REGION_SIZE_ARCMIN = 180;
 
 export const REGION_EXCEEDS_LIMIT_MESSAGE =
-  'This region exceeds the 60-arcmin single-FITS limit; multi-file mosaicking is pending.';
+  'This region exceeds the 180-arcmin (3°) mosaic limit.';
 
 export interface RegionBounds {
   ra_deg: number;
