@@ -57,6 +57,80 @@ export interface Domain {
 
 export type YScaleMode = 'linear' | 'log';
 
+/** A chart-only point; inferred flux is never written back to the API response. */
+export interface DerivedSpectrumPoint extends CubeSpectrumPoint {
+  interpolated: boolean;
+}
+
+/**
+ * Fill only short, interior runs of null flux bounded by finite observations.
+ * Edge and long gaps remain missing; the API's available flag only mirrors
+ * whether value is finite and cannot independently exclude a null. Output is
+ * a fresh chart representation and never mutates the source measurements.
+ */
+export function interpolateMissingFlux(
+  points: CubeSpectrumPoint[],
+  maxGap = 2,
+): DerivedSpectrumPoint[] {
+  const result = points.map((point) => ({ ...point, interpolated: false }));
+  const ordered = points
+    .map((point, index) => ({ point, index }))
+    .sort((a, b) => a.point.wavelength_um - b.point.wavelength_um);
+  const limit = Number.isFinite(maxGap) ? Math.max(0, Math.floor(maxGap)) : 2;
+
+  for (let i = 0; i < ordered.length;) {
+    if (ordered[i].point.value !== null) {
+      i += 1;
+      continue;
+    }
+    const start = i;
+    while (
+      i < ordered.length &&
+      ordered[i].point.value === null
+    ) i += 1;
+    const count = i - start;
+    const left = ordered[start - 1]?.point;
+    const right = ordered[i]?.point;
+    if (
+      count > limit || !left || !right || left.value === null || right.value === null || !Number.isFinite(left.value) ||
+      !Number.isFinite(right.value) || !Number.isFinite(left.wavelength_um) ||
+      !Number.isFinite(right.wavelength_um) || right.wavelength_um <= left.wavelength_um
+    ) continue;
+
+    for (let j = start; j < i; j += 1) {
+      const { point, index } = ordered[j];
+      const fraction = (point.wavelength_um - left.wavelength_um) /
+        (right.wavelength_um - left.wavelength_um);
+      result[index] = {
+        ...point,
+        value: left.value + fraction * (right.value - left.value),
+        interpolated: true,
+      };
+    }
+  }
+  return result;
+}
+
+/** Dashed chart-only links wherever a line segment touches an inferred point. */
+export function interpolatedLineSegments(
+  points: DerivedSpectrumPoint[],
+  x: Scale,
+  y: Scale,
+): string[] {
+  const ordered = [...points].sort((a, b) => a.wavelength_um - b.wavelength_um);
+  const segments: string[] = [];
+  for (let i = 1; i < ordered.length; i += 1) {
+    const a = ordered[i - 1];
+    const b = ordered[i];
+    if ((!a.interpolated && !b.interpolated) || a.value === null || b.value === null) continue;
+    const ay = y(a.value);
+    const by = y(b.value);
+    if (!Number.isFinite(ay) || !Number.isFinite(by)) continue;
+    segments.push(`M${x(a.wavelength_um).toFixed(2)},${ay.toFixed(2)} L${x(b.wavelength_um).toFixed(2)},${by.toFixed(2)}`);
+  }
+  return segments;
+}
+
 /**
  * X covers every channel's band. Linear Y starts at 0 (or below, for negative
  * surface brightness) with 8% headroom; log Y spans whole decades around the
@@ -123,6 +197,51 @@ export function countNonPositive(series: CubeSpectrumPoint[][]): number {
 }
 
 export type Scale = (value: number) => number;
+
+function domainTransform(value: number, logarithmic: boolean): number {
+  return logarithmic ? Math.log10(value) : value;
+}
+
+function domainInverse(value: number, logarithmic: boolean): number {
+  return logarithmic ? 10 ** value : value;
+}
+
+/** Zoom around a normalized pointer location (0 is lower/left, 1 is upper/right). */
+export function zoomDomainAt(
+  domain: [number, number],
+  factor: number,
+  anchor: number,
+  logarithmic = false,
+): [number, number] {
+  const [start, end] = domain.map((value) => domainTransform(value, logarithmic)) as [number, number];
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start || !(factor > 0)) return domain;
+  const fraction = Math.min(1, Math.max(0, anchor));
+  const nextSpan = (end - start) / factor;
+  const anchorValue = start + (end - start) * fraction;
+  return [
+    domainInverse(anchorValue - nextSpan * fraction, logarithmic),
+    domainInverse(anchorValue + nextSpan * (1 - fraction), logarithmic),
+  ];
+}
+
+/** Shift a domain by a fraction of its current span, clamped to its data extent. */
+export function panDomain(
+  domain: [number, number],
+  fraction: number,
+  bounds: [number, number],
+  logarithmic = false,
+): [number, number] {
+  const start = domainTransform(domain[0], logarithmic);
+  const end = domainTransform(domain[1], logarithmic);
+  const boundStart = domainTransform(bounds[0], logarithmic);
+  const boundEnd = domainTransform(bounds[1], logarithmic);
+  const span = end - start;
+  if (![start, end, boundStart, boundEnd, fraction].every(Number.isFinite) || span <= 0) return domain;
+  if (span >= boundEnd - boundStart) return bounds;
+  const shift = span * fraction;
+  const nextStart = Math.min(boundEnd - span, Math.max(boundStart, start + shift));
+  return [domainInverse(nextStart, logarithmic), domainInverse(nextStart + span, logarithmic)];
+}
 
 export function linearScale(domain: [number, number], range: [number, number]): Scale {
   const [d0, d1] = domain;

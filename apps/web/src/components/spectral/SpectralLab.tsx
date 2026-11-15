@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { FormEvent, PointerEvent as ReactPointerEvent } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import type { FormEvent, PointerEvent as ReactPointerEvent, WheelEvent as ReactWheelEvent } from 'react';
 import { api, ApiError, CURATED_CATALOG_FALLBACK } from '../../api';
 import {
   MAX_SPECTRA,
@@ -8,17 +8,22 @@ import {
   computeDomain,
   countNonPositive,
   lineSegments,
+  interpolateMissingFlux,
+  interpolatedLineSegments,
   linearScale,
   logScale,
   logTicks,
   nearestChannel,
+  panDomain,
   planAdd,
   niceTicks,
   parseCoordinates,
   spectrumKey,
+  zoomDomainAt,
 } from '../../spectrum';
 import type { YScaleMode } from '../../spectrum';
 import type { CatalogObject, CubeSpectrumResponse } from '../../types';
+import './SpectralLab.css';
 
 interface SpectrumEntry {
   key: string;
@@ -36,6 +41,7 @@ interface SpectrumEntry {
 
 const CHART_HEIGHT = 380;
 const MARGIN = { top: 16, right: 96, bottom: 44, left: 64 };
+const MAX_CHART_ZOOM = 8;
 
 function formatValue(value: number | null): string {
   if (value === null) return 'no data';
@@ -57,6 +63,7 @@ export function SpectralLab({ request = null }: { request?: SpectrumRequest | nu
   const [decText, setDecText] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
   const [yMode, setYMode] = useState<YScaleMode>('linear');
+  const [sidebarVisible, setSidebarVisible] = useState(true);
   const requestCounter = useRef(0);
   // Source of truth for entries between renders: two clicks before React
   // re-renders must both see the first add (no duplicate key or colour slot).
@@ -142,8 +149,9 @@ export function SpectralLab({ request = null }: { request?: SpectrumRequest | nu
   );
 
   return (
-    <div className="spectral-lab">
-      <aside className="spectral-sidebar" aria-label="Spectra to compare">
+    <div className={`spectral-lab${sidebarVisible ? '' : ' sidebar-collapsed'}`}>
+      <aside id="spectra-sidebar" className="spectral-sidebar" aria-label="Spectra to compare"
+        aria-hidden={!sidebarVisible} inert={!sidebarVisible}>
         <section>
           <h2 className="spectral-heading">Add a spectrum</h2>
           <ul className="spectral-catalog">
@@ -210,7 +218,11 @@ export function SpectralLab({ request = null }: { request?: SpectrumRequest | nu
                 <div className="spectral-legend-text">
                   <strong>{e.label}</strong>
                   <span className="spectral-muted">
-                    {e.status === 'loading' && 'Reading cube tile…'}
+                    {e.status === 'loading' && (
+                      <span className="spectral-loading" role="status" aria-live="polite" aria-busy="true">
+                        Loading cube spectrum…
+                      </span>
+                    )}
                     {e.status === 'error' && <span role="alert">Failed: {e.error}</span>}
                     {e.status === 'ready' &&
                       e.data &&
@@ -240,6 +252,19 @@ export function SpectralLab({ request = null }: { request?: SpectrumRequest | nu
           </ul>
         </section>
       </aside>
+      <button
+        type="button"
+        className="spectral-sidebar-toggle"
+        aria-label={`${sidebarVisible ? 'Hide' : 'Show'} sidebar`}
+        aria-expanded={sidebarVisible}
+        aria-controls="spectra-sidebar"
+        onClick={() => setSidebarVisible((visible) => !visible)}
+      >
+        <svg aria-hidden="true" viewBox="0 0 16 16" focusable="false">
+          <path d={sidebarVisible ? 'M10 3 5 8l5 5' : 'M6 3l5 5-5 5'} />
+        </svg>
+        <span>{sidebarVisible ? 'Hide' : 'Show'}</span>
+      </button>
 
       <main className="spectral-main">
         <header className="spectral-main-header">
@@ -253,19 +278,21 @@ export function SpectralLab({ request = null }: { request?: SpectrumRequest | nu
           SPHEREx Spectrophotometry Tool for science-grade spectra. Gaps are channels with no
           coverage at that pixel.
         </p>
-        <div className="spectral-toolbar" role="group" aria-label="Brightness axis scale">
-          <span className="spectral-muted">Brightness axis</span>
-          {(['linear', 'log'] as const).map((mode) => (
-            <button
-              key={mode}
-              type="button"
-              className={`spectral-toggle ${yMode === mode ? 'active' : ''}`}
-              aria-pressed={yMode === mode}
-              onClick={() => setYMode(mode)}
-            >
-              {mode === 'linear' ? 'Linear' : 'Log'}
-            </button>
-          ))}
+        <div className="spectral-controls">
+          <div className="spectral-toolbar" role="group" aria-label="Brightness axis scale">
+            <span className="spectral-muted">Brightness axis</span>
+            {(['linear', 'log'] as const).map((mode) => (
+              <button
+                key={mode}
+                type="button"
+                className={`spectral-toggle ${yMode === mode ? 'active' : ''}`}
+                aria-pressed={yMode === mode}
+                onClick={() => setYMode(mode)}
+              >
+                {mode === 'linear' ? 'Linear' : 'Log'}
+              </button>
+            ))}
+          </div>
         </div>
         <SpectrumChart entries={plotted} mode={yMode} />
         {plotted.length > 0 && <SpectrumTable entries={plotted} />}
@@ -280,29 +307,44 @@ interface PlottedEntry extends SpectrumEntry {
 
 function SpectrumChart({ entries, mode }: { entries: PlottedEntry[]; mode: YScaleMode }) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const chartId = useId().replace(/:/g, '');
   const [width, setWidth] = useState(720);
   const [hoverChannel, setHoverChannel] = useState<number | null>(null);
+  const [viewDomain, setViewDomain] = useState<{ x: [number, number] | null; y: [number, number] | null }>({ x: null, y: null });
+  const dragRef = useRef<{ x: number; y: number } | null>(null);
 
   useEffect(() => {
     const el = containerRef.current;
     if (!el || typeof ResizeObserver === 'undefined') return;
     const observer = new ResizeObserver(([entry]) => {
-      setWidth(Math.max(320, Math.floor(entry.contentRect.width)));
+      setWidth(Math.max(280, Math.floor(entry.contentRect.width)));
     });
     observer.observe(el);
     return () => observer.disconnect();
   }, []);
 
-  const series = useMemo(() => entries.map((e) => e.data.points), [entries]);
+  const plottedSeries = useMemo(
+    () => entries.map((e) => interpolateMissingFlux(e.data.points)),
+    [entries],
+  );
+  const series = plottedSeries;
   const domain = useMemo(() => computeDomain(series, mode), [series, mode]);
+  useEffect(() => {
+    setViewDomain({ x: null, y: null });
+  }, [domain?.x[0], domain?.x[1], domain?.y[0], domain?.y[1], mode]);
   const hiddenInLog = mode === 'log' ? countNonPositive(series) : 0;
+  const hasNonPositiveEstimate = mode === 'log' && plottedSeries.some((points) =>
+    points.some((p) => p.interpolated && p.value !== null && p.value <= 0),
+  );
   const unit = entries[0]?.data.unit ?? 'MJy/sr';
 
   if (!domain) {
     return (
       <div ref={containerRef} className="spectral-chart spectral-chart-empty">
         <p className="spectral-muted">
-          {entries.length && mode === 'log'
+          {hasNonPositiveEstimate
+            ? 'Interpolated estimate at or below zero cannot be shown on a log axis; switch to Linear or see its value in the data table.'
+            : entries.length && mode === 'log'
             ? 'No positive values to draw on a log axis; switch to Linear.'
             : 'No spectrum plotted yet.'}
         </p>
@@ -310,26 +352,80 @@ function SpectrumChart({ entries, mode }: { entries: PlottedEntry[]; mode: YScal
     );
   }
 
+  const xDomain = viewDomain.x ?? domain.x;
+  const yDomain = viewDomain.y ?? domain.y;
+
   const plotRight = width - MARGIN.right;
   const plotBottom = CHART_HEIGHT - MARGIN.bottom;
-  const x = linearScale(domain.x, [MARGIN.left, plotRight]);
+  const x = linearScale(xDomain, [MARGIN.left, plotRight]);
   const y =
     mode === 'log'
-      ? logScale(domain.y, [plotBottom, MARGIN.top])
-      : linearScale(domain.y, [plotBottom, MARGIN.top]);
-  const xTicks = niceTicks(domain.x[0], domain.x[1], Math.max(4, Math.floor(width / 110)));
+      ? logScale(yDomain, [plotBottom, MARGIN.top])
+      : linearScale(yDomain, [plotBottom, MARGIN.top]);
+  const xTicks = niceTicks(xDomain[0], xDomain[1], Math.max(4, Math.floor(width / 110)));
   const yTicks =
-    mode === 'log' ? logTicks(domain.y[0], domain.y[1]) : niceTicks(domain.y[0], domain.y[1], 5);
+    mode === 'log' ? logTicks(yDomain[0], yDomain[1]) : niceTicks(yDomain[0], yDomain[1], 5);
   const reference = entries[0].data.points;
+  const plotWidth = plotRight - MARGIN.left;
+  const plotHeight = plotBottom - MARGIN.top;
+  const zoomFactor = Math.min(
+    (domain.x[1] - domain.x[0]) / (xDomain[1] - xDomain[0]),
+    (domain.y[1] - domain.y[0]) / (yDomain[1] - yDomain[0]),
+  );
+
+  const setZoom = (factor: number, anchorX = 0.5, anchorY = 0.5) => {
+    setViewDomain((current) => ({
+      x: panDomain(zoomDomainAt(current.x ?? domain.x, factor, anchorX), 0, domain.x),
+      y: panDomain(zoomDomainAt(current.y ?? domain.y, factor, anchorY, mode === 'log'), 0, domain.y, mode === 'log'),
+    }));
+  };
+
+  const handleWheel = (event: ReactWheelEvent<SVGSVGElement>) => {
+    event.preventDefault();
+    const rect = event.currentTarget.getBoundingClientRect();
+    const localX = ((event.clientX - rect.left) / rect.width) * width;
+    const localY = ((event.clientY - rect.top) / rect.height) * CHART_HEIGHT;
+    if (localX < MARGIN.left || localX > plotRight || localY < MARGIN.top || localY > plotBottom) return;
+    setZoom(event.deltaY < 0 ? 1.2 : 1 / 1.2,
+      (localX - MARGIN.left) / plotWidth,
+      1 - (localY - MARGIN.top) / plotHeight);
+  };
+
+  const handlePointerDown = (event: ReactPointerEvent<SVGSVGElement>) => {
+    if (event.button !== 0) return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    const localX = ((event.clientX - rect.left) / rect.width) * width;
+    const localY = ((event.clientY - rect.top) / rect.height) * CHART_HEIGHT;
+    if (localX < MARGIN.left || localX > plotRight || localY < MARGIN.top || localY > plotBottom) return;
+    dragRef.current = { x: event.clientX, y: event.clientY };
+    setHoverChannel(null);
+    event.currentTarget.classList.add('is-panning');
+    try { event.currentTarget.setPointerCapture(event.pointerId); } catch { /* Pointer capture may be unavailable. */ }
+  };
+
+  const handlePointerUp = (event: ReactPointerEvent<SVGSVGElement>) => {
+    dragRef.current = null;
+    event.currentTarget.classList.remove('is-panning');
+  };
 
   const handleMove = (event: ReactPointerEvent<SVGSVGElement>) => {
     const rect = event.currentTarget.getBoundingClientRect();
     const px = ((event.clientX - rect.left) / rect.width) * width;
+    if (dragRef.current) {
+      const dx = event.clientX - dragRef.current.x;
+      const dy = event.clientY - dragRef.current.y;
+      dragRef.current = { x: event.clientX, y: event.clientY };
+      setViewDomain((current) => ({
+        x: panDomain(current.x ?? domain.x, -dx / plotWidth, domain.x),
+        y: panDomain(current.y ?? domain.y, dy / plotHeight, domain.y, mode === 'log'),
+      }));
+      return;
+    }
     if (px < MARGIN.left || px > plotRight) {
       setHoverChannel(null);
       return;
     }
-    const wavelength = domain.x[0] + ((px - MARGIN.left) / (plotRight - MARGIN.left)) * (domain.x[1] - domain.x[0]);
+    const wavelength = xDomain[0] + ((px - MARGIN.left) / (plotRight - MARGIN.left)) * (xDomain[1] - xDomain[0]);
     setHoverChannel(nearestChannel(reference, wavelength));
   };
 
@@ -352,14 +448,34 @@ function SpectrumChart({ entries, mode }: { entries: PlottedEntry[]; mode: YScal
 
   return (
     <div ref={containerRef} className="spectral-chart">
+      <div className="spectral-chart-zoom" role="group" aria-label="Chart zoom controls">
+        <button type="button" className="spectral-toggle" aria-label="Zoom out" disabled={zoomFactor <= 1.01}
+          onClick={() => setZoom(1 / 1.5)}>−</button>
+        <span aria-live="polite">Zoom {Math.max(1, zoomFactor).toFixed(1)}×</span>
+        <button type="button" className="spectral-toggle" aria-label="Zoom in" disabled={zoomFactor >= MAX_CHART_ZOOM}
+          onClick={() => setZoom(1.5)}>+</button>
+        <button type="button" className="spectral-toggle" aria-label="Reset zoom" disabled={zoomFactor <= 1.01}
+          onClick={() => setViewDomain({ x: null, y: null })}>Reset</button>
+        <span className="spectral-chart-hint">Scroll to zoom · drag to move</span>
+      </div>
       <svg
-        width={width}
+        width="100%"
         height={CHART_HEIGHT}
+        viewBox={`0 0 ${width} ${CHART_HEIGHT}`}
         role="img"
-        aria-label={`Spectra of ${entries.map((e) => e.label).join(', ')}: wavelength in microns against surface brightness in ${unit}`}
+        aria-label={`Spectra of ${entries.map((e) => e.label).join(', ')}: wavelength in microns against surface brightness in ${unit}, zoom ${Math.max(1, zoomFactor).toFixed(1)} times`}
+        onPointerDown={handlePointerDown}
         onPointerMove={handleMove}
-        onPointerLeave={() => setHoverChannel(null)}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerUp}
+        onWheel={handleWheel}
+        onPointerLeave={(event) => { if (!dragRef.current) setHoverChannel(null); else handlePointerUp(event); }}
       >
+        <defs>
+          <clipPath id={`${chartId}-plot-clip`}>
+            <rect x={MARGIN.left} y={MARGIN.top} width={plotWidth} height={plotHeight} />
+          </clipPath>
+        </defs>
         {yTicks.map((t) => (
           <g key={`y${t}`}>
             <line className="spectral-grid" x1={MARGIN.left} x2={plotRight} y1={y(t)} y2={y(t)} />
@@ -385,19 +501,35 @@ function SpectrumChart({ entries, mode }: { entries: PlottedEntry[]; mode: YScal
           Surface brightness ({unit})
         </text>
 
-        {entries.map((e) => (
+        <g className="spectral-series-data" clipPath={`url(#${chartId}-plot-clip)`}>
+        {entries.map((e, entryIndex) => (
           <g key={e.key} stroke={SERIES_COLORS[e.slot]}>
             {lineSegments(e.data.points, x, y).map((d, i) => (
               <path key={i} d={d} className="spectral-line" />
             ))}
+            {interpolatedLineSegments(plottedSeries[entryIndex], x, y).map((d, i) => (
+              <path key={`estimated-${i}`} d={d} className="spectral-estimated-line" />
+            ))}
+            {plottedSeries[entryIndex]
+              .filter((p) => p.interpolated && p.value !== null && Number.isFinite(y(p.value)))
+              .map((p) => (
+                <circle
+                  key={`estimated-${p.channel}`}
+                  cx={x(p.wavelength_um)}
+                  cy={y(p.value as number)}
+                  r={4.5}
+                  className="spectral-estimated-marker"
+                />
+              ))}
           </g>
         ))}
+        </g>
 
         {hovered && (
-          <g>
+          <g clipPath={`url(#${chartId}-plot-clip)`}>
             <line className="spectral-crosshair" x1={tooltipLeft} x2={tooltipLeft} y1={MARGIN.top} y2={plotBottom} />
-            {entries.map((e) => {
-              const p = e.data.points[hoverChannel as number];
+            {entries.map((e, entryIndex) => {
+              const p = plottedSeries[entryIndex][hoverChannel as number];
               return p && p.value !== null && Number.isFinite(y(p.value)) ? (
                 <circle
                   key={e.key}
@@ -418,6 +550,20 @@ function SpectrumChart({ entries, mode }: { entries: PlottedEntry[]; mode: YScal
           </text>
         ))}
       </svg>
+      <div className="spectral-estimate-legend" aria-label="Flux data legend">
+        <span><i className="spectral-observed-key" aria-hidden="true" />Observed</span>
+        <span><i className="spectral-interpolated-key" aria-hidden="true" />Interpolated (estimated)</span>
+      </div>
+      {plottedSeries.some((points) => points.some((p) => p.interpolated)) && (
+        <p className="spectral-chart-note" role="note">
+          Interpolated (estimated) values are chart-only estimates; the original measurements are unchanged.
+        </p>
+      )}
+      {mode === 'log' && plottedSeries.some((points) => points.some((p) => p.interpolated && p.value !== null && p.value <= 0)) && (
+        <p className="spectral-chart-note" role="note">
+          Interpolated estimate at or below zero cannot be shown on a log axis; its estimated value remains in the data table.
+        </p>
+      )}
       {hiddenInLog > 0 && (
         <p className="spectral-chart-note" role="note">
           {hiddenInLog} value{hiddenInLog === 1 ? '' : 's'} ≤ 0 {hiddenInLog === 1 ? 'is' : 'are'} not
@@ -437,15 +583,15 @@ function SpectrumChart({ entries, mode }: { entries: PlottedEntry[]; mode: YScal
           <strong>
             {hovered.wavelength_um.toFixed(3)} µm · D{hovered.detector} ch {hovered.subchannel}
           </strong>
-          {entries.map((e) => {
-            const p = e.data.points[hoverChannel as number];
+          {entries.map((e, entryIndex) => {
+            const p = plottedSeries[entryIndex][hoverChannel as number];
             return (
               <div key={e.key} className="spectral-tooltip-row">
                 <span className="spectral-swatch" style={{ background: SERIES_COLORS[e.slot] }} />
                 <span>{e.label}</span>
                 <span className="spectral-tooltip-value">
                   {formatValue(p?.value ?? null)}
-                  {p && p.value !== null ? ` · ${p.nhits} hits` : ''}
+                  {p?.interpolated ? ' (estimated)' : ''}
                 </span>
               </div>
             );
@@ -458,6 +604,10 @@ function SpectrumChart({ entries, mode }: { entries: PlottedEntry[]; mode: YScal
 
 function SpectrumTable({ entries }: { entries: PlottedEntry[] }) {
   const channels = entries[0].data.points;
+  const plottedSeries = useMemo(
+    () => entries.map((entry) => interpolateMissingFlux(entry.data.points)),
+    [entries],
+  );
   return (
     <details className="spectral-table">
       <summary>Data table ({channels.length} channels)</summary>
@@ -481,9 +631,14 @@ function SpectrumTable({ entries }: { entries: PlottedEntry[] }) {
                 <td>{c.channel}</td>
                 <td>D{c.detector}</td>
                 <td>{c.wavelength_um.toFixed(3)}</td>
-                {entries.map((e) => (
-                  <td key={e.key}>{formatValue(e.data.points[i]?.value ?? null)}</td>
-                ))}
+                {entries.map((e, entryIndex) => {
+                  const p = plottedSeries[entryIndex][i];
+                  return (
+                    <td key={e.key}>
+                      {formatValue(p?.value ?? null)}{p?.interpolated ? ' (estimated)' : ''}
+                    </td>
+                  );
+                })}
               </tr>
             ))}
           </tbody>

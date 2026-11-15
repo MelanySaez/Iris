@@ -84,7 +84,7 @@ describe('SpectralLab', () => {
     render(<SpectralLab />);
 
     fireEvent.click(catalogButton('M101 field'));
-    expect(screen.getByText('Reading cube tile…')).toBeTruthy();
+    expect(screen.getByText('Loading cube spectrum…')).toBeTruthy();
     expect(catalogButton('M101 field').hasAttribute('disabled')).toBe(true);
 
     await act(async () => pending.resolve(spectrum([10, null, 30], 2858)));
@@ -92,6 +92,82 @@ describe('SpectralLab', () => {
     expect(screen.getByText('2/3 channels · tile 2858')).toBeTruthy();
     expect(screen.getByRole('img', { name: /Spectra of M101 field/ })).toBeTruthy();
     expect(getSpectrum).toHaveBeenCalledWith(210.80227, 54.34895);
+  });
+
+  it('keeps an explicit loading status while a spectrum request is pending', () => {
+    getSpectrum.mockReturnValue(new Promise(() => {}));
+    render(<SpectralLab />);
+    fireEvent.click(catalogButton('M101 field'));
+
+    expect(screen.getByRole('status').textContent).toMatch(/Loading cube spectrum/);
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('renders positive estimates on the log axis', async () => {
+    getSpectrum.mockResolvedValue(spectrum([10, null, 100]));
+    render(<SpectralLab />);
+    await act(async () => fireEvent.click(catalogButton('M101 field')));
+    fireEvent.click(screen.getByRole('button', { name: 'Log' }));
+
+    expect(document.querySelector('.spectral-estimated-marker')).toBeTruthy();
+    expect(document.querySelector('.spectral-estimated-line')).toBeTruthy();
+  });
+
+  it('explains that nonpositive interpolated flux cannot be drawn on a log axis', async () => {
+    getSpectrum.mockResolvedValue(spectrum([-5, null, -1]));
+    render(<SpectralLab />);
+    await act(async () => fireEvent.click(catalogButton('M101 field')));
+    fireEvent.click(screen.getByRole('button', { name: 'Log' }));
+
+    expect(screen.getByText(/Interpolated estimate.*cannot be shown on a log axis/i)).toBeTruthy();
+    expect(document.querySelector('.spectral-estimated-marker')).toBeNull();
+    expect(screen.getByText('-3.0 (estimated)')).toBeTruthy();
+  });
+
+  it('supports reversible sidebar and chart zoom controls', async () => {
+    getSpectrum.mockResolvedValue(spectrum([10, 20, 30]));
+    render(<SpectralLab />);
+    await act(async () => fireEvent.click(catalogButton('M101 field')));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Hide sidebar' }));
+    expect(screen.queryByRole('complementary')).toBeNull();
+    expect(document.querySelector('#spectra-sidebar')?.getAttribute('aria-hidden')).toBe('true');
+    fireEvent.click(screen.getByRole('button', { name: 'Show sidebar' }));
+    expect(screen.getByRole('complementary')).toBeTruthy();
+    expect(document.querySelector('#spectra-sidebar')?.getAttribute('aria-hidden')).toBe('false');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Zoom in' }));
+    expect(screen.getByText('Zoom 1.5×')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Reset zoom' }));
+    expect(screen.getByText('Zoom 1.0×')).toBeTruthy();
+  });
+
+  it('does not expose NHITS in the primary hover flux readout', async () => {
+    getSpectrum.mockResolvedValue(spectrum([10, 20, 30]));
+    render(<SpectralLab />);
+    await act(async () => fireEvent.click(catalogButton('M101 field')));
+    const chart = screen.getByRole('img', { name: /Spectra of M101 field/ });
+    vi.spyOn(chart, 'getBoundingClientRect').mockReturnValue({
+      width: 720, height: 380, left: 0, top: 0, right: 720, bottom: 380, x: 0, y: 0,
+      toJSON: () => ({}),
+    });
+    fireEvent(chart, new MouseEvent('pointermove', { bubbles: true, clientX: 360, clientY: 100 }));
+    const tooltip = document.querySelector('.spectral-tooltip');
+    expect(tooltip).toBeTruthy();
+    expect(tooltip?.textContent ?? '').not.toMatch(/hits/i);
+  });
+
+  it('announces interpolated values and distinguishes estimates in the chart and table', async () => {
+    const response = spectrum([10, null, 30]);
+    expect(response.points[1].available).toBe(false);
+    getSpectrum.mockResolvedValue(response);
+    render(<SpectralLab />);
+    await act(async () => fireEvent.click(catalogButton('M101 field')));
+
+    expect(screen.getByText('Observed')).toBeTruthy();
+    expect(screen.getByText('Interpolated (estimated)')).toBeTruthy();
+    expect(document.querySelector('.spectral-estimated-marker')).toBeTruthy();
+    expect(screen.getByText('20.0 (estimated)')).toBeTruthy();
   });
 
   it('refuses the same position twice', async () => {

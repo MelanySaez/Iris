@@ -1,0 +1,179 @@
+.spectral-estimated-line {
+  fill: none;
+  stroke-dasharray: 5 4;
+  stroke-width: 2.5;
+  opacity: 0.9;
+}
+
+.spectral-estimated-marker {
+  fill: #0d1119;
+  stroke-width: 2;
+  stroke-dasharray: 2 1;
+}
+
+.spectral-estimate-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.9rem;
+  align-items: center;
+  margin: 0.15rem 0 0.4rem 4rem;
+  color: var(--text-muted, #a7b0c0);
+  font-size: 0.78rem;
+}
+
+.spectral-estimate-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.spectral-estimate-legend i {
+  display: inline-block;
+  width: 1.2rem;
+  height: 0;
+  border-top: 2px solid currentColor;
+}
+
+.spectral-estimate-legend .spectral-interpolated-key {
+  border-top-style: dashed;
+  border-top-width: 3px;
+}
+
+.spectral-estimate-legend .spectral-observed-key::after {
+  content: '';
+  display: block;
+  width: 0.35rem;
+  height: 0.35rem;
+  margin: -0.22rem auto 0;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.spectral-lab.sidebar-collapsed .spectral-main {
+  width: 100%;
+}
+
+.spectral-lab,
+.spectral-main,
+.spectral-chart {
+  min-width: 0;
+}
+
+.spectral-lab { overflow: hidden; }
+
+.spectral-sidebar {
+  box-sizing: border-box;
+  transition: width 220ms cubic-bezier(0.16, 1, 0.3, 1), flex-basis 220ms cubic-bezier(0.16, 1, 0.3, 1), padding 220ms ease, opacity 160ms ease;
+}
+
+.spectral-lab.sidebar-collapsed .spectral-sidebar {
+  width: 0;
+  flex-basis: 0;
+  padding-inline: 0;
+  border: 0;
+  opacity: 0;
+  visibility: hidden;
+}
+
+.spectral-sidebar-toggle {
+  z-index: 2;
+  display: flex;
+  flex: 0 0 34px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  min-height: 64px;
+  padding: 0.5rem 0.2rem;
+  border: 1px solid var(--sky-line);
+  border-top: 0;
+  border-bottom: 0;
+  background: var(--sky-raised);
+  color: var(--sky-muted);
+  font-size: 0.62rem;
+  cursor: pointer;
+}
+
+.spectral-sidebar-toggle:hover,
+.spectral-sidebar-toggle:focus-visible {
+  background: var(--sky-hover);
+  color: var(--sky-ink);
+}
+
+.spectral-sidebar-toggle svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+}
+
+.spectral-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.55rem 1rem;
+}
+
+.spectral-chart-zoom {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.35rem 0.5rem;
+  border-bottom: 1px solid var(--sky-line);
+  font-size: 0.78rem;
+  color: var(--sky-muted);
+}
+
+.spectral-chart-zoom .spectral-toggle:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.spectral-chart-hint {
+  margin-left: auto;
+}
+
+.spectral-chart svg {
+  max-width: 100%;
+  touch-action: none;
+  cursor: crosshair;
+}
+
+.spectral-chart svg.is-panning {
+  cursor: grabbing;
+  user-select: none;
+}
+
+.spectral-loading {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--sky-accent-strong);
+}
+
+.spectral-loading::before {
+  content: '';
+  width: 0.65rem;
+  height: 0.65rem;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: spectral-loading-spin 0.8s linear infinite;
+}
+
+@keyframes spectral-loading-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (max-width: 760px) {
+  .spectral-controls { gap: 0.45rem; }
+  .spectral-chart-zoom { flex-wrap: wrap; }
+  .spectral-chart-hint { flex-basis: 100%; margin-left: 0; }
+  .spectral-sidebar { max-width: min(300px, 70vw); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spectral-loading::before { animation: none; }
+  .spectral-sidebar { transition: none; }
+}

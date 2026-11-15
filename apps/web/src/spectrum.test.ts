@@ -17,6 +17,9 @@ import {
   niceTicks,
   parseCoordinates,
   spectrumKey,
+  interpolateMissingFlux,
+  zoomDomainAt,
+  panDomain,
 } from './spectrum';
 import type { CubeSpectrumPoint } from './types';
 
@@ -133,6 +136,52 @@ describe('lineSegments', () => {
     expect(lineSegments([point(1, 2, 2), point(0, 1, 1)], x, y)).toEqual([
       'M10.00,90.00 L20.00,80.00',
     ]);
+  });
+});
+
+describe('chart domain interactions', () => {
+  it('zooms around a pointer anchor in both linear and logarithmic domains', () => {
+    expect(zoomDomainAt([0, 100], 2, 0.25)).toEqual([12.5, 62.5]);
+    const logDomain = zoomDomainAt([1, 1000], 2, 0.25, true);
+    expect(logDomain[0]).toBeCloseTo(10 ** 0.375);
+    expect(logDomain[1]).toBeCloseTo(10 ** 1.875);
+  });
+
+  it('pans domains while clamping to valid bounds and keeping log values positive', () => {
+    expect(panDomain([20, 60], -0.5, [0, 100])).toEqual([0, 40]);
+    const panned = panDomain([10, 100], 0.5, [1, 1000], true);
+    expect(panned[0]).toBeGreaterThan(0);
+    expect(panned[1]).toBeLessThanOrEqual(1000);
+  });
+});
+
+describe('interpolateMissingFlux', () => {
+  it('linearly fills short interior null runs by wavelength without mutating raw points', () => {
+    const raw = [point(0, 1, 10), { ...point(1, 2, null), available: true }, point(2, 4, 30)];
+    const before = structuredClone(raw);
+    const result = interpolateMissingFlux(raw);
+    expect(result[0].value).toBe(10);
+    expect(result[1].value).toBeCloseTo(50 / 3);
+    expect(result[2].value).toBe(30);
+    expect(result[1].interpolated).toBe(true);
+    expect(result[0].interpolated).toBe(false);
+    expect(raw).toEqual(before);
+  });
+
+  it('interpolates nulls even when the endpoint marks them unavailable, but not edge gaps or long runs', () => {
+    const unavailable = { ...point(2, 3, null), available: false };
+    const raw = [
+      { ...point(0, 0, null), available: true }, point(1, 1, 10),
+      { ...point(2, 2, null), available: true }, unavailable,
+      point(4, 4, 50), { ...point(5, 5, null), available: true },
+      { ...point(6, 6, null), available: true }, { ...point(7, 7, null), available: true }, point(8, 8, 90),
+    ];
+    const values = interpolateMissingFlux(raw).map((p) => p.value);
+    expect(values[0]).toBeNull();
+    expect(values[1]).toBe(10);
+    expect(values[2]).toBeCloseTo(70 / 3);
+    expect(values[3]).toBeCloseTo(110 / 3);
+    expect(values.slice(4)).toEqual([50, null, null, null, 90]);
   });
 });
 
