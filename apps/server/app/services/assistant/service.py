@@ -321,7 +321,8 @@ class Assistant:
                 payload = SERVER_EXECUTORS[name](tool_input)
                 self.log.write("tool_call", **ids, name=name, input=tool_input, ok=True)
                 content = as_tool_data(payload)
-                patterns = detect_injection(content)
+                # Scan the payload itself: the <tool_data> wrapper would always match.
+                patterns = detect_injection(json.dumps(payload, ensure_ascii=False))
                 if patterns:
                     self.log.write(
                         "guardrail",
