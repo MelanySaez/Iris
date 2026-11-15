@@ -384,7 +384,15 @@ def test_object_names_outside_the_catalog_are_resolved_to_coordinates(api):
 
 
 @pytest.mark.parametrize(
-    ("size", "suggested"), [(None, 6.0), (0.2, 1.0), (12.5, 12.5), (199.5, 60.0)]
+    ("size", "suggested"),
+    [
+        (None, 6.0),
+        (0.2, 1.0),
+        (12.5, 12.5),
+        (199.5, 60.0),
+        (float("nan"), 6.0),
+        (float("inf"), 6.0),
+    ],
 )
 def test_resolved_objects_get_a_region_size_show_region_accepts(api, size, suggested):
     from unittest.mock import patch
@@ -435,6 +443,31 @@ def test_unknown_object_names_are_reported_to_the_model(api):
     assert content == "Error: No catalogue knows 'Nowhere-9'."
     failed = [e for e in events(assistant) if e.get("event") == "tool_call"]
     assert failed[0]["ok"] is False
+
+
+def test_replies_after_a_failed_tool_are_not_cached(api):
+    from unittest.mock import patch
+
+    from app.exceptions.domain import NameResolverUnavailableError
+
+    client, _, fake = api(
+        [
+            reply(
+                tool_block("resolve_object_name", {"name": "Andromeda"}, "t1"),
+                stop="tool_use",
+            ),
+            reply(text_block("The resolver is down right now.")),
+            reply(text_block("Second try answered by the model.")),
+        ]
+    )
+    with patch(
+        "app.services.assistant.tools.resolve_name",
+        side_effect=NameResolverUnavailableError("Name resolvers are unavailable."),
+    ):
+        chat(client, "show me Andromeda")
+    again = chat(client, "show me Andromeda").json()
+    assert again["cached"] is False
+    assert len(fake.calls) == 3
 
 
 def test_the_prompt_resolves_and_shows_named_objects_without_asking():

@@ -274,12 +274,13 @@ class Assistant:
                 for call in tool_calls:
                     if call.function.name in UNCACHEABLE_TOOLS:
                         cacheable = False
+                    content = self._execute_tool(ids, call, actions)
+                    if content.startswith("Error:"):
+                        # A failed tool (e.g. a resolver that is down for a
+                        # moment) must not have its answer reused from the cache.
+                        cacheable = False
                     convo.append(
-                        {
-                            "role": "tool",
-                            "tool_call_id": call.id,
-                            "content": self._execute_tool(ids, call, actions),
-                        }
+                        {"role": "tool", "tool_call_id": call.id, "content": content}
                     )
                 continue
 

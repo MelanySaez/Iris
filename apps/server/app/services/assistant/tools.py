@@ -8,6 +8,7 @@ call starts jobs, renames or deletes anything.
 from __future__ import annotations
 
 import json
+import math
 import unicodedata
 import uuid
 from contextvars import ContextVar
@@ -260,6 +261,8 @@ def resolve_object_name(tool_input: Any) -> dict[str, Any]:
     except AppError as exc:  # not found, invalid name or providers unavailable
         raise ToolInputError(exc.detail) from None
     size = found.get("size_arcmin")
+    if not isinstance(size, (int, float)) or not math.isfinite(size):
+        size = None  # unknown (also NaN or infinity, which JSON cannot carry)
     suggested = _REGION_DEFAULT if size is None else size
     return {
         # Text from external catalogues: cleaned and clearly marked as data.
