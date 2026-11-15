@@ -16,7 +16,6 @@ export interface HealthResponse {
   status: string;
   version: string;
   products: string[];
-  local_assets: boolean;
   network: string;
 }
 
@@ -75,7 +74,7 @@ export interface RegionResolveResponse {
   warning: string | null;
   products: Array<{
     id: string;
-    source: 'local' | 'remote';
+    source: 'remote';
     detector: number;
     band: string;
     obs_id: string;
@@ -121,7 +120,7 @@ export interface JobCutout {
   epoch: number;
   obs_id: string;
   date_iso: string;
-  source: 'local' | 'remote';
+  source: 'remote';
   uri?: string;
   version?: string;
   shape: [number, number];
@@ -142,7 +141,7 @@ export interface JobFrame {
   epoch: number;
   obs_id: string;
   date_iso: string;
-  source: 'local' | 'remote';
+  source: 'remote';
   width: number;
   height: number;
   url: string;

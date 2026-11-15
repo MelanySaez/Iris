@@ -1,6 +1,6 @@
 # Planet X — SPHEREx discovery lab
 
-The application now has **two separate workspaces**. The all-sky view uses authentic DR1 All-Sky Cube PNG HiPS tiles through the existing Aladin Lite service-worker adapter. Selecting a small region begins a backend coverage check and prefetch for a local DR1 individual spectral-image FITS. The spectral-image view uses that FITS, not the All-Sky PNG tile.
+The application now has **two separate workspaces**. The all-sky view uses authentic DR1 All-Sky Cube PNG HiPS tiles through the existing Aladin Lite service-worker adapter. Selecting a small region begins a backend IRSA TAP coverage check and prefetch for a remote DR1 spectral-image cutout. The spectral-image view uses that cutout, not the All-Sky PNG tile.
 
 ## Run both services
 
@@ -36,14 +36,14 @@ Records need the backend database; see `apps/server/README.md` (Database). Witho
 
 ## Try the first real spectral-image slice
 
-1. Select **Open local DR1 sample** in the sidebar. This moves Aladin to the footprint of the one local FITS and starts prefetch before opening the result.
-2. Open **Spectral image** while it loads to see progress and a skeleton; the image appears only once the FITS job is ready.
+1. Select a sky region with IRSA TAP coverage. The backend starts prefetch before opening the result.
+2. Open **Spectral image** while the remote cutout loads to see progress and a skeleton; the image appears only once the job is ready.
 3. IMAGE is loaded by default. Opt into VARIANCE and FLAGS in the inspector; each request is deduplicated by coordinates, size and product set.
 4. Click a detector pixel for its raw values and position-dependent wavelength lookup.
 
 The per-pixel `WCS-WAVE` value is **visualization-only**, not calibrated CWAVE/CBAND. The All-Sky Cube channel index does not automatically identify a unique wavelength across an individual LVF image.
 
-The mockup supplies layout direction only. Its generated stars, epochs, historical effects and catalog are not used. Arbitrary-region SIA discovery, calibrated per-pixel channel association, multi-FITS mosaics, precomputed object assets and real historical comparison remain pending. Regions outside the local FITS explicitly report unavailable coverage.
+The mockup supplies layout direction only. Its generated stars, epochs, historical effects and catalog are not used. Arbitrary-region SIA discovery, calibrated per-pixel channel association, multi-FITS mosaics, precomputed object assets and real historical comparison remain pending. Regions without remote IRSA TAP coverage report unavailable coverage.
 
 ## Search by name or catalogue code
 
@@ -92,6 +92,7 @@ cd ../web && pnpm test --run && pnpm typecheck && pnpm build
 ```
 
 ## Current audit update
+
 The mounted UI is `App` / `SkyWorkspace` / `PlateWorkspace`, using `/api/jobs`.
 Sky tiles now use a browser cache (128 entries / 64 MiB); after settling, up to
 16 neighbour requests warm recently observed tile paths, skipping channels 50/51.
@@ -103,10 +104,10 @@ or keyboard-focus the selection to remove it. Cutouts retain native pixels, with
 no silent 512-pixel crop. Region limit: 60 arcmin; multi-FITS mosaicking is pending.
 Backend logs expose request IDs/timing and job IDs/stages/cache hits; job snapshots
 include an execution trace. WCS-WAVE remains approximate.
-Validation: 65 frontend tests, typecheck/build pass. Backend: 15 pass / 11 fail
-because the configured local FITS fixture is absent; real cutout size/hover and
-multi-FITS behavior are NOT verified. Desktop screenshot covers loading UI only,
-not live sky interaction or mobile. Large Aladin bundle warning remains.
+Validation: see the backend and frontend test commands in their project READMEs.
+Real remote cutout size/hover and multi-FITS behavior still require a live IRSA
+integration check. Desktop screenshot covers loading UI only, not live sky
+interaction or mobile. Large Aladin bundle warning remains.
 
 Sky view update: the channel control now passes the selected virtual HiPS URL
 through Aladin Lite's documented `setImageLayer(url)` API. The stage reports

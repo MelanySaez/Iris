@@ -16,7 +16,6 @@ describe('api client', () => {
       status: 'ok',
       version: '0.2.0',
       products: ['DR1 All-Sky Cube HiPS'],
-      local_assets: true,
       network: 'configured',
     };
 

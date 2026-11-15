@@ -19,15 +19,15 @@ Branch: `main` (user explicitly requested direct local commits; no push or PR). 
 
 ## Tasks
 
-- T1 inline [complete]: scaffold dirs, move core/config/tracing/database and ORM, update imports. S1,S2,S7
-- T2 inline [complete]: split Pydantic models into `schemas/`. S2,S6,S7
-- T3 inline [complete]: repositories (selection, job snapshots, assistant log) + services split (jobs/queries). S3,S4
-- T4 inline [complete]: exceptions layer and replace service-level HTTPException. S3,S5,S6
-- T5 inline [complete]: api routes, deps, middleware, router, main, initial_data. S5,S6
-- T6 inline [partial]: alembic env, scripts, README, tests references. S7,S8
-- T7 inline [partial]: ruff + pytest verification. S9
-- T8 inline [complete]: typed `.env` settings and removal of local FITS runtime/configuration references. S6,S10,S11
-- T9 inline [complete]: update frontend catalog fallback and source types to match remote-only products. S6,S11
+- T1 inline [complete, commit 0c60d4b]: scaffold dirs, move core/config/tracing/database and ORM, update imports. S1,S2,S7
+- T2 inline [complete, commit 0c60d4b]: split Pydantic models into `schemas/`. S2,S6,S7
+- T3 inline [complete, commit 0c60d4b]: repositories (selection, job snapshots, assistant log) + services split (jobs/queries). S3,S4
+- T4 inline [complete, commit 0c60d4b]: exceptions layer and replace service-level HTTPException. S3,S5,S6
+- T5 inline [complete, commit 0c60d4b]: api routes, deps, middleware, router, main, initial_data. S5,S6
+- T6 inline [partial, commit 0c60d4b]: alembic env, scripts, README, tests references. S7,S8
+- T7 inline [partial, commit 0c60d4b]: ruff + pytest verification. S9
+- T8 inline [complete, commit 0c60d4b]: typed `.env` settings and removal of local FITS runtime/configuration references. S6,S10,S11
+- T9 inline [complete, commit subject `fix(web): remove obsolete local catalog fallback`]: update frontend catalog fallback and source types to match remote-only products. S6,S11
 
 ## Log
 
@@ -215,3 +215,4 @@ Branch: `main` (user explicitly requested direct local commits; no push or PR). 
 - L7: Verification: settings/discovery/channels/warm-catalog subset 15 passed; frontend Vitest 319 passed and typecheck passed; live Uvicorn `/api/health` and `/api/catalog` returned 200. Full backend pytest timed out after 30s in the TestClient-based suite; prior diagnostic showed even a minimal FastAPI TestClient request hangs in this environment. Ruff could not start because its Nix-linked executable fails with `GLIBC_PRIVATE` symbol lookup error. `git diff --check` and Python compileall passed.
 - L8: Alembic upgrade and SQL prestart were not executed to avoid mutating the configured database; runtime import/compile and live HTTP smoke checks passed instead.
 - L9 (user, 2026-11-15): "varios commits a main y ya está, nada del otro mundo".
+- L10: Committed the backend-layered refactor, typed settings, and local-FITS removal directly to `main` as `0c60d4b`; the frontend remote-only catalog adaptation is a separate consumer work unit.

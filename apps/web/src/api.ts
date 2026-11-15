@@ -241,16 +241,6 @@ export const api = {
 /** Curated reference objects defined in PLANET_X_V3.md Section 4 */
 export const CURATED_CATALOG_FALLBACK: CatalogObject[] = [
   {
-    id: 'local-dr1-sample',
-    name: 'Local DR1 sample',
-    ra_deg: 270.693033,
-    dec_deg: 61.876516,
-    type: 'SPHEREx field',
-    default_size_arcmin: 6,
-    description: 'Covered by the local D2 FITS',
-    precomputed: true,
-  },
-  {
     id: 'm101-field',
     name: 'M101 field',
     ra_deg: 210.80227,
