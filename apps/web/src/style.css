@@ -378,6 +378,8 @@ button:disabled {
   gap: 20px;
   padding: 16px;
   overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--sky-line-strong) transparent;
   z-index: 20;
 }
 
@@ -394,6 +396,27 @@ button:disabled {
   letter-spacing: 0.06em;
   color: var(--sky-faint);
   margin: 0;
+}
+
+.rail-help {
+  margin: 0;
+  color: var(--sky-muted);
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+
+.sky-rail > .rail-section + .rail-section {
+  padding-top: 18px;
+  border-top: 1px solid var(--sky-line);
+}
+
+.recent-shortcuts {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 6px;
+  padding-top: 12px;
+  border-top: 1px solid var(--sky-line);
 }
 
 .search-box {
@@ -435,11 +458,27 @@ button:disabled {
   gap: 2px;
   max-height: 220px;
   overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--sky-line-strong) transparent;
 }
 
 .catalog-layers-section {
   padding-bottom: 12px;
-  border-bottom: 1px solid var(--sky-line);
+}
+
+.catalog-layer-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.catalog-group-label {
+  margin: 8px 0 2px;
+  color: var(--sky-faint);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
 .catalog-layer-toggle {

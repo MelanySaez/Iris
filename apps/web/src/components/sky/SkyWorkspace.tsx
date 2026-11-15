@@ -862,6 +862,38 @@ export function SkyWorkspace({
     );
   });
 
+  const catalogLayers = [
+    {
+      id: 'featured', name: 'Featured objects', description: 'Five objects available offline',
+      visible: localCatalogVisible, disabled: !aladinReady, busy: false,
+      status: localCatalogStatus, onToggle: handleLocalCatalogVisibility,
+    },
+    {
+      id: 'simbad', name: 'SIMBAD HiPS', description: 'Known objects in the visible sky',
+      visible: simbadCatalogVisible, disabled: !aladinReady || simbadCatalogLoading,
+      busy: simbadCatalogLoading, status: simbadCatalogStatus,
+      onToggle: (visible: boolean) => { void handleSimbadCatalogVisibility(visible); },
+    },
+    {
+      id: 'gaia', name: 'Gaia DR3', description: 'Astrometric sources in this sky region',
+      visible: tocatsLayerStates.gaia.visible, disabled: !aladinReady,
+      busy: tocatsLayerStates.gaia.phase === 'waiting' || tocatsLayerStates.gaia.phase === 'loading',
+      status: tocatsLayerStates.gaia.message,
+      onToggle: (visible: boolean) => handleTocatsLayerVisibility('gaia', visible),
+    },
+    {
+      id: 'catwise', name: 'CatWISE2020', description: 'Infrared sources in the visible sky region',
+      visible: tocatsLayerStates.catwise.visible, disabled: !aladinReady,
+      busy: tocatsLayerStates.catwise.phase === 'waiting' || tocatsLayerStates.catwise.phase === 'loading',
+      status: tocatsLayerStates.catwise.message,
+      onToggle: (visible: boolean) => handleTocatsLayerVisibility('catwise', visible),
+    },
+  ];
+  const orderedCatalogLayers = [
+    ...catalogLayers.filter((layer) => layer.visible),
+    ...catalogLayers.filter((layer) => !layer.visible),
+  ];
+
   return (
     <div className="sky-workspace">
       {/* Mobile drawer toggle */}
@@ -869,186 +901,19 @@ export function SkyWorkspace({
         type="button"
         className="mobile-rail-toggle"
         aria-expanded={isRailOpen}
-        aria-label="Toggle object catalog and coordinates"
+        aria-controls="sky-controls"
+        aria-label="Toggle sky controls"
         onClick={() => setIsRailOpen((prev) => !prev)}
       >
-        {isRailOpen ? '✕ Close Catalog' : '☰ Explore Objects'}
+        {isRailOpen ? 'Close controls' : 'Explore sky'}
       </button>
 
       {/* Left Rail (280px) */}
-      <aside className={`sky-rail ${isRailOpen ? 'open' : ''}`} aria-label="Explore and Search">
-        <section className="rail-section catalog-layers-section" aria-label="Catalog layers">
-          <h3 className="rail-label">Catalog layers</h3>
-          <label className="catalog-layer-toggle">
-            <input
-              type="checkbox"
-              checked={localCatalogVisible}
-              disabled={!aladinReady}
-              onChange={(event) => handleLocalCatalogVisibility(event.target.checked)}
-              aria-describedby="featured-catalog-status"
-            />
-            <span className="catalog-layer-swatch featured" aria-hidden="true" />
-            <span className="catalog-layer-copy">
-              <span>Featured objects</span>
-              <small>5 local objects</small>
-            </span>
-          </label>
-          <p id="featured-catalog-status" className="catalog-layer-status" role="status">
-            {localCatalogStatus}
-          </p>
-
-          <label className="catalog-layer-toggle">
-            <input
-              type="checkbox"
-              checked={simbadCatalogVisible}
-              disabled={!aladinReady || simbadCatalogLoading}
-              onChange={(event) => void handleSimbadCatalogVisibility(event.target.checked)}
-              aria-describedby="simbad-catalog-status"
-            />
-            <span className="catalog-layer-swatch simbad" aria-hidden="true" />
-            <span className="catalog-layer-copy">
-              <span>SIMBAD HiPS</span>
-              <small>Progressive catalog</small>
-            </span>
-          </label>
-          <p id="simbad-catalog-status" className="catalog-layer-status" role="status" aria-live="polite">
-            {simbadCatalogStatus}
-          </p>
-
-          <label className="catalog-layer-toggle">
-            <input
-              type="checkbox"
-              checked={tocatsLayerStates.gaia.visible}
-              disabled={!aladinReady}
-              onChange={(event) => handleTocatsLayerVisibility('gaia', event.target.checked)}
-              aria-describedby="gaia-catalog-status"
-            />
-            <span className="catalog-layer-swatch gaia" aria-hidden="true" />
-            <span className="catalog-layer-copy">
-              <span>Gaia DR3</span>
-              <small>Regional TOCats query</small>
-            </span>
-          </label>
-          <p
-            id="gaia-catalog-status"
-            className="catalog-layer-status"
-            role="status"
-            aria-live="polite"
-            aria-busy={tocatsLayerStates.gaia.phase === 'waiting' || tocatsLayerStates.gaia.phase === 'loading'}
-          >
-            {tocatsLayerStates.gaia.message}
-          </p>
-
-          <label className="catalog-layer-toggle">
-            <input
-              type="checkbox"
-              checked={tocatsLayerStates.catwise.visible}
-              disabled={!aladinReady}
-              onChange={(event) => handleTocatsLayerVisibility('catwise', event.target.checked)}
-              aria-describedby="catwise-catalog-status"
-            />
-            <span className="catalog-layer-swatch catwise" aria-hidden="true" />
-            <span className="catalog-layer-copy">
-              <span>CatWISE2020</span>
-              <small>Regional TOCats query</small>
-            </span>
-          </label>
-          <p
-            id="catwise-catalog-status"
-            className="catalog-layer-status"
-            role="status"
-            aria-live="polite"
-            aria-busy={tocatsLayerStates.catwise.phase === 'waiting' || tocatsLayerStates.catwise.phase === 'loading'}
-          >
-            {tocatsLayerStates.catwise.message}
-          </p>
-        </section>
-
-        {/* Search */}
-        <section className="rail-section">
-          <label className="rail-label" htmlFor="catalog-search">
-            Search objects
-          </label>
-          <div className="search-box">
-            <span className="search-icon" aria-hidden="true">
-              🔍
-            </span>
-            <input
-              id="catalog-search"
-              type="search"
-              className="rail-input search-input"
-              placeholder="Search catalog or fields..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
-          </div>
-
-          <div className="catalog-list" role="list" aria-label="Curated objects">
-            {filteredCatalog.map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                className="catalog-row"
-                onClick={() => {
-                  handleGoto(
-                    {
-                      ra_deg: item.ra_deg,
-                      dec_deg: item.dec_deg,
-                      size_arcmin: item.default_size_arcmin,
-                    },
-                    item.name,
-                  );
-                  setIsRailOpen(false);
-                }}
-              >
-                <div className="catalog-row-top">
-                  <span className="object-name">{item.name}</span>
-                  {item.precomputed && (
-                    <span className="chip-precomputed" title="Precomputed spectral products ready">
-                      Warmed
-                    </span>
-                  )}
-                </div>
-                <div className="catalog-row-bottom">
-                  <span className="object-type">{item.type}</span>
-                  <span className="object-coords num">
-                    {item.ra_deg.toFixed(2)}°, {item.dec_deg.toFixed(2)}°
-                  </span>
-                </div>
-              </button>
-            ))}
-            {filteredCatalog.length === 0 && (
-              <p className="rail-empty">No objects match &ldquo;{searchQuery}&rdquo;</p>
-            )}
-          </div>
-        </section>
-
-        {/* Recent selections */}
-        {recentSelections.length > 0 && (
-          <section className="rail-section">
-            <h3 className="rail-label">Recent selections</h3>
-            <div className="recent-list">
-              {recentSelections.map((recent) => (
-                <button
-                  key={recent.id}
-                  type="button"
-                  className="recent-chip"
-                  onClick={() => {
-                    handleGoto(recent, recent.name);
-                    setIsRailOpen(false);
-                  }}
-                >
-                  <span className="recent-name">{recent.name}</span>
-                  <span className="recent-meta num">{recent.size_arcmin}′</span>
-                </button>
-              ))}
-            </div>
-          </section>
-        )}
-
+      <aside id="sky-controls" className={`sky-rail ${isRailOpen ? 'open' : ''}`} aria-label="Explore and Search">
         {/* Coordinates Form */}
-        <section className="rail-section">
-          <h3 className="rail-label">Go to coordinates</h3>
+        <section className="rail-section position-section" aria-label="Choose a region">
+          <h3 className="rail-label">Choose a region</h3>
+          <p className="rail-help">Enter ICRS coordinates or select a region on the map.</p>
           <form className="coord-form" onSubmit={handleFormSubmit}>
             <div className="coord-grid">
               <label>
@@ -1095,6 +960,128 @@ export function SkyWorkspace({
               Go to region
             </button>
           </form>
+                {/* Recent selections */}
+        {recentSelections.length > 0 && (
+          <div className="recent-shortcuts">
+            <h4 className="rail-label">Recent selections</h4>
+            <div className="recent-list">
+              {recentSelections.map((recent) => (
+                <button
+                  key={recent.id}
+                  type="button"
+                  className="recent-chip"
+                  onClick={() => {
+                    handleGoto(recent, recent.name);
+                    setIsRailOpen(false);
+                  }}
+                >
+                  <span className="recent-name">{recent.name}</span>
+                  <span className="recent-meta num">{recent.size_arcmin}′</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        </section>
+
+        {/* Search */}
+        <section className="rail-section object-search-section" aria-label="Find objects">
+          <label className="rail-label" htmlFor="catalog-search">
+            Find objects
+          </label>
+          <p className="rail-help">Browse the featured objects available offline.</p>
+          <div className="search-box">
+            <span className="search-icon" aria-hidden="true">
+              🔍
+            </span>
+            <input
+              id="catalog-search"
+              type="search"
+              className="rail-input search-input"
+              placeholder="Search featured objects..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+          </div>
+
+          <div className="catalog-list" role="list" aria-label="Curated objects">
+            {filteredCatalog.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                className="catalog-row"
+                onClick={() => {
+                  handleGoto(
+                    {
+                      ra_deg: item.ra_deg,
+                      dec_deg: item.dec_deg,
+                      size_arcmin: item.default_size_arcmin,
+                    },
+                    item.name,
+                  );
+                  setIsRailOpen(false);
+                }}
+              >
+                <div className="catalog-row-top">
+                  <span className="object-name">{item.name}</span>
+                  {item.precomputed && (
+                    <span className="chip-precomputed" title="Precomputed spectral products ready">
+                      Warmed
+                    </span>
+                  )}
+                </div>
+                <div className="catalog-row-bottom">
+                  <span className="object-type">{item.type}</span>
+                  <span className="object-coords num">
+                    {item.ra_deg.toFixed(2)}°, {item.dec_deg.toFixed(2)}°
+                  </span>
+                </div>
+              </button>
+            ))}
+            {filteredCatalog.length === 0 && (
+              <p className="rail-empty">No objects match &ldquo;{searchQuery}&rdquo;</p>
+            )}
+          </div>
+        </section>
+
+        <section className="rail-section catalog-layers-section" aria-label="Map layers">
+          <h3 className="rail-label">Map layers</h3>
+          <p className="rail-help">Choose which catalog markers appear on the map.</p>
+          <div className="catalog-layer-list">
+            {orderedCatalogLayers.map((layer, index) => (
+              <div className="catalog-layer-entry" key={layer.id}>
+                {(index === 0 || layer.visible !== orderedCatalogLayers[index - 1].visible) && (
+                  <h4 className="catalog-group-label">
+                    {layer.visible ? 'Enabled layers' : 'Available layers'}
+                  </h4>
+                )}
+                <label className="catalog-layer-toggle">
+                  <input
+                    type="checkbox"
+                    checked={layer.visible}
+                    disabled={layer.disabled}
+                    onChange={(event) => layer.onToggle(event.target.checked)}
+                    aria-describedby={`${layer.id}-catalog-status`}
+                  />
+                  <span className={`catalog-layer-swatch ${layer.id}`} aria-hidden="true" />
+                  <span className="catalog-layer-copy">
+                    <span>{layer.name}</span>
+                    <small>{layer.description}</small>
+                  </span>
+                </label>
+                <p
+                  id={`${layer.id}-catalog-status`}
+                  className="catalog-layer-status"
+                  role="status"
+                  aria-live="polite"
+                  aria-busy={layer.busy}
+                >
+                  {layer.status}
+                </p>
+              </div>
+            ))}
+          </div>
         </section>
       </aside>
 
