@@ -483,6 +483,7 @@ export function SkyWorkspace({
           showGotoControl: false,
           showZoomControl: false,
           showFullscreenControl: false,
+          showContextMenu: false,
         });
 
         viewerRef.current = viewer;
@@ -1102,6 +1103,15 @@ export function SkyWorkspace({
         <div
           ref={mapRef}
           className={`aladin-shell ${mode === 'region' ? 'mode-region' : ''}`}
+          onMouseDownCapture={(event) => {
+            if (event.button !== 2) return;
+            event.preventDefault();
+            event.stopPropagation();
+          }}
+          onContextMenuCapture={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+          }}
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
@@ -1111,6 +1121,8 @@ export function SkyWorkspace({
           {selectedRegion && projectedRegion && (() => {
             const cx = projectedRegion.reduce((sum, p) => sum + p[0], 0) / 4;
             const cy = projectedRegion.reduce((sum, p) => sum + p[1], 0) / 4;
+            const moveX = (projectedRegion[0][0] + projectedRegion[1][0]) / 2;
+            const moveY = (projectedRegion[0][1] + projectedRegion[1][1]) / 2;
             // Place the clear button just outside the first corner so it never covers a resize handle.
             const [x0, y0] = projectedRegion[0];
             const dist = Math.hypot(x0 - cx, y0 - cy) || 1;
@@ -1127,9 +1139,18 @@ export function SkyWorkspace({
                 <polygon
                   className="region-body"
                   points={projectedRegion.map(([x, y]) => `${x},${y}`).join(' ')}
-                  aria-label="Drag to move the selected region"
-                  onPointerDown={handleRegionEditStart('move')}
                 />
+                <g
+                  className="region-move-handle"
+                  transform={`translate(${moveX} ${moveY})`}
+                  onPointerDown={handleRegionEditStart('move')}
+                >
+                  <title>Drag this grip to move the selected region</title>
+                  <rect x="-22" y="-13" width="44" height="26" rx="13" />
+                  <circle cx="-7" cy="0" r="2" />
+                  <circle cx="0" cy="0" r="2" />
+                  <circle cx="7" cy="0" r="2" />
+                </g>
                 {projectedRegion.map(([x, y], i) => (
                   <circle
                     key={i}
@@ -1293,7 +1314,7 @@ export function SkyWorkspace({
                 <span className="num">
                   {formatRa(selectedRegion.ra_deg)} {formatDec(selectedRegion.dec_deg)} · {selectedRegion.size_arcmin.toFixed(1)}′
                 </span>
-                <span className="region-confirm-hint">Drag to move, corners to resize</span>
+                <span className="region-confirm-hint">Pan inside · top grip moves · corners resize</span>
                 <button type="button" className="region-confirm-btn" onClick={handleConfirmRegion}>
                   Confirm region
                 </button>
