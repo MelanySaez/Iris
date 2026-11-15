@@ -98,7 +98,8 @@ describe('searchNearbyCatalogs', () => {
 
     expect(fetcher).toHaveBeenCalledTimes(1);
     const requestUrl = new URL(fetcher.mock.calls[0][0] as string);
-    expect(requestUrl.origin + requestUrl.pathname).toBe('https://simbad.cds.unistra.fr/simbad/sim-tap/sync');
+    // The CDS primary is down; SIMBAD is queried through the Harvard CfA mirror.
+    expect(requestUrl.origin + requestUrl.pathname).toBe('https://simbad.cfa.harvard.edu/simbad/sim-tap/sync');
     expect(decodeURIComponent(requestUrl.searchParams.get('QUERY') ?? '')).toContain("CIRCLE('ICRS', 101, -16, 0.2)");
     expect(results[0].sources[0]).toMatchObject({
       id: '* alf CMa', catalogId: 'simbad', raDeg: 101.287, decDeg: -16.716,

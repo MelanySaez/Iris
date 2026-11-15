@@ -31,6 +31,14 @@ export const TOUR_STEPS: Array<Step & { id: string }> = [
     content: 'Drag to move across the sky and scroll to zoom. This is the SPHEREx all-sky map.',
   },
   {
+    id: 'nearby',
+    target: '[data-tour="map"]',
+    placement: 'center',
+    title: 'Search around any point',
+    content:
+      'Right-click anywhere on the sky to pin that position, then choose “Search nearby catalogs” to list the objects within half a degree in the catalog layers you have turned on.',
+  },
+  {
     id: 'channels',
     target: '[data-tour="channels"]',
     placement: 'top',
