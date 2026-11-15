@@ -66,6 +66,39 @@ describe('Landing', () => {
     expect(within(card).queryByRole('link')).toBeNull();
   });
 
+  it('introduces the team with each member linking to their GitHub profile', () => {
+    render(<Landing onExplore={vi.fn()} onTour={vi.fn()} />);
+    const team = screen.getByRole('region', { name: 'The team' });
+    const links = within(team).getAllByRole('link');
+    expect(links.map((a) => a.textContent?.trim())).toEqual([
+      expect.stringContaining('Melany Marcela Saez Acuña'),
+      expect.stringContaining('Juan Diego Pérez Navarro'),
+      expect.stringContaining('Aarón Dalí López Fortich'),
+      expect.stringContaining('Gabriel Alejandro Mantilla Clavijo'),
+    ]);
+    expect(links.map((a) => a.getAttribute('href'))).toEqual([
+      'https://github.com/MelanySaez',
+      'https://github.com/dosquisd',
+      'https://github.com/AaronDLF',
+      'https://github.com/Gavimantilla',
+    ]);
+    for (const link of links) expect(link.getAttribute('target')).toBe('_blank');
+  });
+
+  it('shows each member as a plain card: name and GitHub handle, no picture', () => {
+    render(<Landing onExplore={vi.fn()} onTour={vi.fn()} />);
+    const team = screen.getByRole('region', { name: 'The team' });
+    expect(team.querySelector('img, .landing-team-avatar')).toBeNull();
+    const [first] = within(team).getAllByRole('link');
+    expect(first.textContent).toBe('Melany Marcela Saez Acuña@MelanySaez');
+  });
+
+  it('jumps to the team from the top navigation', () => {
+    render(<Landing onExplore={vi.fn()} onTour={vi.fn()} />);
+    const nav = screen.getByRole('navigation', { name: 'Landing' });
+    expect(within(nav).getAllByRole('button').map((b) => b.textContent)).toEqual(['About', 'Team', 'Resources']);
+  });
+
   it('links to the official sources in a new tab and states it is not an official NASA app', () => {
     render(<Landing onExplore={vi.fn()} onTour={vi.fn()} />);
     const footer = screen.getByRole('contentinfo');

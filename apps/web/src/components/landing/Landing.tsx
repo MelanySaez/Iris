@@ -58,6 +58,14 @@ const CATALOG_LAYERS = [
   { name: 'Iris featured objects', note: 'A short list of famous targets to start with.', href: null },
 ] as const;
 
+/** The people behind Iris, in the order the team chose. */
+const TEAM = [
+  { name: 'Melany Marcela Saez Acuña', github: 'MelanySaez' },
+  { name: 'Juan Diego Pérez Navarro', github: 'dosquisd' },
+  { name: 'Aarón Dalí López Fortich', github: 'AaronDLF' },
+  { name: 'Gabriel Alejandro Mantilla Clavijo', github: 'Gavimantilla' },
+] as const;
+
 const RESOURCES = [
   { label: 'SPHEREx mission', note: 'NASA', href: 'https://science.nasa.gov/mission/spherex/' },
   { label: 'SPHEREx at IRSA', note: 'Data and tools', href: 'https://irsa.ipac.caltech.edu/Missions/spherex.html' },
@@ -136,6 +144,9 @@ export function Landing({ onExplore, onTour, leaving = false, onExited }: Landin
         <nav aria-label="Landing">
           <button type="button" onClick={() => scrollTo('landing-context')}>
             About
+          </button>
+          <button type="button" onClick={() => scrollTo('landing-team')}>
+            Team
           </button>
           <button type="button" onClick={() => scrollTo('landing-resources')}>
             Resources
@@ -219,6 +230,21 @@ export function Landing({ onExplore, onTour, leaving = false, onExited }: Landin
             <path d="M4 12 12 4M6 4h6v6" />
           </svg>
         </button>
+      </section>
+
+      <section id="landing-team" className="landing-team" aria-labelledby="landing-team-title">
+        <h2 id="landing-team-title">The team</h2>
+        <p className="landing-team-lede">The people who built Iris for NASA Space Apps 2026.</p>
+        <ul>
+          {TEAM.map((member) => (
+            <li key={member.github}>
+              <a href={`https://github.com/${member.github}`} {...external}>
+                <span className="landing-team-name">{member.name}</span>
+                <span className="landing-team-handle">@{member.github}</span>
+              </a>
+            </li>
+          ))}
+        </ul>
       </section>
 
       <footer id="landing-resources" className="landing-footer">
