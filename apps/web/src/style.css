@@ -3887,7 +3887,35 @@ p.name-suggestion-error {
 .spectral-subheading-note { margin: 2px 0 10px; font-size: 11.5px; color: var(--sky-faint); }
 .spectral-subheading-coords { margin-top: 18px; margin-bottom: 8px; padding-top: 14px; border-top: 1px solid var(--sky-line); }
 .spectral-subheading-search { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--sky-line); }
-/* Featured objects: a native disclosure, collapsed by default. */
+/* Featured objects: a native disclosure, collapsed by default, on a lightly shaded card. */
+.spectral-featured {
+  padding: 10px 12px;
+  border: 1px solid var(--sky-line);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.025);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  interpolate-size: allow-keywords;
+}
+/* Eased open/close where ::details-content is supported; older browsers just toggle. */
+.spectral-featured::details-content {
+  block-size: 0;
+  opacity: 0;
+  overflow: hidden;
+  transition: block-size 220ms ease, opacity 220ms ease, content-visibility 220ms allow-discrete;
+}
+.spectral-featured[open]::details-content { block-size: auto; opacity: 1; }
+.spectral-featured .spectral-catalog { padding-top: 10px; }
+/* The list also fades and slides in on open, in every browser. */
+.spectral-featured[open] .spectral-catalog { animation: spectral-featured-reveal 220ms ease-out; }
+@keyframes spectral-featured-reveal {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: none; }
+}
+.spectral-featured > summary .spectral-subheading-note { margin-bottom: 0; }
+@media (prefers-reduced-motion: reduce) {
+  .spectral-featured::details-content, .spectral-featured-toggle { transition: none; }
+  .spectral-featured[open] .spectral-catalog { animation: none; }
+}
 .spectral-featured > summary { display: grid; grid-template-columns: 1fr auto; column-gap: 8px; align-items: center; cursor: pointer; list-style: none; }
 .spectral-featured > summary::-webkit-details-marker { display: none; }
 .spectral-featured > summary .spectral-subheading-note { display: block; grid-column: 1; }
