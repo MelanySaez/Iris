@@ -62,6 +62,10 @@ class ModelUnavailable(Exception):
     """The provider could not answer (network, auth, rate limit, server error)."""
 
 
+class MalformedResponse(Exception):
+    """The provider answered without a usable choice or message."""
+
+
 def _usage(response: Any) -> dict[str, int]:
     usage = getattr(response, "usage", None)
     details = getattr(usage, "prompt_tokens_details", None)
@@ -136,7 +140,7 @@ class Assistant:
 
         try:
             reply, actions, cacheable = self._run(ids, messages, context)
-        except openai.APIError as exc:
+        except (openai.APIError, MalformedResponse) as exc:
             status = getattr(exc, "status_code", None)
             self.log.write("error", **ids, kind=type(exc).__name__, status=status)
             raise ModelUnavailable(type(exc).__name__) from exc
@@ -220,8 +224,12 @@ class Assistant:
         for round_no in range(1, self.max_tool_rounds + 1):
             started = time.perf_counter()
             response = self.client.chat.completions.create(**params, messages=convo)
-            choice = response.choices[0]
-            message, finish = choice.message, choice.finish_reason
+            # Some OpenAI-compatible gateways return no choices on upstream errors.
+            choices = getattr(response, "choices", None) or []
+            message = getattr(choices[0], "message", None) if choices else None
+            if message is None:
+                raise MalformedResponse()
+            finish = choices[0].finish_reason
             self.log.write(
                 "model_call",
                 **ids,

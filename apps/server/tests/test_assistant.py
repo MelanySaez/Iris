@@ -284,6 +284,23 @@ def test_tool_loop_is_capped(api):
     assert any(e.get("kind") == "tool_round_limit" for e in events(assistant))
 
 
+@pytest.mark.parametrize(
+    "choices",
+    [[], [SimpleNamespace(message=None, finish_reason="stop")]],
+    ids=["no_choices", "no_message"],
+)
+def test_malformed_provider_responses_are_logged_and_answer_502(api, choices):
+    broken = SimpleNamespace(model="test-model", choices=choices, usage=None)
+    client, assistant, _ = api([broken])
+    resp = chat(client, "hello")
+    assert resp.status_code == 502
+    assert "MalformedResponse" in resp.json()["detail"]
+    assert any(
+        e.get("event") == "error" and e.get("kind") == "MalformedResponse"
+        for e in events(assistant)
+    )
+
+
 def test_refusals_are_answered_safely(api):
     client, assistant, _ = api([reply(stop="refusal")])
     body = chat(client, "something disallowed").json()
