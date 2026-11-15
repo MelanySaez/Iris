@@ -19,7 +19,7 @@ export function TopBar({ currentRoute, activeJobId, onNavigate }: TopBarProps) {
       <div className="topbar-left">
         <div className="brand" onClick={() => onNavigate('#/sky')} role="button" tabIndex={0}>
           <span className="brand-logo"><PlanetIcon /></span>
-          <strong className="brand-name">Planet X</strong>
+          <strong className="brand-name">Iris</strong>
           <span className="brand-sub">SPHEREx Explorer</span>
         </div>
         <span className="provenance-chip" title="Official SPHEREx DR1 Data Collection">
