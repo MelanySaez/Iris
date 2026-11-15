@@ -19,6 +19,9 @@ vi.mock('./api', async (importOriginal) => {
       ...actual.api,
       getHealth: vi.fn().mockResolvedValue({ status: 'ok' }),
       listSelections: vi.fn().mockResolvedValue({ items: [], next_before: null }),
+      createJob: vi.fn(),
+      setConsent: vi.fn().mockResolvedValue({ level: 'necessary', records_enabled: true }),
+      claimSelections: vi.fn().mockResolvedValue({ claimed: 1 }),
     },
   };
 });
@@ -56,11 +59,22 @@ const recorded: SelectionSummary = {
   last_seen_at: '2026-11-14T12:00:00Z',
 };
 
+function setConsentCookie(value: string | null) {
+  document.cookie = value === null
+    ? 'iris_consent=; max-age=0; path=/'
+    : `iris_consent=${value}; path=/`;
+}
+
 describe('App workspace switch', () => {
   beforeEach(() => {
     window.location.hash = '#/sky';
+    // These tests use Records as a browser that already accepted cookies.
+    setConsentCookie('necessary');
   });
-  afterEach(cleanup);
+  afterEach(() => {
+    cleanup();
+    setConsentCookie(null);
+  });
 
   it('opens the Records workspace from the top bar', async () => {
     render(<App />);
@@ -213,5 +227,55 @@ describe('App workspace switch', () => {
     expect(api.assistantChat).toHaveBeenCalledWith(
       expect.objectContaining({ context: expect.objectContaining({ workspace: 'sky' }) }),
     );
+  });
+});
+
+describe('App cookie consent', () => {
+  beforeEach(() => {
+    window.location.hash = '#/sky';
+    setConsentCookie(null);
+    vi.clearAllMocks();
+    vi.mocked(api.createJob).mockResolvedValue({ id: 'early-job' } as Awaited<
+      ReturnType<typeof api.createJob>
+    >);
+  });
+  afterEach(() => {
+    cleanup();
+    setConsentCookie(null);
+  });
+
+  it('asks for consent in a footer bar and recovers selections made before accepting', async () => {
+    render(<App />);
+    expect(screen.getByRole('region', { name: 'Cookie consent' })).toBeTruthy();
+
+    const { onStartJob } = skyProps.mock.calls.at(-1)![0] as {
+      onStartJob: (req: unknown) => Promise<void>;
+    };
+    await act(async () => {
+      await onStartJob({ ra_deg: 1, dec_deg: 2, size_arcmin: 6, channels: [44] });
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Accept necessary' }));
+    });
+
+    expect(api.setConsent).toHaveBeenCalledWith('necessary');
+    expect(api.claimSelections).toHaveBeenCalledWith(['early-job']);
+    expect(screen.queryByRole('region', { name: 'Cookie consent' })).toBeNull();
+  });
+
+  it('tells Records visitors that selections cannot be saved without cookies', async () => {
+    setConsentCookie('none');
+    window.location.hash = '#/records';
+    render(<App />);
+
+    expect(screen.queryByRole('region', { name: 'Cookie consent' })).toBeNull();
+    expect(screen.getByRole('status').textContent).toContain(
+      'Your selections cannot be saved without cookies.',
+    );
+    expect(api.listSelections).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cookie settings' }));
+    expect(screen.getByRole('region', { name: 'Cookie consent' })).toBeTruthy();
   });
 });

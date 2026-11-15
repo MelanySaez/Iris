@@ -1,4 +1,5 @@
 import type { AssistantAction, AssistantUiContext } from './assistant';
+import type { ConsentLevel } from './consent';
 import type {
   CatalogObject,
   CatalogResponse,
@@ -235,6 +236,24 @@ export const api = {
 
   async deleteSelection(id: string): Promise<void> {
     return request<void>(`/api/selections/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  },
+
+  /** Store the cookie choice; accepting makes the backend issue the owner cookie. */
+  async setConsent(level: ConsentLevel): Promise<{ level: ConsentLevel; records_enabled: boolean }> {
+    return request('/api/consent', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ level }),
+    });
+  },
+
+  /** Save, under the new owner cookie, the jobs submitted before accepting cookies. */
+  async claimSelections(jobIds: string[]): Promise<{ claimed: number }> {
+    return request('/api/selections/claim', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ job_ids: jobIds }),
+    });
   },
 };
 

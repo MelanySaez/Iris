@@ -18,6 +18,10 @@ interface RecordsWorkspaceProps {
   onOpenPlate: (jobId: string) => void;
   /** Rebuild the selection box on the Sky map, back in the view where it was made. */
   onShowInSky?: (region: RegionRequest) => void;
+  /** Selections are saved only after accepting cookies (no accounts). */
+  recordsEnabled: boolean;
+  /** Reopen the cookie bar to change the choice. */
+  onOpenCookieSettings: () => void;
 }
 
 function errorText(err: unknown): string {
@@ -179,10 +183,15 @@ function NameCell({ selection, onRename }: NameCellProps) {
   );
 }
 
-export function RecordsWorkspace({ onOpenPlate, onShowInSky }: RecordsWorkspaceProps) {
+export function RecordsWorkspace({
+  onOpenPlate,
+  onShowInSky,
+  recordsEnabled,
+  onOpenCookieSettings,
+}: RecordsWorkspaceProps) {
   const [items, setItems] = useState<SelectionSummary[]>([]);
   const [nextBefore, setNextBefore] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(recordsEnabled);
   const [error, setError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
@@ -201,8 +210,8 @@ export function RecordsWorkspace({ onOpenPlate, onShowInSky }: RecordsWorkspaceP
   }, []);
 
   useEffect(() => {
-    void loadPage();
-  }, [loadPage]);
+    if (recordsEnabled) void loadPage();
+  }, [loadPage, recordsEnabled]);
 
   /** Returns whether the name was stored, so the editor knows whether to close. */
   const handleRename = async (selection: SelectionSummary, name: string | null) => {
@@ -232,12 +241,34 @@ export function RecordsWorkspace({ onOpenPlate, onShowInSky }: RecordsWorkspaceP
     }
   };
 
+  if (!recordsEnabled) {
+    return (
+      <section className="records-workspace" aria-labelledby="records-title">
+        <header className="records-header">
+          <div>
+            <h2 id="records-title">Saved selections</h2>
+          </div>
+        </header>
+        <div className="records-consent" role="status">
+          <p>
+            Your selections cannot be saved without cookies. Iris has no accounts: accept the
+            necessary cookies to keep your records in this browser. Selections made in this visit are
+            recovered when you accept.
+          </p>
+          <button type="button" className="records-btn" onClick={onOpenCookieSettings}>
+            Cookie settings
+          </button>
+        </div>
+      </section>
+    );
+  }
+
   return (
     <section className="records-workspace" aria-labelledby="records-title">
       <header className="records-header">
         <div>
           <h2 id="records-title">Saved selections</h2>
-          <p className="records-sub">Every region selected in Sky is saved automatically.</p>
+          <p className="records-sub">Every region selected in Sky is saved automatically in this browser.</p>
         </div>
         <button type="button" className="records-btn" onClick={() => void loadPage()} disabled={loading}>
           Refresh
