@@ -297,3 +297,13 @@ class CubeSpectrumResponse(BaseModel):
     calibrated: bool = False
     notes: list[str]
     points: list[CubeSpectrumPoint]
+
+
+class ResolveNameResponse(BaseModel):
+    query: str
+    name: str
+    ra_deg: float
+    dec_deg: float
+    object_type: str | None = None
+    source: Literal["simbad", "ned", "designation"]
+    cached: bool = False
