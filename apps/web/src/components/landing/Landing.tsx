@@ -10,6 +10,8 @@ const FADE_OUT_MS = 650;
 interface LandingProps {
   /** Opens the sky viewer. */
   onExplore: () => void;
+  /** Opens the sky viewer with the guided tour. */
+  onTour: () => void;
   /** The viewer is already showing underneath: fade the landing away. */
   leaving?: boolean;
   /** Called once the fade has finished, so the landing can unmount. */
@@ -64,7 +66,7 @@ const external = { target: '_blank', rel: 'noopener noreferrer' } as const;
  * context and the official sources. Scrolling fades the hero and drifts the
  * stars, written to a CSS variable so React does not re-render on scroll.
  */
-export function Landing({ onExplore, leaving = false, onExited }: LandingProps) {
+export function Landing({ onExplore, onTour, leaving = false, onExited }: LandingProps) {
   const rootRef = useRef<HTMLDivElement>(null);
   const starsRef = useRef<StarfieldHandle>(null);
   const [warping, setWarping] = useState(false);
@@ -76,12 +78,12 @@ export function Landing({ onExplore, leaving = false, onExited }: LandingProps) 
   }, [leaving, onExited]);
 
   // Focal moment: the stars jump towards the viewer, then the viewer opens.
-  const enterSky = () => {
+  const enterSky = (next: () => void = onExplore) => {
     if (warping) return;
     setWarping(true);
     const jump = starsRef.current?.warp() ?? Promise.resolve();
     const limit = new Promise<void>((resolve) => setTimeout(resolve, WARP_TIMEOUT_MS));
-    void Promise.race([jump, limit]).then(onExplore);
+    void Promise.race([jump, limit]).then(next);
   };
 
   useEffect(() => {
@@ -139,14 +141,14 @@ export function Landing({ onExplore, leaving = false, onExited }: LandingProps) 
           channels and look at the sky the way SPHEREx sees it.
         </p>
         <div className="landing-actions">
-          <button type="button" className="landing-cta" onClick={enterSky}>
+          <button type="button" className="landing-cta" onClick={() => enterSky()}>
             Explore the Sky
             <svg viewBox="0 0 16 16" aria-hidden="true">
               <path d="M4 12 12 4M6 4h6v6" />
             </svg>
           </button>
-          <button type="button" className="landing-secondary" disabled>
-            Guided Tour <span className="landing-soon">Coming soon</span>
+          <button type="button" className="landing-secondary" onClick={() => enterSky(onTour)}>
+            Guided Tour
           </button>
         </div>
         <div className="landing-hero-foot">
@@ -181,7 +183,7 @@ export function Landing({ onExplore, leaving = false, onExited }: LandingProps) 
             </article>
           ))}
         </div>
-        <button type="button" className="landing-cta landing-cta-end" onClick={enterSky}>
+        <button type="button" className="landing-cta landing-cta-end" onClick={() => enterSky()}>
           Open the viewer
           <svg viewBox="0 0 16 16" aria-hidden="true">
             <path d="M4 12 12 4M6 4h6v6" />

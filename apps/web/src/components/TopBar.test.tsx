@@ -36,3 +36,19 @@ describe('TopBar tab indicator', () => {
     expect(container.querySelector('.switch-indicator')?.getAttribute('data-visible')).toBe('false');
   });
 });
+
+describe('TopBar tour button', () => {
+  afterEach(() => cleanup());
+
+  it('replays the guided tour and marks where the tour points', () => {
+    const onStartTour = vi.fn();
+    const { container } = render(
+      <TopBar currentRoute={{ type: 'sky' }} activeJobId={null} onNavigate={vi.fn()} onStartTour={onStartTour} />,
+    );
+    const help = screen.getByRole('button', { name: 'Take the guided tour' });
+    expect(help.getAttribute('data-tour')).toBe('tour-help');
+    fireEvent.click(help);
+    expect(onStartTour).toHaveBeenCalledTimes(1);
+    expect(container.querySelector('nav[data-tour="workspaces"]')).not.toBeNull();
+  });
+});

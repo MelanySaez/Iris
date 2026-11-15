@@ -11,6 +11,7 @@ import {
 } from './components/sky/SkyWorkspace';
 import { AssistantWidget, type ActionResult } from './components/assistant/AssistantWidget';
 import { Landing } from './components/landing/Landing';
+import { GuidedTour } from './components/tour/GuidedTour';
 import type { AssistantAction, AssistantUiContext } from './assistant';
 import { SpectralLab, type SpectrumRequest } from './components/spectral/SpectralLab';
 import type { SpectrumTarget } from './components/sky/SelectionActions';
@@ -25,6 +26,27 @@ export function App() {
   // After "Explore the Sky" the landing stays on top while it fades into the viewer.
   const [landingExit, setLandingExit] = useState(false);
   const endLandingExit = useCallback(() => setLandingExit(false), []);
+  // Guided tour: runs over Sky. Starting it waits for the viewer to be on screen.
+  const [tourRun, setTourRun] = useState(false);
+  // A new key per start remounts Joyride, so every press begins a fresh tour
+  // even if an earlier one was left half-way (paused by a tab change, closed, …).
+  const [tourKey, setTourKey] = useState(0);
+  const tourTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const startTour = useCallback(
+    (delayMs: number) => {
+      navigate('#/sky');
+      if (tourTimer.current) clearTimeout(tourTimer.current);
+      setTourRun(false);
+      setTourKey((key) => key + 1);
+      tourTimer.current = setTimeout(() => setTourRun(true), delayMs);
+    },
+    [navigate],
+  );
+  useEffect(() => () => {
+    if (tourTimer.current) clearTimeout(tourTimer.current);
+  }, []);
+  const endTour = useCallback(() => setTourRun(false), []);
+
   // The viewer's own arrival (900 ms) outlasts the landing fade, so it has its own timer.
   const [appArriving, setAppArriving] = useState(false);
   useEffect(() => {
@@ -181,10 +203,16 @@ export function App() {
             setAppArriving(true);
             navigate('#/sky');
           }}
+          onTour={() => {
+            setLandingExit(true);
+            setAppArriving(true);
+            startTour(1100); // after the viewer has come out of the dark
+          }}
           onExited={endLandingExit}
         />
       )}
-      <TopBar currentRoute={route} activeJobId={activeJobId} onNavigate={navigate} />
+      <TopBar currentRoute={route} activeJobId={activeJobId} onNavigate={navigate} onStartTour={() => startTour(250)} />
+      <GuidedTour key={tourKey} run={tourRun && route.type === 'sky'} onEnd={endTour} />
 
       {contractError && <p role="alert">{contractError}</p>}
       {jobCreateError && (

@@ -37,6 +37,7 @@ import { installCatalogPopupControls } from '../../catalogPopup';
 import { useRgbComposite } from '../../hooks/useRgbComposite';
 import { RgbControls } from './RgbControls';
 import { SelectionActions, type SpectrumTarget } from './SelectionActions';
+import { RegionConfirmBar } from './RegionConfirmBar';
 import { NameSuggestion, type ResolvedTarget, type SubmitLookup } from './NameSuggestion';
 import { runEnterLookup } from '../../searchEnter';
 import { lookupView } from '../../lookupView';
@@ -1227,7 +1228,7 @@ export function SkyWorkspace({
         </section>
 
         {/* Search */}
-        <section className="rail-section object-search-section" aria-label="Find objects">
+        <section className="rail-section object-search-section" aria-label="Find objects" data-tour="search">
           <label className="rail-label" htmlFor="catalog-search">
             Find objects
           </label>
@@ -1369,7 +1370,7 @@ export function SkyWorkspace({
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
         >
-          <div id="aladin-view" aria-label="Aladin Lite All-Sky DR1 HiPS view" />
+          <div id="aladin-view" aria-label="Aladin Lite All-Sky DR1 HiPS view" data-tour="map" />
 
           {contextTarget && contextPosition && (
             <div className="sky-search-origin" role="img" aria-label="Search origin: original pinned sky position"
@@ -1495,6 +1496,7 @@ export function SkyWorkspace({
                 aria-pressed={mode === 'region'}
                 disabled={!aladinReady}
                 title="Drag rectangle to select region (1..60 arcmin)"
+                data-tour="region-tool"
                 onClick={() => setMode('region')}
               >
                 <RegionIcon />
@@ -1580,6 +1582,7 @@ export function SkyWorkspace({
 
           <SelectionActions
             selection={selectedRegion}
+            confirmed={regionConfirmed}
             activeJobId={activeJob?.id ?? null}
             onOpenPlate={onOpenPlate}
             onViewSpectrum={onViewSpectrum}
@@ -1588,18 +1591,10 @@ export function SkyWorkspace({
           {/* Bottom-centre stack: the region bar always sits right above the dock, whatever its height */}
           <div className="sky-bottom-stack">
             {selectedRegion && !regionConfirmed && (
-              <div className="region-confirm-bar float" role="group" aria-label="Confirm selected region">
-                <span className="num">
-                  {formatRa(selectedRegion.ra_deg)} {formatDec(selectedRegion.dec_deg)} · {selectedRegion.size_arcmin.toFixed(1)}′
-                </span>
-                <span className="region-confirm-hint">Pan inside · top grip moves · corners resize</span>
-                <button type="button" className="region-confirm-btn" onClick={handleConfirmRegion}>
-                  Confirm region
-                </button>
-              </div>
+              <RegionConfirmBar region={selectedRegion} onConfirm={handleConfirmRegion} onDiscard={handleClearRegion} />
             )}
           {/* Bottom-Center Channel Dock */}
-          <div className="sky-channel-dock float" aria-label="Channel slider dock">
+          <div className="sky-channel-dock float" aria-label="Channel slider dock" data-tour="channels">
             <RgbControls
               ready={aladinReady}
               rgbMode={rgbMode}
