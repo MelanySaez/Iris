@@ -27,15 +27,15 @@ export const HIPS_CATALOG_PROVIDERS = {
     name: 'SIMBAD',
     url: 'https://hipscat.cds.unistra.fr/HiPSCatService/Simbad',
     color: '#73d9f5',
-    sourceSize: 6,
+    sourceSize: 8,
   },
 } as const;
 
 export const LOCAL_CATALOG_STYLE = {
   name: 'PlanetX featured objects',
   color: '#ffd36e',
-  sourceSize: 14,
-  shape: 'diamond',
+  sourceSize: 16,
+  shape: 'rhomb',
 } as const;
 
 function normalizeIdentifier(value: string): string {

@@ -171,7 +171,20 @@ button:disabled {
 }
 
 .brand-logo {
-  font-size: 18px;
+  display: inline-flex;
+  color: var(--sky-warm);
+}
+
+.sky-icon {
+  display: block;
+  width: 18px;
+  height: 18px;
+  flex: none;
+}
+
+.brand-logo .sky-icon {
+  width: 20px;
+  height: 20px;
 }
 
 .brand-name {
@@ -702,6 +715,36 @@ button:disabled {
   height: 100%;
   position: absolute;
   inset: 0;
+}
+
+#aladin-view .aladin-popup-container.popup-below .aladin-popup-arrow {
+  position: absolute;
+  top: -23px;
+  left: calc(50% - 12px);
+  margin: 0;
+  transform: rotate(180deg);
+}
+
+#aladin-view .aladin-popup-container.popup-right .aladin-popup-arrow,
+#aladin-view .aladin-popup-container.popup-left .aladin-popup-arrow {
+  position: absolute;
+  top: calc(50% - 12px);
+  margin: 0;
+}
+
+#aladin-view .aladin-popup-container.popup-right .aladin-popup-arrow {
+  left: -23px;
+  transform: rotate(90deg);
+}
+
+#aladin-view .aladin-popup-container.popup-left .aladin-popup-arrow {
+  right: -23px;
+  transform: rotate(-90deg);
+}
+
+#aladin-view .aladin-closeBtn:focus-visible {
+  outline: 2px solid var(--sky-accent);
+  outline-offset: 2px;
 }
 
 /* Selection Box Overlay */

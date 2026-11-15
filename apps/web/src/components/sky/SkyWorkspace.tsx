@@ -32,12 +32,15 @@ import {
   type SpectralChannel,
 } from '../../hips';
 import { setChannelImageLayer } from '../../aladinView';
+import { createCatalogMarker } from '../../catalogMarker';
+import { installCatalogPopupControls } from '../../catalogPopup';
 import { useRgbComposite } from '../../hooks/useRgbComposite';
 import { RgbControls } from './RgbControls';
 import { SelectionActions, type SpectrumTarget } from './SelectionActions';
 import { NameSuggestion, type ResolvedTarget, type SubmitLookup } from './NameSuggestion';
 import { runEnterLookup } from '../../searchEnter';
 import { lookupView } from '../../lookupView';
+import { AllSkyIcon, PanIcon, RegionIcon, ZoomInIcon, ZoomOutIcon } from '../SkyIcons';
 import { contextFovDeg, resolveSelectionView, saveSelectionView } from '../../selectionView';
 import { ensureServiceWorkerControl } from '../../serviceWorkerControl';
 import {
@@ -234,6 +237,7 @@ export function SkyWorkspace({
         name: provider.name,
         color: provider.color,
         sourceSize: provider.sourceSize,
+        shape: createCatalogMarker(provider.color, provider.sourceSize, 'circle'),
         onClick: 'showTable',
         filter: (source: AladinSource) => !isDuplicateRemoteSource(source),
       });
@@ -312,7 +316,7 @@ export function SkyWorkspace({
           name: provider.label,
           color: provider.color,
           sourceSize: provider.sourceSize,
-          shape: catalogId === 'gaia' ? 'circle' : 'diamond',
+          shape: createCatalogMarker(provider.color, provider.sourceSize, provider.shape),
           onClick: 'showPopup',
         });
         viewer.addCatalog(catalogLayer);
@@ -322,9 +326,9 @@ export function SkyWorkspace({
       if (!densityLayer) {
         densityLayer = Aladin.catalog({
           name: `${provider.label} density tiles`,
-          color: catalogId === 'gaia' ? '#78995c' : '#af789d',
-          sourceSize: 10,
-          shape: 'circle',
+          color: provider.color,
+          sourceSize: 12,
+          shape: createCatalogMarker(provider.color, 12, provider.shape),
           onClick: 'showPopup',
         });
         viewer.addCatalog(densityLayer);
@@ -440,6 +444,7 @@ export function SkyWorkspace({
   useEffect(() => {
     let active = true;
     let timer: number | undefined;
+    let disposePopupControls: (() => void) | undefined;
 
     async function initAladin() {
       try {
@@ -495,6 +500,31 @@ export function SkyWorkspace({
         });
 
         viewerRef.current = viewer;
+        const aladinRoot = mapRef.current.querySelector<HTMLElement>('#aladin-view');
+        if (aladinRoot) {
+          disposePopupControls = installCatalogPopupControls(aladinRoot, () => viewer.hidePopup?.(), {
+            projectSource: (ra, dec) => {
+              const point = viewer.world2pix?.(ra, dec);
+              if (!point || !Number.isFinite(point[0]) || !Number.isFinite(point[1])) return null;
+              return { x: point[0], y: point[1] };
+            },
+            reopenPopup: (ra, dec, title, description) => viewer.showPopup?.(ra, dec, title, description),
+            subscribeToViewportChanges: (callback) => {
+              viewer.on?.('positionChanged', callback);
+              viewer.on?.('resizeChanged', callback);
+              viewer.on?.('rotationChanged', callback);
+              viewer.on?.('projectionChanged', callback);
+              viewer.on?.('zoomChanged', callback);
+              return () => {
+                viewer.on?.('positionChanged', undefined);
+                viewer.on?.('resizeChanged', undefined);
+                viewer.on?.('rotationChanged', undefined);
+                viewer.on?.('projectionChanged', undefined);
+                viewer.on?.('zoomChanged', undefined);
+              };
+            },
+          });
+        }
 
         // Start at fov 180 centered on RA 0/Dec 0 (all sky), then set default channel 44
         setChannelImageLayer(viewer, channelVirtualHipsUrl(DEFAULT_CHANNEL_INDEX, location.origin));
@@ -503,6 +533,7 @@ export function SkyWorkspace({
         try {
           const localCatalog = Aladin.catalog({
             ...LOCAL_CATALOG_STYLE,
+            shape: createCatalogMarker(LOCAL_CATALOG_STYLE.color, LOCAL_CATALOG_STYLE.sourceSize, 'rhomb'),
             onClick: 'showPopup',
           });
           localCatalog.addSources(FEATURED_OBJECTS.map((object) => Aladin.marker(
@@ -511,6 +542,7 @@ export function SkyWorkspace({
             {
               popupTitle: object.name,
               popupDesc: featuredObjectPopup(object),
+              useMarkerDefaultIcon: false,
             },
           )));
           viewer.addCatalog(localCatalog);
@@ -549,6 +581,7 @@ export function SkyWorkspace({
     return () => {
       active = false;
       simbadRequestRef.current?.abort();
+      disposePopupControls?.();
       if (timer) window.clearInterval(timer);
     };
   }, []);
@@ -1249,7 +1282,7 @@ export function SkyWorkspace({
                 title="Pan map"
                 onClick={() => setMode('pan')}
               >
-                <span aria-hidden="true">✋</span>
+                <PanIcon />
                 <span className="sr-only">Pan</span>
               </button>
               <button
@@ -1260,7 +1293,7 @@ export function SkyWorkspace({
                 title="Drag rectangle to select region (1..60 arcmin)"
                 onClick={() => setMode('region')}
               >
-                <span aria-hidden="true">⬚</span>
+                <RegionIcon />
                 <span className="sr-only">Select Region</span>
               </button>
             </div>
@@ -1269,26 +1302,29 @@ export function SkyWorkspace({
               <button
                 type="button"
                 className="tool-btn"
-                title="Zoom in"
-                onClick={() => handleZoom(0.6)}
-              >
-                +
-              </button>
-              <button
-                type="button"
-                className="tool-btn"
+                aria-label="Zoom out"
                 title="Zoom out"
                 onClick={() => handleZoom(1.5)}
               >
-                −
+                <ZoomOutIcon />
               </button>
               <button
                 type="button"
                 className="tool-btn"
+                aria-label="Zoom in"
+                title="Zoom in"
+                onClick={() => handleZoom(0.6)}
+              >
+                <ZoomInIcon />
+              </button>
+              <button
+                type="button"
+                className="tool-btn"
+                aria-label="Show all sky"
                 title="Show all sky"
                 onClick={handleAllSky}
               >
-                🌐
+                <AllSkyIcon />
               </button>
             </div>
           </div>

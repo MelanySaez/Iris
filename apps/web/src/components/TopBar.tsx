@@ -1,4 +1,5 @@
 import { DataNotesPopover } from './DataNotesPopover';
+import { PlanetIcon } from './SkyIcons';
 import type { AppRoute } from '../router';
 
 interface TopBarProps {
@@ -17,7 +18,7 @@ export function TopBar({ currentRoute, activeJobId, onNavigate }: TopBarProps) {
     <header className="app-topbar">
       <div className="topbar-left">
         <div className="brand" onClick={() => onNavigate('#/sky')} role="button" tabIndex={0}>
-          <span className="brand-logo">🪐</span>
+          <span className="brand-logo"><PlanetIcon /></span>
           <strong className="brand-name">Planet X</strong>
           <span className="brand-sub">SPHEREx Explorer</span>
         </div>
