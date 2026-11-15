@@ -206,11 +206,10 @@ export function RecordsWorkspace({ onOpenPlate, onShowInSky }: RecordsWorkspaceP
                     <button
                       type="button"
                       className="records-btn"
-                      disabled={!canOpenInPlate(selection)}
-                      title={canOpenInPlate(selection) ? 'Open in Plate' : 'Only ready jobs can be opened'}
+                      title={canOpenInPlate(selection) ? 'Open in Plate' : 'Inspect job status in Plate'}
                       onClick={() => onOpenPlate(selection.job_id)}
                     >
-                      Open
+                      {canOpenInPlate(selection) ? 'Open' : 'Inspect'}
                     </button>
                     <button
                       type="button"

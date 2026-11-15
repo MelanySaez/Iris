@@ -927,6 +927,36 @@ button:disabled {
   z-index: 35;
 }
 
+.preparing-card.embedded {
+  position: relative;
+  inset: auto;
+  width: 100%;
+  z-index: auto;
+  box-sizing: border-box;
+  border-radius: 0;
+  border-width: 0 0 1px;
+  box-shadow: none;
+  background: var(--sky-surface);
+  border-color: var(--sky-line);
+}
+
+.preparing-retry-note {
+  margin: 0;
+  color: var(--sky-accent);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.plate-poll-alert {
+  padding: 12px 14px;
+  background: var(--sky-surface);
+  color: var(--sky-ink);
+  border-bottom: 1px solid var(--sky-line);
+  font-size: 11.5px;
+}
+.plate-poll-alert p { margin: 5px 0; overflow-wrap: anywhere; }
+.plate-poll-alert button { color: var(--sky-accent); text-decoration: underline; }
+
 .preparing-card.ready {
   border-color: rgba(157, 178, 255, 0.4);
 }
@@ -1039,6 +1069,72 @@ button:disabled {
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+.preparing-trace {
+  min-width: 0;
+  color: var(--sky-muted);
+  font-size: 11px;
+}
+
+.preparing-trace summary {
+  cursor: pointer;
+  color: var(--sky-muted);
+  line-height: 1.5;
+}
+
+.preparing-trace summary:hover {
+  color: var(--sky-ink);
+}
+
+.preparing-trace-list {
+  max-height: 132px;
+  margin: 8px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 7px;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.preparing-trace-event {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 58px minmax(0, 1fr);
+  gap: 8px;
+  font-size: 10.5px;
+}
+
+.preparing-trace-time {
+  color: var(--sky-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.preparing-trace-copy {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+  color: var(--sky-muted);
+  overflow-wrap: anywhere;
+}
+
+.preparing-trace-event.started .preparing-trace-copy {
+  color: var(--sky-accent);
+}
+
+.preparing-trace-event.failed .preparing-trace-copy,
+.discovery-attempt-failure {
+  color: var(--sky-danger);
+}
+
+.preparing-trace-detail {
+  color: var(--sky-muted);
+}
+
+.discovery-attempt-failure {
+  margin: 0;
+  font-size: 11.5px;
+  font-weight: 600;
 }
 
 .error-detail {
@@ -1503,6 +1599,10 @@ button:disabled {
 .skeleton-label {
   color: #a4abbd;
   font-size: 13px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-box { animation: none; }
 }
 
 @keyframes pulse {
@@ -2171,7 +2271,11 @@ button:disabled {
 .persistent-region .region-clear { display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; margin: 2px; padding: 0; border: 2px solid #9db2ff; border-radius: 50%; background: #09111b; color: #fff; cursor: pointer; transition: background 0.15s, border-color 0.15s; }
 .persistent-region .region-clear:hover, .persistent-region .region-clear:focus-visible { background: #9db2ff; color: #09111b; border-color: #fff; }
 .persistent-region .region-clear svg { width: 12px; height: 12px; stroke: currentColor; stroke-width: 2; stroke-linecap: round; fill: none; }
-.persistent-region .region-body { cursor: move; touch-action: none; }
+.persistent-region .region-body { pointer-events: none; }
+.persistent-region .region-move-handle { pointer-events: all; cursor: move; touch-action: none; }
+.persistent-region .region-move-handle rect { fill: #09111b; stroke: #9db2ff; stroke-width: 2; }
+.persistent-region .region-move-handle circle { fill: #9db2ff; pointer-events: none; }
+.persistent-region .region-move-handle:hover rect { fill: #17223a; stroke: #c3d0ff; }
 .persistent-region .region-handle { fill: #09111b; stroke: #9db2ff; stroke-width: 2; pointer-events: all; touch-action: none; }
 .persistent-region .handle-nwse { cursor: nwse-resize; }
 .persistent-region .handle-nesw { cursor: nesw-resize; }

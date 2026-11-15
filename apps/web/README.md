@@ -20,7 +20,7 @@ Open the Vite localhost URL. The frontend needs IRSA network access for the offi
 
 ## Saved selections (Records)
 
-Every region selected in Sky creates a job, and the backend saves it as a selection record. Open **Records** in the top bar to list them, reopen a ready one in Plate, or delete it.
+Every region selected in Sky creates a job, and the backend saves it as a selection record. Open **Records** in the top bar to list them, open a ready plate, inspect a pending or failed job in Plate, or delete it. Plate shows discovery attempts and retry timing in the spectral rail; failed jobs offer an explicit retry.
 
 The **View** column shows how the map looked when the region was selected: `Single` or `RGB · 16/32/46` (the evaluated channel is in **Channels**). It reads this browser's saved view first (when it belongs to the same evaluated channel) and otherwise the view the backend recorded; selections made before views were recorded show `—`. The **Channels** column is always the channel the job evaluated, which in RGB mode is the last single channel, not the composite.
 

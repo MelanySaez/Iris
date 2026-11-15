@@ -1,10 +1,12 @@
-import type { JobSnapshot } from '../types';
+import { useEffect, useState } from 'react';
+import type { JobEvent, JobSnapshot } from '../types';
 
 interface PreparingPlateCardProps {
   job: JobSnapshot;
   onOpenPlate: (jobId: string) => void;
   onRetry: () => void;
   onDismiss?: () => void;
+  embedded?: boolean;
 }
 
 const STAGES = [
@@ -33,19 +35,62 @@ function getStageIndex(status: string): number {
   }
 }
 
+function getEventLabel(event: JobEvent): string {
+  if (
+    event.event_type !== 'discovery_attempt' ||
+    !event.provider ||
+    typeof event.attempt !== 'number' ||
+    typeof event.max_attempts !== 'number'
+  ) {
+    return event.stage;
+  }
+
+  const outcome = event.outcome === 'started'
+    ? 'in progress'
+    : event.outcome === 'succeeded'
+      ? `succeeded${typeof event.result_count === 'number' ? ` · ${event.result_count} products` : ''}`
+      : event.outcome === 'failed'
+        ? 'failed'
+        : 'status unavailable';
+  const retry = event.outcome === 'failed' && event.will_retry ? '; retrying' : '';
+  return `${event.provider} · Attempt ${event.attempt} of ${event.max_attempts} ${outcome}${retry}`;
+}
+
 export function PreparingPlateCard({
   job,
   onOpenPlate,
   onRetry,
   onDismiss,
+  embedded = false,
 }: PreparingPlateCardProps) {
+  const [now, setNow] = useState(() => Date.now());
   const currentStageIdx = getStageIndex(job.status);
   const isFailed = job.status === 'failed';
   const isReady = job.status === 'ready';
+  const discoveryEvents = (job.events ?? []).filter(
+    (event) => event.event_type === 'discovery_attempt',
+  );
+  const latestDiscoveryEvent = discoveryEvents[discoveryEvents.length - 1];
+  const retryDeadline = job.status === 'discovering' && latestDiscoveryEvent?.outcome === 'failed' && latestDiscoveryEvent.will_retry
+    ? latestDiscoveryEvent.at * 1000 + (latestDiscoveryEvent.retry_after_seconds ?? 0) * 1000
+    : null;
+  useEffect(() => {
+    if (isFailed || isReady) return;
+    const timer = window.setInterval(() => setNow(Date.now()), 250);
+    return () => window.clearInterval(timer);
+  }, [isFailed, isReady]);
+  const retrySeconds = retryDeadline === null ? null : Math.max(0, Math.ceil((retryDeadline - now) / 1000));
+  const startedAt = job.events?.[0]?.at;
+  const elapsedSeconds = typeof startedAt === 'number' ? Math.max(0, Math.floor((now - startedAt * 1000) / 1000)) : null;
+  const discoveryAttemptCount = new Set(
+    discoveryEvents
+      .map((event) => event.attempt)
+      .filter((attempt): attempt is number => typeof attempt === 'number'),
+  ).size;
 
   return (
     <div
-      className={`preparing-card float ${isFailed ? 'failed' : ''} ${isReady ? 'ready' : ''}`}
+      className={`preparing-card float ${embedded ? 'embedded' : ''} ${isFailed ? 'failed' : ''} ${isReady ? 'ready' : ''}`}
       role="status"
       aria-live="polite"
     >
@@ -91,8 +136,45 @@ export function PreparingPlateCard({
         </div>
       )}
 
-      <small>Job {job.id} · {job.cache.hit ? 'Cache hit' : 'Preparing / computed'}</small>
-      {Boolean(job.events?.length) && <details><summary>Execution trace</summary><ol>{job.events?.map((event, i) => <li key={i}>{new Date(event.at * 1000).toLocaleTimeString()} · {event.stage}</li>)}</ol></details>}
+      {retrySeconds !== null && !isFailed && (
+        <p className="preparing-retry-note" aria-live="polite">
+          {retrySeconds > 0 ? `Next discovery attempt in ${retrySeconds}s` : 'Starting the next discovery attempt…'}
+        </p>
+      )}
+
+      <small>Job {job.id} · {job.cache.hit ? 'Cache hit' : 'Preparing / computed'}
+        {elapsedSeconds !== null && ` · ${elapsedSeconds}s elapsed`}
+      </small>
+      {Boolean(job.events?.length) && (
+        <details className="preparing-trace">
+          <summary>
+            Execution trace
+            {discoveryAttemptCount > 0 && (
+              <span> · {discoveryAttemptCount} discovery {discoveryAttemptCount === 1 ? 'attempt' : 'attempts'}</span>
+            )}
+          </summary>
+          <ol className="preparing-trace-list">
+            {job.events?.map((event, i) => {
+              const occurredAt = new Date(event.at * 1000);
+              const timeLabel = Number.isFinite(occurredAt.getTime())
+                ? occurredAt.toLocaleTimeString()
+                : 'Unknown time';
+              return (
+                <li
+                  key={`${event.at}-${i}`}
+                  className={`preparing-trace-event ${event.outcome ?? ''}`}
+                >
+                  <time className="preparing-trace-time">{timeLabel}</time>
+                  <div className="preparing-trace-copy">
+                    <span>{getEventLabel(event)}</span>
+                    {event.detail && <span className="preparing-trace-detail">{event.detail}</span>}
+                  </div>
+                </li>
+              );
+            })}
+          </ol>
+        </details>
+      )}
       {/* Staged checklist */}
       <ul className="stage-checklist">
         {STAGES.map((s, idx) => {
@@ -123,6 +205,15 @@ export function PreparingPlateCard({
 
       {isFailed && (
         <div className="error-box">
+          {latestDiscoveryEvent?.outcome === 'failed' &&
+            !latestDiscoveryEvent.will_retry &&
+            typeof latestDiscoveryEvent.attempt === 'number' &&
+            typeof latestDiscoveryEvent.max_attempts === 'number' && (
+            <p className="discovery-attempt-failure">
+              {latestDiscoveryEvent.provider} failed on attempt {latestDiscoveryEvent.attempt} of{' '}
+              {latestDiscoveryEvent.max_attempts}.
+            </p>
+          )}
           <p className="error-detail">{job.error || 'Failed to prepare DR1 spectral cutout.'}</p>
           <button type="button" className="btn btn-retry" onClick={onRetry}>
             Retry

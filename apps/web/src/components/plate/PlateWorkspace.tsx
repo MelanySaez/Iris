@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, ApiError } from '../../api';
+import { PreparingPlateCard } from '../PreparingPlateCard';
 import {
   BLANK_CHANNELS,
   channelToBand,
@@ -29,12 +30,18 @@ import type {
 
 interface PlateWorkspaceProps {
   job: JobSnapshot;
+  pollError?: string | null;
+  pollRetry?: { attempt: number; delaySeconds: number } | null;
+  onRetryPoll?: () => void;
   onBackToSky: () => void;
   onRequestNewJob: (req: JobCreateRequest) => Promise<void>;
 }
 
 export function PlateWorkspace({
   job,
+  pollError,
+  pollRetry,
+  onRetryPoll,
   onBackToSky,
   onRequestNewJob,
 }: PlateWorkspaceProps) {
@@ -789,6 +796,16 @@ export function PlateWorkspace({
                   </div>
                 )}
               </div>
+            ) : job.status !== 'ready' && job.status !== 'failed' ? (
+              <div className="plate-loading-skeleton" role="status" aria-label="Preparing spectral cutout">
+                <div className="skeleton-box" aria-hidden="true" />
+                <span className="skeleton-label">{job.stage || 'Preparing spectral cutout…'}</span>
+              </div>
+            ) : job.status === 'failed' ? (
+              <div className="plate-cutout-missing">
+                <h3>Cutout preparation failed</h3>
+                <p>See the failure and retry controls in the spectral rail.</p>
+              </div>
             ) : (
               <div className="plate-cutout-missing" role="status">
                 <h3>No {currentDetectorStr} cutout loaded</h3>
@@ -897,6 +914,22 @@ export function PlateWorkspace({
           onKeyDown={handleRailKeyDown}
           aria-label="102-channel spectral rail"
         >
+          {pollError && (
+            <div className="plate-poll-alert" role="alert">
+              <strong>Job updates interrupted</strong>
+              <p>{pollError}</p>
+              <p>{pollRetry ? `Next poll scheduled after ${pollRetry.delaySeconds}s · retry ${pollRetry.attempt} of 4` : 'Automatic polling stopped.'}</p>
+              {!pollRetry && <button type="button" onClick={onRetryPoll}>Try again</button>}
+            </div>
+          )}
+          {job.status !== 'ready' && (
+            <PreparingPlateCard
+              embedded
+              job={job}
+              onOpenPlate={() => {}}
+              onRetry={() => void onRequestNewJob(job.request)}
+            />
+          )}
           <div className="rail-header">
             <h2 className="rail-title">Spectral Channels</h2>
             <span className="rail-instructions">Use ↑ / ↓ arrow keys</span>

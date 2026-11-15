@@ -156,8 +156,12 @@ export interface JobSnapshot {
   status: JobStatus;
   progress: number;
   stage: string;
-  events?: Array<{stage: string; at: number}>;
+  events?: JobEvent[];
   error: string | null;
+  failed_stage?: string | null;
+  error_kind?: string | null;
+  error_trace?: string | null;
+  request_id?: string | null;
   request: JobCreateRequest;
   region: {
     ra_deg: number;
@@ -179,6 +183,20 @@ export interface JobSnapshot {
   wavelength_status: string;
   calibrated: boolean;
   multi_product_mosaic: string;
+}
+
+export interface JobEvent {
+  stage: string;
+  at: number;
+  event_type?: string;
+  provider?: string;
+  attempt?: number;
+  max_attempts?: number;
+  outcome?: 'started' | 'succeeded' | 'failed';
+  will_retry?: boolean;
+  retry_after_seconds?: number | null;
+  detail?: string;
+  result_count?: number;
 }
 
 export interface PixelReadout {

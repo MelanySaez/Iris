@@ -9,6 +9,8 @@ export function useJobPoller(
   const [snapshot, setSnapshot] = useState<JobSnapshot | null>(initialSnapshot);
   const [isPolling, setIsPolling] = useState(false);
   const [pollError, setPollError] = useState<string | null>(null);
+  const [pollRetry, setPollRetry] = useState<{ attempt: number; delaySeconds: number } | null>(null);
+  const [restartToken, setRestartToken] = useState(0);
   const activeJobIdRef = useRef<string | null>(jobId);
 
   useEffect(() => {
@@ -17,8 +19,13 @@ export function useJobPoller(
       setSnapshot(null);
       setIsPolling(false);
       setPollError(null);
+      setPollRetry(null);
       return;
     }
+
+    setSnapshot((current) => current?.id === jobId ? current : null);
+    setPollError(null);
+    setPollRetry(null);
 
     // If initialSnapshot matches and is already terminal, use it and don't poll
     if (initialSnapshot && initialSnapshot.id === jobId) {
@@ -31,6 +38,7 @@ export function useJobPoller(
 
     let isMounted = true;
     let timer: number | undefined;
+    let failures = 0;
 
     const poll = async () => {
       try {
@@ -39,6 +47,8 @@ export function useJobPoller(
 
         setSnapshot(next);
         setPollError(null);
+        setPollRetry(null);
+        failures = 0;
 
         if (next.status === 'ready' || next.status === 'failed') {
           setIsPolling(false);
@@ -50,11 +60,14 @@ export function useJobPoller(
         if (!isMounted || activeJobIdRef.current !== jobId) return;
         const msg = err instanceof ApiError ? (err.detail ?? err.message) : String(err);
         setPollError(msg);
-        // Continue polling or stop on terminal 404? Continue retry unless 404
-        if (err instanceof ApiError && err.status === 404) {
+        failures += 1;
+        if ((err instanceof ApiError && err.status === 404) || failures >= 5) {
           setIsPolling(false);
+          setPollRetry(null);
         } else {
-          timer = window.setTimeout(poll, 700);
+          const delay = Math.min(11200, 700 * 2 ** (failures - 1));
+          setPollRetry({ attempt: failures, delaySeconds: delay / 1000 });
+          timer = window.setTimeout(poll, delay);
         }
       }
     };
@@ -66,11 +79,11 @@ export function useJobPoller(
       isMounted = false;
       if (timer) window.clearTimeout(timer);
     };
-  }, [jobId, initialSnapshot]);
+  }, [jobId, initialSnapshot, restartToken]);
 
   const updateSnapshot = (newSnap: JobSnapshot) => {
     setSnapshot(newSnap);
   };
 
-  return { snapshot, isPolling, pollError, updateSnapshot };
+  return { snapshot, isPolling, pollError, pollRetry, retryPoll: () => setRestartToken((value) => value + 1), updateSnapshot };
 }

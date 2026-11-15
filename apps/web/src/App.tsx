@@ -30,7 +30,7 @@ export function App() {
   });
   const [jobCreateError, setJobCreateError] = useState<string | null>(null);
 
-  const { snapshot: activeJob, updateSnapshot, pollError } = useJobPoller(activeJobId);
+  const { snapshot: activeJob, updateSnapshot, pollError, pollRetry, retryPoll } = useJobPoller(activeJobId);
 
   // Track the live route so job creation can follow the current workspace
   // without re-creating the callback on every navigation.
@@ -162,13 +162,16 @@ export function App() {
         {/* Plate Workspace - rendered when route is plate and job is loaded */}
         {isPlate && (
           <div className="workspace-layer plate-layer layer-active" aria-hidden={false}>
-            {pollError ? (<div className="plate-loading-page" role="alert"><h2>Could not load the spectral job</h2><p>{pollError}</p><p>Check that the backend exposes /api/jobs. The legacy /api/spectral API is not compatible with this workspace.</p><button onClick={() => navigate("#/sky")}>Back to sky</button></div>) : activeJob ? (
+            {activeJob ? (
               <PlateWorkspace
                 job={activeJob}
+                pollError={pollError}
+                pollRetry={pollRetry}
+                onRetryPoll={retryPoll}
                 onBackToSky={() => navigate('#/sky')}
                 onRequestNewJob={handleStartJob}
               />
-            ) : (
+            ) : pollError ? (<div className="plate-loading-page" role="alert"><h2>Could not load the spectral job</h2><p>{pollError}</p><button type="button" onClick={retryPoll}>Try again</button></div>) : (
               <div className="plate-loading-page" role="status">
                 <div className="plate-paper-skeleton">
                   <div className="skeleton-line title" />
