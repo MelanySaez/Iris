@@ -309,3 +309,14 @@ describe('SpectralLab featured objects panel', () => {
     expect(getSpectrum).toHaveBeenCalledWith(10.684708, 41.26875);
   });
 });
+
+describe('SpectralLab tour anchors', () => {
+  afterEach(() => cleanup());
+
+  it('marks each part the Spectral Lab tour points at', () => {
+    render(<SpectralLab request={null} />);
+    for (const anchor of ['lab-add', 'lab-compare', 'lab-axis', 'lab-chart', 'lab-sidebar']) {
+      expect(document.querySelectorAll(`[data-tour="${anchor}"]`)).toHaveLength(1);
+    }
+  });
+});

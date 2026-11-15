@@ -138,7 +138,7 @@ export function SpectralLab({ request = null }: { request?: SpectrumRequest | nu
     <div className={`spectral-lab${sidebarVisible ? '' : ' sidebar-collapsed'}`}>
       <aside id="spectra-sidebar" className="spectral-sidebar" aria-label="Spectra to compare"
         aria-hidden={!sidebarVisible} inert={!sidebarVisible}>
-        <section>
+        <section data-tour="lab-add">
           <h2 className="spectral-heading">Add a spectrum</h2>
           <h3 className="spectral-subheading">Featured objects</h3>
           <p className="spectral-subheading-note">Well-known targets to get you started</p>
@@ -192,7 +192,7 @@ export function SpectralLab({ request = null }: { request?: SpectrumRequest | nu
           )}
         </section>
 
-        <section>
+        <section data-tour="lab-compare">
           <h2 className="spectral-heading">
             Comparing {entries.length}/{MAX_SPECTRA}
           </h2>
@@ -247,6 +247,7 @@ export function SpectralLab({ request = null }: { request?: SpectrumRequest | nu
       <button
         type="button"
         className="spectral-sidebar-toggle"
+        data-tour="lab-sidebar"
         aria-label={`${sidebarVisible ? 'Hide' : 'Show'} sidebar`}
         aria-expanded={sidebarVisible}
         aria-controls="spectra-sidebar"
@@ -272,7 +273,7 @@ export function SpectralLab({ request = null }: { request?: SpectrumRequest | nu
           coverage at that pixel.
         </p>
         <div className="spectral-controls">
-          <div className="spectral-toolbar" role="group" aria-label="Brightness axis scale">
+          <div className="spectral-toolbar" role="group" aria-label="Brightness axis scale" data-tour="lab-axis">
             <span className="spectral-muted">Brightness axis</span>
             {(['linear', 'log'] as const).map((mode) => (
               <button
@@ -340,7 +341,7 @@ function SpectrumChart({ entries, mode }: { entries: PlottedEntry[]; mode: YScal
 
   if (!domain) {
     return (
-      <div ref={containerRef} className="spectral-chart spectral-chart-empty">
+      <div ref={containerRef} className="spectral-chart spectral-chart-empty" data-tour="lab-chart">
         <p className="spectral-muted">
           {hasNonPositiveEstimate
             ? 'Interpolated estimate at or below zero cannot be shown on a log axis; switch to Linear or see its value in the data table.'
@@ -447,7 +448,7 @@ function SpectrumChart({ entries, mode }: { entries: PlottedEntry[]; mode: YScal
   const tooltipLeft = hovered ? x(hovered.wavelength_um) : 0;
 
   return (
-    <div ref={containerRef} className="spectral-chart">
+    <div ref={containerRef} className="spectral-chart" data-tour="lab-chart">
       <div className="spectral-chart-zoom" role="group" aria-label="Chart zoom controls">
         <button type="button" className="spectral-toggle" aria-label="Zoom out" disabled={zoomFactor <= 1.01}
           onClick={() => setZoom(1 / 1.5)}>−</button>
