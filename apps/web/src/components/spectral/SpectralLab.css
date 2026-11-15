@@ -35,8 +35,18 @@
 }
 
 .spectral-estimate-legend .spectral-interpolated-key {
-  border-top-style: dashed;
-  border-top-width: 3px;
+  height: 0.8rem;
+  border-top: 0;
+  background:
+    linear-gradient(currentColor, currentColor) center / 100% 0 no-repeat,
+    repeating-linear-gradient(90deg, currentColor 0 4px, transparent 4px 7px) center / 100% 3px no-repeat;
+}
+
+.spectral-estimate-legend .spectral-single-estimate-key {
+  width: 0.7rem;
+  height: 0.7rem;
+  border: 2px dashed currentColor;
+  border-radius: 50%;
 }
 
 .spectral-estimate-legend .spectral-observed-key::after {
@@ -235,3 +245,78 @@
   .spectral-toggle:active,
   .spectral-coords button:active { transform: none; }
 }
+
+/* .spectral-main scrolls; without this its flex children shrink on short
+   windows and the chart's legend and notes spill over the data table. */
+.spectral-main > * { flex-shrink: 0; }
+
+/* Show estimates: an on/off switch, so it does not read as another axis button. */
+.spectral-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.2rem 0.1rem;
+  border: 0;
+  background: none;
+  color: var(--sky-muted);
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+.spectral-switch-track {
+  position: relative;
+  width: 2.1rem;
+  height: 1.2rem;
+  border: 1px solid var(--sky-line-strong);
+  border-radius: 999px;
+  background: var(--sky-bg);
+  transition: background-color 180ms ease, border-color 180ms ease;
+}
+.spectral-switch-thumb {
+  position: absolute;
+  top: 50%;
+  left: 0.15rem;
+  width: 0.8rem;
+  height: 0.8rem;
+  border-radius: 50%;
+  background: var(--sky-muted);
+  transform: translateY(-50%);
+  transition: transform 180ms ease, background-color 180ms ease;
+}
+.spectral-switch[aria-checked='true'] { color: var(--sky-ink); }
+.spectral-switch[aria-checked='true'] .spectral-switch-track {
+  border-color: var(--sky-accent);
+  background: var(--sky-accent-soft);
+}
+.spectral-switch[aria-checked='true'] .spectral-switch-thumb {
+  background: var(--sky-accent);
+  transform: translate(0.9rem, -50%);
+}
+.spectral-switch:hover .spectral-switch-track { border-color: var(--sky-accent); }
+.spectral-switch:focus-visible { outline: 2px solid var(--sky-accent); outline-offset: 3px; border-radius: var(--radius-sm); }
+
+.spectral-table-title {
+  margin: 0;
+  color: var(--sky-muted);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spectral-switch-track,
+  .spectral-switch-thumb { transition: none; }
+}
+
+/* The data table is always visible now: give it the chart's full width and frame. */
+.spectral-table-scroll {
+  border: 1px solid var(--sky-line);
+  border-radius: var(--radius-md);
+  background: var(--sky-surface);
+}
+.spectral-table table { width: 100%; }
+.spectral-table th:first-child,
+.spectral-table td:first-child { padding-left: 14px; }
+.spectral-table th:last-child,
+.spectral-table td:last-child { padding-right: 14px; }
+.spectral-table tbody tr:last-child td { border-bottom: 0; }
+.spectral-table tbody tr:hover td { background: var(--sky-hover); }
