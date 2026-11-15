@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { PlanetIcon } from '../SkyIcons';
+import { IrisLogo } from '../IrisLogo';
 import { prefersReducedMotion, Starfield, type StarfieldHandle } from './Starfield';
 
 /** Upper bound for the jump, so the button always leads into the viewer. */
@@ -40,12 +40,22 @@ const CONTEXT = [
   {
     question: 'What are astronomical catalogs?',
     answer:
-      'Lists of known celestial sources with their positions and measured properties. Iris can overlay several of them on the map.',
-    link: {
-      label: 'SPHEREx data documentation',
-      href: 'https://irsa.ipac.caltech.edu/onlinehelp/spherex/spherex/overview.html',
-    },
+      'Lists of known celestial sources with their positions and measured properties. Iris can overlay the four listed below on the map.',
+    link: null,
   },
+] as const;
+
+/** Catalog layers of the Sky map, shown as a strip under the four questions. */
+const CATALOG_LAYERS = [
+  {
+    name: 'SIMBAD',
+    note: 'Well-known objects such as galaxies, nebulae and stars; the most cited ones in view.',
+    href: 'https://simbad.cds.unistra.fr/',
+  },
+  { name: 'Gaia DR3', note: 'Stars with very precise positions, from ESA’s Gaia mission.', href: 'https://www.cosmos.esa.int/web/gaia/dr3' },
+  { name: 'CatWISE2020', note: 'Mid-infrared sources seen by NASA’s WISE telescope.', href: 'https://catwise.github.io/' },
+  // Iris's own list: there is no external page to link to.
+  { name: 'Iris featured objects', note: 'A short list of famous targets to start with.', href: null },
 ] as const;
 
 const RESOURCES = [
@@ -119,7 +129,7 @@ export function Landing({ onExplore, onTour, leaving = false, onExited }: Landin
       <header className="landing-nav">
         <span className="landing-brand">
           <span className="brand-logo">
-            <PlanetIcon />
+            <IrisLogo />
           </span>
           <strong>Iris</strong>
         </span>
@@ -183,6 +193,26 @@ export function Landing({ onExplore, onTour, leaving = false, onExited }: Landin
             </article>
           ))}
         </div>
+        <section className="landing-catalog-strip" aria-labelledby="landing-catalogs-title">
+          <h3 id="landing-catalogs-title">Catalog layers on the map</h3>
+          <ul>
+            {CATALOG_LAYERS.map((catalog) => (
+              <li key={catalog.name}>
+                {catalog.href ? (
+                  <a href={catalog.href} {...external}>
+                    <strong>{catalog.name}</strong>
+                    <svg viewBox="0 0 16 16" aria-hidden="true">
+                      <path d="M4 12 12 4M6 4h6v6" />
+                    </svg>
+                  </a>
+                ) : (
+                  <strong>{catalog.name}</strong>
+                )}
+                <span>{catalog.note}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
         <button type="button" className="landing-cta landing-cta-end" onClick={() => enterSky()}>
           Open the viewer
           <svg viewBox="0 0 16 16" aria-hidden="true">

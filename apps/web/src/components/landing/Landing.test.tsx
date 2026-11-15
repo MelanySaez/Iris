@@ -38,12 +38,32 @@ describe('Landing', () => {
   it('answers the four context questions', () => {
     render(<Landing onExplore={vi.fn()} onTour={vi.fn()} />);
     const context = screen.getByRole('region', { name: 'A little context before you explore' });
-    expect(within(context).getAllByRole('heading', { level: 3 }).map((h) => h.textContent)).toEqual([
+    expect(within(context).getAllByRole('article').map((a) => within(a).getByRole('heading', { level: 3 }).textContent)).toEqual([
       'What is SPHEREx?',
       'Where does the data come from?',
       'What can I explore?',
       'What are astronomical catalogs?',
     ]);
+  });
+
+  it('names every catalog layer the map can show, below the four questions', () => {
+    render(<Landing onExplore={vi.fn()} onTour={vi.fn()} />);
+    const strip = screen.getByRole('region', { name: 'Catalog layers on the map' });
+    const names = within(strip).getAllByRole('listitem').map((li) => li.querySelector('strong')?.textContent);
+    expect(names).toEqual(['SIMBAD', 'Gaia DR3', 'CatWISE2020', 'Iris featured objects']);
+    const links = within(strip).getAllByRole('link');
+    expect(links.map((a) => a.getAttribute('href'))).toEqual([
+      'https://simbad.cds.unistra.fr/',
+      'https://www.cosmos.esa.int/web/gaia/dr3',
+      'https://catwise.github.io/',
+    ]);
+    for (const link of links) expect(link.getAttribute('target')).toBe('_blank');
+  });
+
+  it('leaves the catalog question without its own link', () => {
+    render(<Landing onExplore={vi.fn()} onTour={vi.fn()} />);
+    const card = screen.getByRole('heading', { name: 'What are astronomical catalogs?' }).closest('article') as HTMLElement;
+    expect(within(card).queryByRole('link')).toBeNull();
   });
 
   it('links to the official sources in a new tab and states it is not an official NASA app', () => {

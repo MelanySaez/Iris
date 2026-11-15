@@ -20,7 +20,7 @@ interface Meteor {
   life: number;
 }
 
-const STAR_COUNT = 900;
+const STAR_COUNT = 1100;
 const DEPTH = 1000;
 const CRUISE_SPEED = 0.03; // depth units per ms: a slow drift towards the viewer
 const WARP_MS = 900;
@@ -134,7 +134,7 @@ export function Starfield({ ref }: { ref?: Ref<StarfieldHandle> }) {
           continue;
         }
         const near = 1 - star.z / DEPTH;
-        const alpha = 0.4 + near * 0.6;
+        const alpha = 0.55 + near * 0.45;
         const color = star.warm ? '245, 217, 168' : '233, 237, 245';
         if (boost > 2) {
           const pk = focal / prevZ;
@@ -147,7 +147,7 @@ export function Starfield({ ref }: { ref?: Ref<StarfieldHandle> }) {
         } else {
           ctx.fillStyle = `rgba(${color}, ${alpha})`;
           ctx.beginPath();
-          ctx.arc(x, y, 0.5 + near * near * 1.7, 0, Math.PI * 2);
+          ctx.arc(x, y, 0.7 + near * near * 1.9, 0, Math.PI * 2);
           ctx.fill();
         }
       }

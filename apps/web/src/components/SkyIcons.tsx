@@ -9,10 +9,6 @@ function Icon({ children }: { children: ReactNode }) {
   );
 }
 
-export function PlanetIcon() {
-  return <Icon><circle cx="12" cy="12" r="5.5" /><path d="M3 16c2.6 2.8 8.2 3.2 12.8 1.3 3.5-1.5 5.6-3.8 5.2-5.7" /><path d="M3 16c-.5-2.5 2.7-5.5 7-7.3" /></Icon>;
-}
-
 export function PanIcon() {
   return <Icon><path d="M12 3v18M3 12h18M12 3 9.5 5.5M12 3l2.5 2.5M21 12l-2.5-2.5M21 12l-2.5 2.5M12 21l-2.5-2.5M12 21l2.5-2.5M3 12l2.5-2.5M3 12l2.5 2.5" /></Icon>;
 }
