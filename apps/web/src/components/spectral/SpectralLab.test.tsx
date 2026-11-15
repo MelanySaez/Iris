@@ -169,6 +169,27 @@ describe('SpectralLab', () => {
     expect(screen.getByText('20.0 (estimated)')).toBeTruthy();
   });
 
+  it('hides every estimate from the chart, legend and table when Show estimates is off', async () => {
+    getSpectrum.mockResolvedValue(spectrum([10, null, 30]));
+    render(<SpectralLab />);
+    await act(async () => fireEvent.click(catalogButton('Andromeda Galaxy')));
+
+    const toggle = screen.getByRole('button', { name: 'Show estimates' });
+    expect(toggle.getAttribute('aria-pressed')).toBe('true');
+    fireEvent.click(toggle);
+
+    expect(toggle.getAttribute('aria-pressed')).toBe('false');
+    expect(document.querySelector('.spectral-estimated-marker')).toBeNull();
+    expect(document.querySelector('.spectral-estimated-line')).toBeNull();
+    expect(screen.queryByText('Interpolated (estimated)')).toBeNull();
+    expect(screen.queryByText(/chart-only estimates/)).toBeNull();
+    expect(screen.queryByText('20.0 (estimated)')).toBeNull();
+    expect(screen.getByText('Observed')).toBeTruthy();
+
+    fireEvent.click(toggle);
+    expect(screen.getByText('20.0 (estimated)')).toBeTruthy();
+  });
+
   it('refuses the same position twice', async () => {
     getSpectrum.mockResolvedValue(spectrum([1, 2]));
     render(<SpectralLab />);

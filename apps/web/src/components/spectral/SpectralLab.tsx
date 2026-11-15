@@ -63,6 +63,7 @@ export function SpectralLab({ request = null }: { request?: SpectrumRequest | nu
   const [decText, setDecText] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
   const [yMode, setYMode] = useState<YScaleMode>('linear');
+  const [showEstimates, setShowEstimates] = useState(true);
   const [sidebarVisible, setSidebarVisible] = useState(true);
   const requestCounter = useRef(0);
   // Source of truth for entries between renders: two clicks before React
@@ -272,8 +273,8 @@ export function SpectralLab({ request = null }: { request?: SpectrumRequest | nu
           SPHEREx Spectrophotometry Tool for science-grade spectra. Gaps are channels with no
           coverage at that pixel.
         </p>
-        <div className="spectral-controls">
-          <div className="spectral-toolbar" role="group" aria-label="Brightness axis scale" data-tour="lab-axis">
+        <div className="spectral-controls" data-tour="lab-axis">
+          <div className="spectral-toolbar" role="group" aria-label="Brightness axis scale">
             <span className="spectral-muted">Brightness axis</span>
             {(['linear', 'log'] as const).map((mode) => (
               <button
@@ -287,9 +288,18 @@ export function SpectralLab({ request = null }: { request?: SpectrumRequest | nu
               </button>
             ))}
           </div>
+          <button
+            type="button"
+            className={`spectral-toggle ${showEstimates ? 'active' : ''}`}
+            aria-pressed={showEstimates}
+            title="Fill gaps of up to two channels on the same detector with a straight line"
+            onClick={() => setShowEstimates((v) => !v)}
+          >
+            Show estimates
+          </button>
         </div>
-        <SpectrumChart entries={plotted} mode={yMode} />
-        {plotted.length > 0 && <SpectrumTable entries={plotted} />}
+        <SpectrumChart entries={plotted} mode={yMode} showEstimates={showEstimates} />
+        {plotted.length > 0 && <SpectrumTable entries={plotted} showEstimates={showEstimates} />}
       </main>
     </div>
   );
@@ -299,7 +309,14 @@ interface PlottedEntry extends SpectrumEntry {
   data: CubeSpectrumResponse;
 }
 
-function SpectrumChart({ entries, mode }: { entries: PlottedEntry[]; mode: YScaleMode }) {
+/** Longest run of blank channels the chart fills in; 0 shows the raw measurements only. */
+const estimateGap = (showEstimates: boolean) => (showEstimates ? 2 : 0);
+
+function SpectrumChart({ entries, mode, showEstimates }: {
+  entries: PlottedEntry[];
+  mode: YScaleMode;
+  showEstimates: boolean;
+}) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartId = useId().replace(/:/g, '');
   const [width, setWidth] = useState(720);
@@ -325,8 +342,8 @@ function SpectrumChart({ entries, mode }: { entries: PlottedEntry[]; mode: YScal
   }, []);
 
   const plottedSeries = useMemo(
-    () => entries.map((e) => interpolateMissingFlux(e.data.points)),
-    [entries],
+    () => entries.map((e) => interpolateMissingFlux(e.data.points, estimateGap(showEstimates))),
+    [entries, showEstimates],
   );
   const series = plottedSeries;
   const domain = useMemo(() => computeDomain(series, mode), [series, mode]);
@@ -553,7 +570,9 @@ function SpectrumChart({ entries, mode }: { entries: PlottedEntry[]; mode: YScal
       </svg>
       <div className="spectral-estimate-legend" aria-label="Flux data legend">
         <span><i className="spectral-observed-key" aria-hidden="true" />Observed</span>
-        <span><i className="spectral-interpolated-key" aria-hidden="true" />Interpolated (estimated)</span>
+        {showEstimates && (
+          <span><i className="spectral-interpolated-key" aria-hidden="true" />Interpolated (estimated)</span>
+        )}
       </div>
       {plottedSeries.some((points) => points.some((p) => p.interpolated)) && (
         <p className="spectral-chart-note" role="note">
@@ -603,11 +622,11 @@ function SpectrumChart({ entries, mode }: { entries: PlottedEntry[]; mode: YScal
   );
 }
 
-function SpectrumTable({ entries }: { entries: PlottedEntry[] }) {
+function SpectrumTable({ entries, showEstimates }: { entries: PlottedEntry[]; showEstimates: boolean }) {
   const channels = entries[0].data.points;
   const plottedSeries = useMemo(
-    () => entries.map((entry) => interpolateMissingFlux(entry.data.points)),
-    [entries],
+    () => entries.map((entry) => interpolateMissingFlux(entry.data.points, estimateGap(showEstimates))),
+    [entries, showEstimates],
   );
   return (
     <details className="spectral-table">

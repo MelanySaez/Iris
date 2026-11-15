@@ -146,8 +146,9 @@ const SPECTRAL: TourStep[] = [
     id: 'lab-axis',
     target: '[data-tour="lab-axis"]',
     placement: 'bottom',
-    title: 'Linear or log',
-    content: 'Switch the brightness axis to log to compare faint and bright objects on the same chart.',
+    title: 'Axis and estimates',
+    content:
+      'Switch the brightness axis to log to compare faint and bright objects. Show estimates fills short gaps with dashed lines; turn it off to see only measured channels.',
   },
   {
     id: 'lab-chart',
