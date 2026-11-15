@@ -265,10 +265,8 @@ export function RecordsWorkspace({ onOpenPlate, onShowInSky }: RecordsWorkspaceP
               <th scope="col">Region</th>
               <th scope="col">Channels</th>
               <th scope="col">View</th>
-              <th scope="col">Products</th>
               <th scope="col">Coverage</th>
               <th scope="col">Status</th>
-              <th scope="col">Hits</th>
               <th scope="col">
                 <span className="sr-only">Actions</span>
               </th>
@@ -286,13 +284,11 @@ export function RecordsWorkspace({ onOpenPlate, onShowInSky }: RecordsWorkspaceP
                 <td className="records-mono">
                   <ViewModeCell selection={selection} />
                 </td>
-                <td>{selection.products.join(', ')}</td>
                 <td>{selection.region.coverage}</td>
                 <td>
                   <span className={`records-status status-${selection.job_status}`}>{selection.job_status}</span>
                   <FailureReason details={failureDetails(selection)} />
                 </td>
-                <td className="records-mono">{selection.hits}</td>
                 <td className="records-actions">
                   <div className="records-actions-inner">
                     {onShowInSky && (
