@@ -18,13 +18,26 @@ pnpm dev
 
 Open the Vite localhost URL. The frontend needs IRSA network access for the official HiPS and localhost/HTTPS for its service worker. Vite proxies `/api` to the FastAPI server on port 8000.
 
+## Container image
+
+Build the image from the frontend directory:
+
+```bash
+cd apps/web
+docker build -t iris-web .
+```
+
+Compose uses `apps/web` as the build context. The Node 24 build stage creates the Vite bundle; a non-root Distroless Node 24 runtime serves it on port `3000` and proxies `/api/` to `API_URL` (default: `http://server:8000`). Set `API_URL` in the root `.env` for the Docker network, or in `apps/web/.env` for the Vite development proxy (default: `http://127.0.0.1:8000`).
+
 ## Assistant
 
 The round button in the bottom-right corner opens the Planet X assistant (any OpenAI-compatible model, called by the backend; see `apps/server/README.md` → Contextual assistant). Ask about the app or give instructions such as “show M101 in RGB” or “open Records”. Each question carries the current interface state (workspace, channel, colour mode, selected region, map centre and zoom). The reply's actions run in the browser after a second validation (`src/assistant.ts`): opening a workspace, drawing a draft region in Sky (it never starts a job; press **Confirm region**), changing channel or colour mode. Each action shows under the reply, and the browser reports whether it ran. **Activity** lists the logged events of the conversation (model calls with tokens and latency, tools, cache hits, guardrails). Replies answered from the cache show **From cache**. **New** starts a new conversation. Without `ASSISTANT_API_KEY` and `ASSISTANT_MODEL` on the server the panel says the assistant is disabled.
 
 ## Saved selections (Records)
 
-Every region selected in Sky creates a job, and the backend saves it as a selection record. Open **Records** in the top bar to list them, open a ready plate, inspect a pending or failed job in Plate, or delete it. Plate shows discovery attempts and retry timing in the spectral rail; failed jobs offer an explicit retry.
+Every region selected in Sky creates a job. There are no accounts, so records are kept per browser through a cookie: a footer bar asks for consent with **Accept necessary**, **Accept all** or **Reject all** (`src/components/consent/ConsentBar.tsx`). The records cookie counts as necessary, so both acceptances save selections; with **Reject all**, or before choosing, jobs still run but nothing is saved and Records says that selections cannot be saved without cookies (its **Cookie settings** button reopens the bar). Jobs submitted before accepting are remembered in memory for the current visit and recovered as saved selections when the visitor accepts (`src/hooks/useRecordsConsent.ts`, backend `POST /api/selections/claim`), including a job whose request was still in flight at that moment; reloading the page before accepting forgets them. Choosing **Reject all** after accepting hides the browser's records without deleting them: accepting again shows them.
+
+Once cookies are accepted, the backend saves each selection for this browser. Open **Records** in the top bar to list them, open a ready plate, inspect a pending or failed job in Plate, or delete it. Plate shows discovery attempts and retry timing in the spectral rail; failed jobs offer an explicit retry.
 
 The **Name** column labels a selection: click the name or **Untitled** (or press **✎**), then edit in place without resizing the grid. Press **Enter** or leave the field to save; **Escape** discards the draft, and an empty name removes it. Names are stored by the backend (up to 80 characters), so every browser sees them.
 
@@ -51,7 +64,7 @@ The app opens on a landing page (`#/`): a full-screen star field, **Explore the 
 
 ## Guided tour
 
-A seven-step tour (React Joyride) walks through the viewer: welcome, **Find objects**, the map, the channel dock, the region tool, the workspace tabs and how to replay it. Start it from **Guided Tour** on the landing page or the **?** button in the top bar. It can be skipped at any step; finishing or skipping is remembered in `localStorage` (`iris_tour_seen`). Steps point at `data-tour` attributes, and a step whose anchor is not on screen (for example the rail on a phone) is left out.
+An eight-step tour (React Joyride) walks through the viewer: welcome, **Find objects**, the map, the right-click nearby search, the channel dock, the region tool, the workspace tabs and how to replay it. Start it from **Guided Tour** on the landing page or the **?** button in the top bar. It can be skipped at any step; finishing or skipping is remembered in `localStorage` (`iris_tour_seen`). Steps point at `data-tour` attributes, and a step whose anchor is not on screen (for example the rail on a phone) is left out.
 
 ## Search by name or catalogue code
 
@@ -62,6 +75,10 @@ under the box (official name, type, position and source), above the matching
 featured objects. Click it, or press **Enter** to take the first suggestion
 right away. Partial names are not completed: SIMBAD only resolves full names or
 codes. If every resolver is down, use **Go to coordinates**.
+
+## SIMBAD map layer
+
+The **SIMBAD** layer in Map layers shows the SIMBAD objects in the visible field. The CDS SIMBAD services (the HiPS catalog and TAP) have been unavailable, so the layer queries the Harvard CfA SIMBAD mirror (`https://simbad.cfa.harvard.edu/simbad/sim-tap/sync`) once the map stops moving: the 300 most-cited objects in view (`ORDER BY nbref DESC`), so the full-sky view shows the best-known objects and zooming in reveals more. Views wider than a hemisphere query the whole sky (the service rejects larger circles). Clicking a marker shows the object's name and type. The nearby-catalogs search uses the same mirror.
 
 ## Sky RGB composite
 

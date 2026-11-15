@@ -2,11 +2,12 @@ import { describe, expect, it } from 'vitest';
 import { TOUR_STEPS } from './tourSteps';
 
 describe('guided tour steps', () => {
-  it('follows the demo path in seven steps', () => {
+  it('follows the demo path in eight steps, including the hidden right-click search', () => {
     expect(TOUR_STEPS.map((step) => step.id)).toEqual([
       'welcome',
       'search',
       'map',
+      'nearby',
       'channels',
       'region',
       'workspaces',

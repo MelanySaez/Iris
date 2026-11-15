@@ -27,7 +27,7 @@ describe('GuidedTour', () => {
     map.getClientRects = () => [{}] as unknown as DOMRectList;
     render(<GuidedTour run onEnd={vi.fn()} />);
     const ids = (joyride.props?.steps as Array<{ id: string }>).map((s) => s.id);
-    expect(ids).toEqual(['welcome', 'map']);
+    expect(ids).toEqual(['welcome', 'map', 'nearby']);
     expect(joyride.props?.run).toBe(true);
     expect(joyride.props?.continuous).toBe(true);
   });

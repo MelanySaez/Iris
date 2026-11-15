@@ -9,12 +9,20 @@ from __future__ import annotations
 
 import json
 import unicodedata
+import uuid
+from contextvars import ContextVar
 from typing import Any
 
 from app.schemas.assistant import UI_ACTION_TYPES
 from app.services.assistant.guardrails import sanitize_untrusted
 from app.services.catalog import get_catalog
 from app.services.selections import current_selection_service
+
+# The browser asking (its owner cookie), set by the chat route for one request.
+# Saved-selection tools only read that browser's records.
+selection_owner: ContextVar[uuid.UUID | None] = ContextVar(
+    "selection_owner", default=None
+)
 
 WORKSPACES = ("sky", "plate", "spectral", "records")
 UNAVAILABLE_CHANNELS = (50, 51)
@@ -230,6 +238,11 @@ def list_saved_selections(tool_input: Any) -> dict[str, Any]:
     service = current_selection_service()
     if service is None:
         raise ToolInputError("saved selections are unavailable (no database configured)")
+    owner = selection_owner.get()
+    if owner is None:
+        raise ToolInputError(
+            "saved selections are unavailable: this browser has not accepted cookies"
+        )
     return {
         "selections": [
             {
@@ -243,7 +256,7 @@ def list_saved_selections(tool_input: Any) -> dict[str, Any]:
                 "view_mode": sel.view_mode,
                 "job_status": sel.job_status,
             }
-            for sel in service.list_recent(limit)
+            for sel in service.list_recent(owner, limit)
         ]
     }
 
