@@ -164,5 +164,56 @@ describe('NameSuggestion', () => {
     retype('M31');
     expect(signals[0].aborted).toBe(true);
   });
+
+  describe('when both catalogues know the name', () => {
+    const both: ResolvedName = {
+      ...m31,
+      alternatives: [
+        {
+          name: 'MESSIER 031',
+          ra_deg: 10.6848,
+          dec_deg: 41.2691,
+          object_type: 'G',
+          size_arcmin: null,
+          source: 'ned',
+        },
+      ],
+    };
+
+    it('lists SIMBAD first and NED second', async () => {
+      setup('M31', vi.fn().mockResolvedValue(both));
+      await settle();
+      const rows = screen.getAllByRole('button');
+      expect(rows.map((row) => row.textContent)).toEqual([
+        'M 31AGN · 10.6847°, +41.2687°SIMBAD',
+        'MESSIER 031G · 10.6848°, +41.2691°NED',
+      ]);
+    });
+
+    it('moves the map to the NED position when its row is chosen', async () => {
+      const { onSelect } = setup('M31', vi.fn().mockResolvedValue(both));
+      await settle();
+      fireEvent.click(screen.getByRole('button', { name: /MESSIER 031/ }));
+      expect(onSelect).toHaveBeenCalledWith({
+        ra_deg: 10.6848,
+        dec_deg: 41.2691,
+        name: 'MESSIER 031',
+        size_arcmin: null,
+      });
+    });
+
+    it('Enter still takes the SIMBAD answer', async () => {
+      const { submitRef } = setup('M31', vi.fn().mockResolvedValue(both));
+      await settle();
+      let outcome: Awaited<ReturnType<SubmitLookup>> | undefined;
+      await act(async () => {
+        outcome = await submitRef.current!();
+      });
+      expect(outcome).toEqual({
+        kind: 'found',
+        target: { ra_deg: 10.684708, dec_deg: 41.26875, name: 'M 31', size_arcmin: 199.53 },
+      });
+    });
+  });
 });
 
