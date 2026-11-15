@@ -1,0 +1,27 @@
+services:
+  db:
+    restart: "no"
+    ports:
+      - "${DB_PORT-5432}:5432"
+
+  server:
+    restart: "no"
+    build:
+      context: ./apps/server
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+
+  web:
+    restart: "no"
+    build:
+      context: ./apps/web
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+
+  traefik:
+    restart: "no"
+    ports:
+      - "80:80"
+      - "443:443"
