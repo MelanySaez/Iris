@@ -416,12 +416,15 @@ describe('SpectralLab object search', () => {
     vi.useRealTimers();
   });
 
-  it('places a Search objects box above the featured objects', () => {
+  it('places the Search objects box below the featured objects and above the coordinates', () => {
     render(<SpectralLab request={null} />);
+    const featuredList = document.querySelector('.spectral-catalog') as HTMLElement;
     const search = screen.getByRole('heading', { name: 'Search objects' });
-    const featured = screen.getByRole('heading', { name: 'Featured objects' });
-    expect(search.compareDocumentPosition(featured) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(searchBox().compareDocumentPosition(featured) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const coords = screen.getByRole('heading', { name: 'Or enter coordinates' });
+    const follows = (a: Node, b: Node) => !!(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(follows(featuredList, search)).toBe(true);
+    expect(follows(search, searchBox())).toBe(true);
+    expect(follows(searchBox(), coords)).toBe(true);
   });
 
   it('lists SIMBAD and NED answers and plots the chosen one under its name', async () => {

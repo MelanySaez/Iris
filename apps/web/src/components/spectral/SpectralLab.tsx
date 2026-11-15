@@ -178,32 +178,6 @@ export function SpectralLab({ request = null }: { request?: SpectrumRequest | nu
         aria-hidden={!sidebarVisible} inert={!sidebarVisible}>
         <section data-tour="lab-add">
           <h2 className="spectral-heading">Add a spectrum</h2>
-          <h3 className="spectral-subheading">Search objects</h3>
-          <p className="spectral-subheading-note">
-            Type a name or catalogue code (M31, NGC 224, HD 48915) to look it up in SIMBAD / NED.
-          </p>
-          <div className="search-box spectral-search">
-            <span className="search-icon" aria-hidden="true">
-              🔍
-            </span>
-            <input
-              type="search"
-              aria-label="Search objects"
-              className="rail-input search-input"
-              placeholder="Name or code, e.g. M31…"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              onKeyDown={handleSearchKeyDown}
-            />
-          </div>
-          <div className="spectral-search-results">
-            <NameSuggestion
-              query={searchQuery}
-              resolve={api.resolveName}
-              onSelect={handleResolvedName}
-              submitRef={nameSubmitRef}
-            />
-          </div>
           <h3 className="spectral-subheading">Featured objects</h3>
           <p className="spectral-subheading-note">Well-known targets to get you started</p>
           {featured.length === 0 && (
@@ -230,6 +204,32 @@ export function SpectralLab({ request = null }: { request?: SpectrumRequest | nu
               );
             })}
           </ul>
+          <h3 className="spectral-subheading spectral-subheading-search">Search objects</h3>
+          <p className="spectral-subheading-note">
+            Type a name or catalogue code (M31, NGC 224, HD 48915) to look it up in SIMBAD / NED.
+          </p>
+          <div className="search-box spectral-search">
+            <span className="search-icon" aria-hidden="true">
+              🔍
+            </span>
+            <input
+              type="search"
+              aria-label="Search objects"
+              className="rail-input search-input"
+              placeholder="Name or code, e.g. M31…"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyDown={handleSearchKeyDown}
+            />
+          </div>
+          <div className="spectral-search-results">
+            <NameSuggestion
+              query={searchQuery}
+              resolve={api.resolveName}
+              onSelect={handleResolvedName}
+              submitRef={nameSubmitRef}
+            />
+          </div>
           <h3 className="spectral-subheading spectral-subheading-coords">Or enter coordinates</h3>
           <form className="spectral-coords" onSubmit={handleSubmit} noValidate>
             <label>

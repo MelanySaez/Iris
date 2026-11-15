@@ -133,7 +133,7 @@ const SPECTRAL: TourStep[] = [
     placement: 'right',
     title: 'Add a spectrum',
     content:
-      'Search an object by name (M31, NGC 224…), pick one of the featured objects or enter RA and Dec in degrees. Each spectrum is the brightness of one point across the 102 channels.',
+      'Pick one of the featured objects, search an object by name (M31, NGC 224…) or enter RA and Dec in degrees. Each spectrum is the brightness of one point across the 102 channels.',
   },
   {
     id: 'lab-compare',
