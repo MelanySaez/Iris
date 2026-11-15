@@ -37,6 +37,7 @@ import { useRgbComposite } from '../../hooks/useRgbComposite';
 import { RgbControls } from './RgbControls';
 import { SelectionActions, type SpectrumTarget } from './SelectionActions';
 import { RegionConfirmBar } from './RegionConfirmBar';
+import type { SpectrumOrigin } from '../../spectrumLabel';
 import { NameSuggestion, type ResolvedTarget, type SubmitLookup } from './NameSuggestion';
 import { runEnterLookup } from '../../searchEnter';
 import { lookupView } from '../../lookupView';
@@ -425,6 +426,8 @@ export function SkyWorkspace({
   const [selectedRegion, setSelectedRegion] = useState<RegionRequest | null>(null);
   // A drawn or adjusted region stays a draft until the user confirms it.
   const [regionConfirmed, setRegionConfirmed] = useState(true);
+  // Object a region was created from (search, featured, recent): names its spectrum while the centre is on it.
+  const [regionOrigin, setRegionOrigin] = useState<SpectrumOrigin | null>(null);
   const regionEdit = useRef<{
     kind: 'move' | 'resize';
     startWorld: [number, number];
@@ -704,6 +707,7 @@ export function SkyWorkspace({
       setRegionError(null);
       setSelectedRegion(target);
       setRegionConfirmed(true);
+      setRegionOrigin(name ? { name, ra_deg: target.ra_deg, dec_deg: target.dec_deg } : null);
 
       if (viewerRef.current) {
         viewerRef.current.gotoRaDec?.(target.ra_deg, target.dec_deg);
@@ -1540,6 +1544,7 @@ export function SkyWorkspace({
 
           <SelectionActions
             selection={selectedRegion}
+            origin={regionOrigin}
             confirmed={regionConfirmed}
             activeJobId={activeJob?.id ?? null}
             onOpenPlate={onOpenPlate}
