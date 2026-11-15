@@ -30,7 +30,7 @@ qr3/level2/2026W20_2A/l2b-v27-2026-267/1/level2_2026W20_2A_0001_1D1_spx_l2b-v27-
 ```
 
 | Measured operation (cold open) | DR1 | QR3 |
-|---|---:|---:|
+| --- | ---: | ---: |
 | Original object bytes, HEAD | 65,393,280 | 65,977,920 |
 | All HDU headers, received body bytes | 89,600 | 89,600 |
 | Header range GETs / HEADs | 15 / 1 | 15 / 1 |
@@ -73,7 +73,7 @@ The actual DR1 and QR3 centers find their respective products. (0°,0°) returns
 The intentionally tiny database scans its WCS records. An RTree/HEALPix accelerator was **evaluated, not implemented or benchmarked**:
 
 | Option | Appropriate use / tradeoff |
-|---|---|
+| --- | --- |
 | SQLite full WCS scan | Simplest for 2–8 rows; no fragile bounding-box rejection. Not a global design. |
 | SQLite + RTree | Lightweight candidate selection, but longitude wrap, poles and conservative distorted boundaries need explicit handling. Always refine with WCS. |
 | HEALPix cell → products + WCS | Recommended global direction: spherical partitioning avoids longitude-seam boxes. Requires conservative cell coverage (not just image-center assignment), completeness bookkeeping and exact refinement; dependency/storage tuning remains unmeasured. |
