@@ -74,7 +74,7 @@ export function App() {
 
   const { snapshot: activeJob, updateSnapshot, pollError, pollRetry, retryPoll } = useJobPoller(activeJobId);
   const consent = useRecordsConsent();
-  const { trackJob } = consent;
+  const { beginJob } = consent;
 
   // Track the live route so job creation can follow the current workspace
   // without re-creating the callback on every navigation.
@@ -91,10 +91,11 @@ export function App() {
   // Create job from sky or plate
   const handleStartJob = useCallback(
     async (req: JobCreateRequest) => {
+      // Without cookies the backend saves nothing; the job is recovered on acceptance.
+      const finishJob = beginJob();
       try {
         const snap = await api.createJob(req);
-        // Without cookies the backend saves nothing; remember the job to recover it.
-        trackJob(snap.id);
+        finishJob(snap.id);
         updateSnapshot(snap);
         setActiveJobId(snap.id);
         setJobCreateError(null);
@@ -112,7 +113,7 @@ export function App() {
         throw err;
       }
     },
-    [updateSnapshot, navigate, trackJob],
+    [updateSnapshot, navigate, beginJob],
   );
 
   // Sky selection → Spectral Lab: each click is a new request id, consumed once.

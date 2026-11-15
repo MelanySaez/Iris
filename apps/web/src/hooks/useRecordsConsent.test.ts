@@ -21,9 +21,9 @@ describe('useRecordsConsent', () => {
     const { result } = renderHook(() => useRecordsConsent(null));
 
     act(() => {
-      result.current.trackJob('job-a');
-      result.current.trackJob('job-b');
-      result.current.trackJob('job-a');
+      result.current.beginJob()('job-a');
+      result.current.beginJob()('job-b');
+      result.current.beginJob()('job-a');
     });
     expect(result.current.recordsEnabled).toBe(false);
 
@@ -36,7 +36,7 @@ describe('useRecordsConsent', () => {
     expect(result.current.recordsVersion).toBe(1);
 
     // Later jobs are saved by the server directly; nothing is pending any more.
-    act(() => result.current.trackJob('job-c'));
+    act(() => result.current.beginJob()('job-c'));
     await act(() => result.current.choose('all'));
     expect(claim).toHaveBeenCalledTimes(1);
   });
@@ -46,7 +46,7 @@ describe('useRecordsConsent', () => {
     const claim = vi.spyOn(api, 'claimSelections');
     const { result } = renderHook(() => useRecordsConsent(null));
 
-    act(() => result.current.trackJob('job-a'));
+    act(() => result.current.beginJob()('job-a'));
     await act(() => result.current.choose('none'));
 
     expect(claim).not.toHaveBeenCalled();
@@ -63,7 +63,7 @@ describe('useRecordsConsent', () => {
       .mockResolvedValueOnce({ claimed: 1 });
     const { result } = renderHook(() => useRecordsConsent(null));
 
-    act(() => result.current.trackJob('job-a'));
+    act(() => result.current.beginJob()('job-a'));
     await act(() => result.current.choose('all'));
     expect(result.current.barOpen).toBe(true);
     expect(result.current.error).toContain('offline');
@@ -72,6 +72,24 @@ describe('useRecordsConsent', () => {
     expect(claim).toHaveBeenLastCalledWith(['job-a']);
     expect(result.current.barOpen).toBe(false);
     expect(result.current.error).toBeNull();
+  });
+
+  it('recovers a job sent before accepting whose answer arrives after', async () => {
+    vi.spyOn(api, 'setConsent').mockResolvedValue({ level: 'necessary', records_enabled: true });
+    const claim = vi.spyOn(api, 'claimSelections').mockResolvedValue({ claimed: 1 });
+    const { result } = renderHook(() => useRecordsConsent(null));
+
+    const finishEarly = result.current.beginJob(); // request sent without cookies
+    await act(() => result.current.choose('necessary'));
+    expect(claim).not.toHaveBeenCalled(); // its id was not known yet
+
+    await act(async () => finishEarly('in-flight'));
+    expect(claim).toHaveBeenCalledWith(['in-flight']);
+    expect(result.current.recordsVersion).toBe(2);
+
+    // A job sent after accepting is saved by the server: nothing to recover.
+    await act(async () => result.current.beginJob()('saved-by-server'));
+    expect(claim).toHaveBeenCalledTimes(1);
   });
 
   it('can reopen the bar to change the choice', () => {

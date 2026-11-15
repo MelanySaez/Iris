@@ -24,6 +24,9 @@ describe('RecordsWorkspace consent', () => {
     expect(screen.getByRole('status').textContent).toContain(
       'Your selections cannot be saved without cookies.',
     );
+    expect(screen.getByRole('status').textContent).toContain(
+      'Records you saved earlier in this browser are kept and shown again when you accept.',
+    );
     fireEvent.click(screen.getByRole('button', { name: 'Cookie settings' }));
     expect(onOpenCookieSettings).toHaveBeenCalledTimes(1);
     expect(list).not.toHaveBeenCalled();

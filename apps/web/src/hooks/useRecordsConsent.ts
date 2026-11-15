@@ -13,8 +13,12 @@ export interface RecordsConsent {
   recordsVersion: number;
   openBar: () => void;
   choose: (level: ConsentLevel) => Promise<void>;
-  /** Remember a job submitted while records are off, to recover it on acceptance. */
-  trackJob: (jobId: string) => void;
+  /**
+   * Call right before sending a job; call the returned function with its id
+   * once the backend answers. A job sent while records were off is recovered:
+   * at acceptance, or at once if the visitor accepted while it was in flight.
+   */
+  beginJob: () => (jobId: string) => void;
 }
 
 function errorText(err: unknown): string {
@@ -36,10 +40,30 @@ export function useRecordsConsent(initial: ConsentLevel | null = readConsent()):
   levelRef.current = level;
   const pending = useRef<string[]>([]);
 
-  const trackJob = useCallback((jobId: string) => {
-    // With records on, the backend saves the job itself.
-    if (recordsEnabled(levelRef.current) || pending.current.includes(jobId)) return;
+  const remember = (jobId: string) => {
+    if (pending.current.includes(jobId)) return;
     pending.current = [...pending.current, jobId].slice(-MAX_CLAIMED_JOBS);
+  };
+
+  const beginJob = useCallback(() => {
+    // With records on when the request leaves, the backend saves the job itself.
+    const sentWithRecords = recordsEnabled(levelRef.current);
+    return (jobId: string) => {
+      if (sentWithRecords) return;
+      if (!recordsEnabled(levelRef.current)) {
+        remember(jobId);
+        return;
+      }
+      // The visitor accepted while this request was in flight: recover it now.
+      void api
+        .claimSelections([jobId])
+        .then(() => setRecordsVersion((version) => version + 1))
+        .catch((err: unknown) => {
+          remember(jobId);
+          setError(errorText(err));
+          setBarOpen(true);
+        });
+    };
   }, []);
 
   const choose = useCallback(async (next: ConsentLevel) => {
@@ -78,6 +102,6 @@ export function useRecordsConsent(initial: ConsentLevel | null = readConsent()):
     recordsVersion,
     openBar,
     choose,
-    trackJob,
+    beginJob,
   };
 }

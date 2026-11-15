@@ -253,7 +253,8 @@ export function RecordsWorkspace({
           <p>
             Your selections cannot be saved without cookies. Iris has no accounts: accept the
             necessary cookies to keep your records in this browser. Selections made in this visit are
-            recovered when you accept.
+            recovered when you accept. Records you saved earlier in this browser are kept and shown
+            again when you accept.
           </p>
           <button type="button" className="records-btn" onClick={onOpenCookieSettings}>
             Cookie settings
