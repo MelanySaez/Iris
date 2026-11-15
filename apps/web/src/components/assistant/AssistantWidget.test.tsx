@@ -40,7 +40,7 @@ describe('AssistantWidget', () => {
     setup();
     expect(screen.queryByRole('dialog', { name: 'Planet X assistant' })).toBeNull();
     const launcher = screen.getByRole('button', { name: 'Open assistant' });
-    expect(launcher.querySelector('svg[data-icon="rover"]')).not.toBeNull();
+    expect(launcher.querySelector('svg[data-icon="bot"]')).not.toBeNull();
     await openPanel();
     expect(screen.getByRole('dialog', { name: 'Planet X assistant' })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Close assistant' }));

@@ -193,17 +193,15 @@ export function AssistantWidget({ getContext, onAction }: AssistantWidgetProps) 
             <path d="M6 6l12 12M18 6L6 18" />
           </svg>
         ) : (
-          // Planetary rover: camera mast, body, rocker legs and three wheels.
-          <svg viewBox="0 0 24 24" aria-hidden="true" data-icon="rover">
-            <rect x="6.5" y="3" width="5" height="3.2" rx="0.8" />
-            <path d="M9 6.2V10.5" />
-            <path d="M15.5 10.5l1.6-3.4" />
-            <circle cx="17.5" cy="6.2" r="0.9" />
-            <rect x="4" y="10.5" width="16" height="4.5" rx="1.2" />
-            <path d="M6.5 15l-0.5 2M12 15v2M17.5 15l0.5 2" />
-            <circle cx="6" cy="19" r="1.9" />
-            <circle cx="12" cy="19" r="1.9" />
-            <circle cx="18" cy="19" r="1.9" />
+          // Robot head: antenna, rounded face, two eyes and a mouth, with side ears.
+          <svg viewBox="0 0 24 24" aria-hidden="true" data-icon="bot">
+            <path d="M12 3.5v3" />
+            <circle cx="12" cy="2.8" r="0.9" />
+            <rect x="4.5" y="6.5" width="15" height="12" rx="3.5" />
+            <path d="M2.5 11v3.5M21.5 11v3.5" />
+            <circle cx="9.2" cy="11.6" r="1.3" />
+            <circle cx="14.8" cy="11.6" r="1.3" />
+            <path d="M9.5 15.3h5" />
           </svg>
         )}
       </button>
