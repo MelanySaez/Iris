@@ -53,7 +53,7 @@ The app opens on a landing page (`#/`): a full-screen star field, **Explore the 
 
 ## Guided tour
 
-An eight-step tour (React Joyride) walks through the viewer: welcome, **Find objects**, the map, the right-click nearby search, the channel dock, the region tool, the workspace tabs and how to replay it. Start it from **Guided Tour** on the landing page or the **?** button in the top bar. It can be skipped at any step; finishing or skipping is remembered in `localStorage` (`iris_tour_seen`). Steps point at `data-tour` attributes, and a step whose anchor is not on screen (for example the rail on a phone) is left out.
+Each workspace has its own short guide (React Joyride), opened with the same **?** button in the top bar for the tab on screen: **Sky** (8 steps: welcome, Find objects, the map, the right-click nearby search, the channel dock, the region tool, the workspace tabs, and a note that every tab has its own guide), **Plate** (the plate, its record, the detector image controls, observation dates, channels, pixel readout), **Spectral Lab** (adding spectra, the comparison list, linear/log axis, the chart, hiding the panel) and **Records** (saved selections, cookies, the table, row actions). **Guided Tour** on the landing page starts the Sky guide. A guide can be skipped at any step; finishing or skipping is remembered in `localStorage` (`iris_tour_seen`). Steps point at `data-tour` attributes, and a step whose anchor is not on screen (the rail on a phone, a Records table with no rows) is left out.
 
 ## Search by name or catalogue code
 

@@ -25,7 +25,7 @@ describe('GuidedTour', () => {
     document.body.innerHTML = '<div data-tour="map"></div>';
     const map = document.querySelector('[data-tour="map"]') as HTMLElement;
     map.getClientRects = () => [{}] as unknown as DOMRectList;
-    render(<GuidedTour run onEnd={vi.fn()} />);
+    render(<GuidedTour tour="sky" run onEnd={vi.fn()} />);
     const ids = (joyride.props?.steps as Array<{ id: string }>).map((s) => s.id);
     expect(ids).toEqual(['welcome', 'map', 'nearby']);
     expect(joyride.props?.run).toBe(true);
@@ -34,7 +34,7 @@ describe('GuidedTour', () => {
 
   it.each(['finished', 'skipped'])('ends and remembers the tour when it is %s', (status) => {
     const onEnd = vi.fn();
-    render(<GuidedTour run onEnd={onEnd} />);
+    render(<GuidedTour tour="sky" run onEnd={onEnd} />);
     expect(hasSeenTour()).toBe(false);
     joyride.props?.onEvent({ status }, {});
     expect(onEnd).toHaveBeenCalledTimes(1);
@@ -44,19 +44,27 @@ describe('GuidedTour', () => {
 
   it('ends the tour when it is closed with Escape or the close button', () => {
     const onEnd = vi.fn();
-    render(<GuidedTour run onEnd={onEnd} />);
+    render(<GuidedTour tour="sky" run onEnd={onEnd} />);
     joyride.props?.onEvent({ status: 'running', action: 'close' }, {});
     expect(onEnd).toHaveBeenCalledTimes(1);
   });
 
   it('does not close the tour on a stray click outside the tooltip', () => {
-    render(<GuidedTour run onEnd={vi.fn()} />);
+    render(<GuidedTour tour="sky" run onEnd={vi.fn()} />);
     expect(joyride.props?.options.overlayClickAction).toBe(false);
+  });
+
+  it('runs the tour of the workspace it is given', () => {
+    document.body.innerHTML = '<div data-tour="lab-axis"></div>';
+    const axis = document.querySelector('[data-tour="lab-axis"]') as HTMLElement;
+    axis.getClientRects = () => [{}] as unknown as DOMRectList;
+    render(<GuidedTour tour="spectral" run onEnd={vi.fn()} />);
+    expect((joyride.props?.steps as Array<{ id: string }>).map((s) => s.id)).toEqual(['lab-axis']);
   });
 
   it('keeps running on intermediate events', () => {
     const onEnd = vi.fn();
-    render(<GuidedTour run onEnd={onEnd} />);
+    render(<GuidedTour tour="sky" run onEnd={onEnd} />);
     joyride.props?.onEvent({ status: 'running', action: 'next' }, {});
     expect(onEnd).not.toHaveBeenCalled();
   });

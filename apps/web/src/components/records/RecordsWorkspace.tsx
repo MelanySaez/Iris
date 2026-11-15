@@ -244,12 +244,12 @@ export function RecordsWorkspace({
   if (!recordsEnabled) {
     return (
       <section className="records-workspace" aria-labelledby="records-title">
-        <header className="records-header">
+        <header className="records-header" data-tour="records-intro">
           <div>
             <h2 id="records-title">Saved selections</h2>
           </div>
         </header>
-        <div className="records-consent" role="status">
+        <div className="records-consent" role="status" data-tour="records-consent">
           <p>
             Your selections cannot be saved without cookies. Iris has no accounts: accept the
             necessary cookies to keep your records in this browser. Selections made in this visit are
@@ -266,7 +266,7 @@ export function RecordsWorkspace({
 
   return (
     <section className="records-workspace" aria-labelledby="records-title">
-      <header className="records-header">
+      <header className="records-header" data-tour="records-intro">
         <div>
           <h2 id="records-title">Saved selections</h2>
           <p className="records-sub">Every region selected in Sky is saved automatically in this browser.</p>
@@ -287,7 +287,7 @@ export function RecordsWorkspace({
       )}
 
       {items.length > 0 && (
-        <table className="records-table">
+        <table className="records-table" data-tour="records-table">
           <thead>
             <tr>
               <th scope="col">Name</th>
@@ -303,7 +303,7 @@ export function RecordsWorkspace({
             </tr>
           </thead>
           <tbody>
-            {items.map((selection) => (
+            {items.map((selection, index) => (
               <tr key={selection.id}>
                 <td>
                   <NameCell selection={selection} onRename={handleRename} />
@@ -320,7 +320,7 @@ export function RecordsWorkspace({
                   <FailureReason details={failureDetails(selection)} />
                 </td>
                 <td className="records-actions">
-                  <div className="records-actions-inner">
+                  <div className="records-actions-inner" data-tour={index === 0 ? 'records-actions' : undefined}>
                     {onShowInSky && (
                       <button
                         type="button"

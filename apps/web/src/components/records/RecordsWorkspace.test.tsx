@@ -41,3 +41,30 @@ describe('RecordsWorkspace consent', () => {
     expect(await screen.findByText(/No saved selections yet/)).toBeTruthy();
   });
 });
+
+describe('RecordsWorkspace tour anchors', () => {
+  const anchors = () => Array.from(document.querySelectorAll('[data-tour]'), (el) => el.getAttribute('data-tour'));
+
+  it('marks the header and the cookie notice before cookies are accepted', () => {
+    render(<RecordsWorkspace onOpenPlate={vi.fn()} recordsEnabled={false} onOpenCookieSettings={vi.fn()} />);
+    expect(anchors()).toEqual(['records-intro', 'records-consent']);
+  });
+
+  it('marks the table and only the first row of actions once there are selections', async () => {
+    const selection = {
+      id: 's1', job_id: 'j1',
+      region: { ra_deg: 10, dec_deg: 41, size_arcmin: 6, fov_deg: 1, coverage: 'available', checked_at: '2026-11-15T00:00:00Z' },
+      channels: [44], products: ['image'], mode: 'latest', stretch: 'asinh', job_status: 'ready',
+      job_error: null, failed_stage: null, error_kind: null, error_trace: null, job_events: null,
+      view_mode: null, rgb_channels: null, name: 'M31', hits: 1,
+      created_at: '2026-11-15T00:00:00Z', last_seen_at: '2026-11-15T00:00:00Z',
+    };
+    vi.spyOn(api, 'listSelections').mockResolvedValue({
+      items: [selection, { ...selection, id: 's2', job_id: 'j2', name: 'M81' }],
+      next_before: null,
+    } as never);
+    render(<RecordsWorkspace onOpenPlate={vi.fn()} recordsEnabled onOpenCookieSettings={vi.fn()} />);
+    await screen.findByText('M81');
+    expect(anchors()).toEqual(['records-intro', 'records-table', 'records-actions']);
+  });
+});

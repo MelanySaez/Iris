@@ -277,3 +277,14 @@ describe('SpectralLab', () => {
     expect(screen.getByText('Selection centre (270.693°, 61.877°) is already in the comparison.')).toBeTruthy();
   });
 });
+
+describe('SpectralLab tour anchors', () => {
+  afterEach(() => cleanup());
+
+  it('marks each part the Spectral Lab tour points at', () => {
+    render(<SpectralLab request={null} />);
+    for (const anchor of ['lab-add', 'lab-compare', 'lab-axis', 'lab-chart', 'lab-sidebar']) {
+      expect(document.querySelectorAll(`[data-tour="${anchor}"]`)).toHaveLength(1);
+    }
+  });
+});
