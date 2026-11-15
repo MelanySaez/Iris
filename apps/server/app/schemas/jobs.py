@@ -56,7 +56,7 @@ class CutoutMetadata(BaseModel):
     epoch: int
     obs_id: str
     date_iso: str
-    source: Literal["remote", "s3", "mixed"]
+    source: Literal["remote", "s3", "mixed", "cube"]
     channel: int | None = None
     calibrated: bool = False
     wavelength_status: str = "wcs_wave_approximate"
@@ -82,7 +82,7 @@ class FrameDescriptor(BaseModel):
     epoch: int
     obs_id: str
     date_iso: str
-    source: Literal["remote", "s3", "mixed"]
+    source: Literal["remote", "s3", "mixed", "cube"]
     calibrated: bool = False
     wavelength_status: str = "wcs_wave_approximate"
     provenance: list[dict[str, Any]] = Field(default_factory=list)
@@ -149,7 +149,7 @@ class ManifestCutout(BaseModel):
     detector: int
     epoch: int
     obs_id: str
-    source: Literal["remote", "s3", "mixed"]
+    source: Literal["remote", "s3", "mixed", "cube"]
     channel: int | None = None
     calibrated: bool = False
     wavelength_status: str = "wcs_wave_approximate"

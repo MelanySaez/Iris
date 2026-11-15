@@ -22,7 +22,7 @@ class RegionDescriptor(BaseModel):
 
 class ProductDescriptor(BaseModel):
     id: str
-    source: Literal["remote", "s3", "mixed"]
+    source: Literal["remote", "s3", "mixed", "cube"]
     detector: int
     band: str
     obs_id: str

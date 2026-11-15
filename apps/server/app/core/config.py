@@ -98,6 +98,10 @@ HIPS_PROPERTIES_URL = (
 TAP_SYNC_URL = "https://irsa.ipac.caltech.edu/TAP/sync"
 CUBE_BASE_URL = "https://irsa.ipac.caltech.edu/data/hips/SPHEREx/spherex_allsky_cube"
 CUBE_ORDER = 5  # order of the published fits-cube tiles (custom_tile_format_order)
+# Public anonymous S3 mirror of the same DR1 cube tiles (fallback when IRSA is down).
+CUBE_S3_BASE_URL = (
+    "https://nasa-irsa-spherex.s3.us-east-1.amazonaws.com/dr1/hips5_cube/hips_20261026"
+)
 CUBE_FETCH_TIMEOUT = 30.0
 CUBE_CACHE_DIR = CACHE_DIR / "cube"
 CUBE_SPECTRUM_CACHE_DIR = CUBE_CACHE_DIR / "spectra"

@@ -85,11 +85,14 @@ def render_frame_png(
 
     active_stretch = stretch or job.request.stretch
     target_prod = product if product in ("image", "variance") else "image"
-    percentile_key = (
-        (channel, -1, target_prod)
-        if cutout.metadata.get("calibrated")
-        else (det, epoch, target_prod)
-    )
+    if cutout.metadata.get("calibrated"):
+        percentile_key = (channel, -1, target_prod)
+    elif cutout.metadata.get("source") == "cube":
+        # Cube cutouts are per channel: a per-detector key would share one
+        # stretch across every channel of the detector.
+        percentile_key = ("cube", channel, target_prod)
+    else:
+        percentile_key = (det, epoch, target_prod)
     percentiles = job.percentiles.get(percentile_key)
     if percentiles is None:
         if cutout.metadata.get("calibrated"):

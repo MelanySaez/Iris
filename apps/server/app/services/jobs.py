@@ -37,12 +37,21 @@ from app.exceptions.domain import (
 from app.repositories.job_snapshots import JobSnapshotRepository
 from app.schemas.jobs import JobRequest
 from app.services.channels import get_channel, get_channel_window
+from app.services.cube_fallback import (
+    CUBE_COVERAGE_STATE,
+    CUBE_PROVIDER,
+    CubeCutout,
+    CubeUpstreamError,
+    build_cube_cutout,
+    no_temporal_notice,
+)
 from app.services.discovery import resolve_region
 from app.services.fits import (
     DerivedCutout,
     download_cutout,
     get_or_extract_derived,
     load_derived_cutout,
+    save_derived_cutout,
 )
 from app.services.rendering import compute_cutout_percentiles
 from app.utils.tracing import request_id_var
@@ -94,6 +103,14 @@ class JobState:
     discovery: dict[str, Any] = field(default_factory=dict)
     animation_reason: str | None = None
 
+    def _wavelength_status(self) -> str:
+        """Job-level wavelength status: calibrated, cube nominal, or approximate."""
+        if self.frames and all(f.get("calibrated") for f in self.frames):
+            return "calibrated_cwave_cband"
+        if self.frames and all(f.get("source") == "cube" for f in self.frames):
+            return str(self.frames[0]["wavelength_status"])
+        return WAVELENGTH_STATUS
+
     def to_snapshot(self) -> dict[str, Any]:
         """Convert current job state to a serializable dictionary matching JobSnapshot."""
         ch_items = []
@@ -135,9 +152,7 @@ class JobState:
             "frames": self.frames,
             "cutouts": self.cutouts,
             "cache": {"hit": self.cache_hit},
-            "wavelength_status": "calibrated_cwave_cband"
-            if self.frames and all(f.get("calibrated") for f in self.frames)
-            else WAVELENGTH_STATUS,
+            "wavelength_status": self._wavelength_status(),
             "calibrated": bool(self.frames)
             and all(f.get("calibrated") for f in self.frames),
             "multi_product_mosaic": "complete"
@@ -529,6 +544,131 @@ class JobManager:
         job.events.append({"stage": job.stage, "at": time.time()})
         self._save_snapshot_to_disk(job)
 
+    def _run_cube_job(self, job: JobState, discovery: dict[str, Any]) -> None:
+        """Build one cutout per requested channel from the DR1 All-Sky Cube on S3.
+
+        The cube is a single combined image: there is exactly one epoch, no
+        VARIANCE layer, and wavelengths are nominal channel centres. The job
+        events, ``animation_reason`` and frame metadata say so.
+        """
+        req = job.request
+        notice = discovery.get("fallback_notice") or no_temporal_notice("", "")
+        job.animation_reason = notice
+        job.events.append(
+            {
+                "stage": "Using DR1 All-Sky Cube fallback",
+                "event_type": "cube_fallback",
+                "provider": CUBE_PROVIDER,
+                "fallback": True,
+                "coverage_state": CUBE_COVERAGE_STATE,
+                "temporal_available": False,
+                "detail": notice,
+                "at": time.time(),
+            }
+        )
+        products = [p for p in sorted(set(req.products)) if p != "variance"]
+        if "variance" in req.products:
+            job.events.append(
+                {
+                    "stage": "Variance unavailable",
+                    "event_type": "cube_no_variance",
+                    "provider": CUBE_PROVIDER,
+                    "detail": "The DR1 All-Sky Cube has no VARIANCE layer; "
+                    "variance frames are omitted.",
+                    "at": time.time(),
+                }
+            )
+        channels = sorted(set(req.channels))
+        job.status = "downloading"
+        cutouts: dict[int, CubeCutout] = {}
+        for done, channel in enumerate(channels, 1):
+            job.stage = f"Reading DR1 cube channel {channel} ({done}/{len(channels)})"
+            job.progress = 20 + int(55 * (done - 1) / len(channels))
+            job.events.append({"stage": job.stage, "at": time.time()})
+            try:
+                cutout = build_cube_cutout(
+                    req.ra_deg, req.dec_deg, req.size_arcmin, channel
+                )
+            except CubeUpstreamError as exc:
+                self._fail(job, "cube_unavailable", str(exc))
+                return
+            try:
+                save_derived_cutout(cutout)
+            except OSError:
+                logger.warning("Could not cache cube cutout %s", cutout.uri)
+            cutouts[channel] = cutout
+            job.cutout_objects[(cutout.detector, 0, channel)] = cutout
+
+        job.status = "rendering"
+        job.progress = 85
+        job.stage = "Rendering frames"
+        job.events.append({"stage": job.stage, "at": time.time()})
+
+        cutouts_meta: list[dict[str, Any]] = []
+        frames: list[dict[str, Any]] = []
+        for channel, cutout in cutouts.items():
+            meta = cutout.metadata
+            h, w = cutout.image.shape
+            job.percentiles[("cube", channel, "image")] = compute_cutout_percentiles(
+                cutout.image
+            )
+            wavelength = float(meta["channel_wavelength_um"])
+            cutouts_meta.append(
+                {
+                    "detector": cutout.detector,
+                    "epoch": 0,
+                    "channel": channel,
+                    "obs_id": cutout.obs_id,
+                    "date_iso": cutout.date_iso,
+                    "source": cutout.source,
+                    "calibrated": False,
+                    "wavelength_status": meta["wavelength_status"],
+                    "provenance": meta["provenance"],
+                    "uri": cutout.uri,
+                    "version": meta["version"],
+                    "shape": [int(h), int(w)],
+                    "pixel_scale_arcsec": meta["pixel_scale_arcsec"],
+                    "wavelength_min_um": round(wavelength, 4),
+                    "wavelength_max_um": round(wavelength, 4),
+                    "bandwidth_median_um": round(float(meta["channel_bandwidth_um"]), 4),
+                    "image_unit": meta["units"]["image"],
+                    "variance_unit": "",
+                    "flags_defined": False,
+                    "flag_bits": [],
+                }
+            )
+            win_min, win_max = get_channel_window(channel)
+            base_url = f"/api/jobs/{job.id}/frames/{channel}"
+            for product in products:
+                frames.append(
+                    {
+                        "channel": channel,
+                        "product": product,
+                        "detector": cutout.detector,
+                        "epoch": 0,
+                        "obs_id": cutout.obs_id,
+                        "date_iso": cutout.date_iso,
+                        "source": cutout.source,
+                        "calibrated": False,
+                        "wavelength_status": meta["wavelength_status"],
+                        "provenance": meta["provenance"],
+                        "width": int(w),
+                        "height": int(h),
+                        "url": f"{base_url}/{product}.png?mode=full&epoch=0",
+                        "slice_url": f"{base_url}/{product}.png?mode=slice&epoch=0",
+                        "wavelengths_url": f"{base_url}/wavelengths.npy?epoch=0",
+                        "window_um": [win_min, win_max],
+                    }
+                )
+
+        job.cutouts = cutouts_meta
+        job.frames = frames
+        job.status = "ready"
+        job.progress = 100
+        job.stage = "Ready"
+        job.events.append({"stage": job.stage, "at": time.time()})
+        self._save_snapshot_to_disk(job)
+
     def _run_job(self, job: JobState) -> None:
         """Complete workflow for a queued job: discover, download, extract, render."""
         try:
@@ -556,6 +696,8 @@ class JobManager:
                     "coverage_complete",
                     "provider_trace",
                     "warning",
+                    "temporal_available",
+                    "fallback_notice",
                 )
                 if key in discovery
             }
@@ -573,6 +715,10 @@ class JobManager:
                     "Retry the request. "
                     f"Discovery error: {discovery.get('warning') or 'unknown'}",
                 )
+                return
+
+            if discovery.get("coverage_state") == CUBE_COVERAGE_STATE:
+                self._run_cube_job(job, discovery)
                 return
 
             if (

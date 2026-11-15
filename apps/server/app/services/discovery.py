@@ -27,6 +27,12 @@ from app.core.config import (
     TAP_SYNC_URL,
 )
 from app.exceptions.domain import RegionRequestError
+from app.services.cube_fallback import (
+    CUBE_COVERAGE_STATE,
+    CUBE_PROVIDER,
+    CubeUpstreamError,
+    discover_cube,
+)
 from app.services.spherex_provider import query_index
 
 logger = logging.getLogger(__name__)
@@ -219,6 +225,51 @@ ORDER BY a.uri
     return [], last_err
 
 
+def _try_cube_fallback(
+    ra_deg: float,
+    dec_deg: float,
+    size_arcmin: float,
+    observe: Callable[[dict[str, Any]], None],
+) -> dict[str, Any] | None:
+    """Last resort after IRSA TAP and the S3 L2 index: the DR1 All-Sky Cube.
+
+    Returns the cube discovery (products and user notice), or None when the
+    cube tiles cannot be read either. Both outcomes are recorded as events.
+    """
+    try:
+        found = discover_cube(ra_deg, dec_deg, size_arcmin)
+    except CubeUpstreamError as exc:
+        observe(
+            {
+                "event_type": "provider_fallback",
+                "provider": CUBE_PROVIDER,
+                "fallback": True,
+                "outcome": "unavailable",
+                "coverage_state": "unknown_not_indexed",
+                "coverage_complete": False,
+                "temporal_available": False,
+                "detail": str(exc),
+                "result_count": 0,
+            }
+        )
+        return None
+    observe(
+        {
+            "event_type": "provider_fallback",
+            "provider": CUBE_PROVIDER,
+            "fallback": True,
+            "outcome": "succeeded",
+            "coverage_state": CUBE_COVERAGE_STATE,
+            "coverage_complete": False,
+            "temporal_available": False,
+            "detail": found["notice"],
+            "result_count": len(found["products"]),
+            "tiles": found["tiles"],
+        }
+    )
+    return found
+
+
 def validate_region_size(size_arcmin: float) -> None:
     """Enforce the region-size contract shared by discovery and jobs."""
     if not math.isfinite(size_arcmin):
@@ -273,6 +324,7 @@ def resolve_region(
             pass
 
     provider_trace: list[dict[str, Any]] = []
+    fallback_notice: str | None = None
 
     def observe(event: dict[str, Any]) -> None:
         provider_trace.append(event)
@@ -315,6 +367,13 @@ def resolve_region(
                 "result_count": len(products),
             }
         )
+        if not products:
+            cube = _try_cube_fallback(ra_deg, dec_deg, size_arcmin, observe)
+            if cube is not None:
+                products = cube["products"]
+                complete = False
+                coverage_state = CUBE_COVERAGE_STATE
+                fallback_notice = cube["notice"]
 
     # Group into detectors summary
     det_map: dict[int, list[dict[str, Any]]] = {}
@@ -363,6 +422,8 @@ def resolve_region(
         "warning": warning,
         "coverage_complete": complete,
         "coverage_state": coverage_state,
+        "temporal_available": coverage_state != CUBE_COVERAGE_STATE,
+        "fallback_notice": fallback_notice,
         "provider_trace": provider_trace,
         "products": products,
         "detectors": detectors,
