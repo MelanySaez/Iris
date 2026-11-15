@@ -18,6 +18,10 @@ pnpm dev
 
 Open the Vite localhost URL. The frontend needs IRSA network access for the official HiPS and localhost/HTTPS for its service worker. Vite proxies `/api` to the FastAPI server on port 8000.
 
+## Assistant
+
+The round button in the bottom-right corner opens the Planet X assistant (Claude, through the backend; see `apps/server/README.md` → Contextual assistant). Ask about the app or give instructions such as “show M101 in RGB” or “open Records”. Each question carries the current interface state (workspace, channel, colour mode, selected region, map centre and zoom). The reply's actions run in the browser after a second validation (`src/assistant.ts`): opening a workspace, drawing a draft region in Sky (it never starts a job; press **Confirm region**), changing channel or colour mode. Each action shows under the reply, and the browser reports whether it ran. **Activity** lists the logged events of the conversation (model calls with tokens and latency, tools, cache hits, guardrails). Replies answered from the cache show **From cache**. **New** starts a new conversation. Without `ANTHROPIC_API_KEY` on the server the panel says the assistant is disabled.
+
 ## Saved selections (Records)
 
 Every region selected in Sky creates a job, and the backend saves it as a selection record. Open **Records** in the top bar to list them, open a ready plate, inspect a pending or failed job in Plate, or delete it. Plate shows discovery attempts and retry timing in the spectral rail; failed jobs offer an explicit retry.

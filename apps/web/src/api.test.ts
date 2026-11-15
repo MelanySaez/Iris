@@ -298,6 +298,25 @@ describe('api client', () => {
     );
   });
 
+  it('sends assistant chat turns and reads its logs', async () => {
+    const reply = { conversation_id: 'c', request_id: 'r', reply: 'Hi', actions: [], cached: false, cache_kind: null };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => reply })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ items: [] }) });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const body = { conversation_id: 'c', messages: [{ role: 'user' as const, content: 'hi' }], context: { workspace: 'sky' as const } };
+    await expect(api.assistantChat(body)).resolves.toEqual(reply);
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/assistant/chat',
+      expect.objectContaining({ method: 'POST', body: JSON.stringify(body) }),
+    );
+
+    await api.assistantLogs({ limit: 50, conversationId: 'abc' });
+    expect(fetchMock.mock.calls[1][0]).toBe('/api/assistant/logs?limit=50&conversation_id=abc');
+  });
+
   it('surfaces the 503 detail when selection storage is disabled', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: false,

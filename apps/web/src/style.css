@@ -3089,7 +3089,8 @@ tr:hover .records-name-edit,
 .sky-selection-actions {
   position: absolute;
   right: 16px;
-  bottom: 18px;
+  /* Above the assistant launcher in the bottom-right corner. */
+  bottom: 84px;
   z-index: 30;
   display: flex;
   flex-direction: column;
@@ -3109,4 +3110,273 @@ tr:hover .records-name-edit,
 
 .selection-action-btn:hover {
   background: var(--sky-hover);
+}
+
+/* ==========================================================================
+   Contextual assistant (launcher bottom right + chat panel)
+   ========================================================================== */
+
+.assistant-launcher {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  padding: 0;
+  border: 1px solid var(--sky-glass-border);
+  border-radius: 50%;
+  background: var(--sky-accent);
+  color: var(--sky-bg);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.5);
+  cursor: pointer;
+  transition: transform 0.15s, filter 0.15s;
+}
+
+.assistant-launcher:hover,
+.assistant-launcher:focus-visible {
+  transform: translateY(-1px);
+  filter: brightness(1.1);
+}
+
+.assistant-launcher.is-open {
+  background: var(--sky-raised);
+  color: var(--sky-ink);
+}
+
+.assistant-launcher svg {
+  width: 24px;
+  height: 24px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.assistant-panel {
+  position: fixed;
+  right: 20px;
+  bottom: 84px;
+  z-index: 80;
+  display: flex;
+  flex-direction: column;
+  width: min(380px, calc(100vw - 40px));
+  height: min(560px, calc(100svh - 120px));
+  background: var(--sky-glass-bg);
+  border: 1px solid var(--sky-glass-border);
+  border-radius: var(--radius-lg);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55);
+  color: var(--sky-ink);
+  font-size: 13px;
+  overflow: hidden;
+}
+
+.assistant-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--sky-line);
+}
+
+.assistant-tabs {
+  display: flex;
+  gap: 2px;
+  margin-left: auto;
+  padding: 2px;
+  border: 1px solid var(--sky-line-strong);
+  border-radius: var(--radius-md);
+  background: var(--sky-bg);
+}
+
+.assistant-tabs button,
+.assistant-reset,
+.assistant-activity-bar button {
+  padding: 3px 10px;
+  border-radius: var(--radius-sm);
+  color: var(--sky-muted);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.assistant-tabs button[aria-selected='true'] {
+  background: var(--sky-raised);
+  color: var(--sky-accent);
+}
+
+.assistant-reset {
+  border: 1px solid var(--sky-line-strong);
+}
+
+.assistant-messages,
+.assistant-activity {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.assistant-msg {
+  max-width: 88%;
+  padding: 8px 11px;
+  border-radius: var(--radius-md);
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.assistant-msg p {
+  margin: 0;
+}
+
+.assistant-msg.user {
+  align-self: flex-end;
+  background: var(--sky-accent);
+  color: var(--sky-bg);
+}
+
+.assistant-msg.assistant {
+  align-self: flex-start;
+  background: var(--sky-raised);
+  border: 1px solid var(--sky-line);
+}
+
+.assistant-actions {
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 11px;
+  color: var(--sky-accent);
+}
+
+.assistant-actions li::before {
+  content: '→ ';
+}
+
+.assistant-actions li.failed {
+  color: var(--sky-danger);
+}
+
+.assistant-badge {
+  display: inline-block;
+  margin-top: 6px;
+  padding: 1px 7px;
+  border: 1px solid var(--sky-line-strong);
+  border-radius: 999px;
+  color: var(--sky-muted);
+  font-size: 10px;
+}
+
+.assistant-notice {
+  margin: 0;
+  color: var(--sky-muted);
+  font-size: 12px;
+}
+
+.assistant-error {
+  margin: 0 12px;
+  color: var(--sky-danger);
+  font-size: 12px;
+}
+
+.assistant-input {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+  padding: 10px 12px;
+  border-top: 1px solid var(--sky-line);
+}
+
+.assistant-input textarea {
+  flex: 1;
+  resize: none;
+  padding: 7px 9px;
+  border: 1px solid var(--sky-line-strong);
+  border-radius: var(--radius-md);
+  background: var(--sky-bg);
+  color: var(--sky-ink);
+  font: inherit;
+}
+
+.assistant-input textarea:focus {
+  outline: 2px solid var(--sky-accent);
+  outline-offset: 1px;
+}
+
+.assistant-input button {
+  padding: 7px 14px;
+  border: 1px solid var(--sky-accent);
+  border-radius: var(--radius-md);
+  background: var(--sky-accent);
+  color: var(--sky-bg);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.assistant-input button:disabled,
+.assistant-input textarea:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.assistant-activity-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--sky-muted);
+  font-size: 11px;
+}
+
+.assistant-activity-bar button {
+  border: 1px solid var(--sky-line-strong);
+}
+
+.assistant-log {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 11px;
+}
+
+.assistant-log li {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--sky-line);
+  overflow-wrap: anywhere;
+}
+
+.assistant-log time {
+  color: var(--sky-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.assistant-log .log-guardrail span,
+.assistant-log .log-error span {
+  color: var(--sky-danger);
+}
+
+.assistant-log .log-cache_hit span {
+  color: var(--sky-accent);
+}
+
+@media (max-width: 520px) {
+  .assistant-panel {
+    right: 10px;
+    left: 10px;
+    width: auto;
+    bottom: 80px;
+  }
 }
