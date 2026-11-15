@@ -235,3 +235,45 @@ def test_designation_with_impossible_seconds_is_not_parsed_locally(fake):
     resp = get("J023675.95+094746.2")
     assert resp.status_code == 404
     assert SIMBAD_HOST in fake.calls
+
+
+# --- Second review: only definitive answers may be cached; bounded waits ---
+
+
+def test_simbad_miss_with_ned_down_is_404_but_not_remembered(fake):
+    fake.ned = "down"
+    resp = get("Arp 220")
+    assert resp.status_code == 404
+    fake.ned = {
+        "Arp 220": {"name": "UGC 09913", "ra": 233.738, "dec": 23.5032, "type": "G"}
+    }
+    assert (
+        get("Arp 220").status_code == 200
+    )  # NED recovered: no stale "unknown" in the way
+
+
+def test_simbad_internal_error_is_an_outage_not_an_unknown_name(fake, monkeypatch):
+    original = fake.__call__
+
+    def simbad_script_error(request):
+        if request.url.host == SIMBAD_HOST:
+            fake.calls.append(SIMBAD_HOST)
+            return httpx.Response(
+                200, text="::error::::::::\n\n[1] internal error, try later\n"
+            )
+        return original(request)
+
+    monkeypatch.setattr(
+        resolver,
+        "_make_client",
+        lambda: httpx.Client(transport=httpx.MockTransport(simbad_script_error)),
+    )
+    assert (
+        get("M31").status_code == 503
+    )  # NED does not know it either; SIMBAD never answered
+
+
+def test_resolver_waits_are_bounded():
+    with resolver._make_client() as client:
+        assert client.timeout.read <= 5
+        assert client.timeout.connect <= 5

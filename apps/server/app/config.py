@@ -39,7 +39,7 @@ SIMBAD_SCRIPT_URL = os.environ.get(
     "SIMBAD_SCRIPT_URL", "https://simbad.cfa.harvard.edu/simbad/sim-script"
 )
 NED_LOOKUP_URL = os.environ.get("NED_LOOKUP_URL", "https://ned.ipac.caltech.edu/srs/ObjectLookup")
-NAME_RESOLVER_TIMEOUT = 10.0
+NAME_RESOLVER_TIMEOUT = 5.0  # per provider; keeps a hung mirror from pinning workers
 NAME_CACHE_DIR = CACHE_DIR / "names"
 NAME_CACHE_TTL_SECONDS = 30 * 86400  # positions of named objects rarely change
 NAME_NOT_FOUND_TTL_SECONDS = 86400  # retry unknown names daily

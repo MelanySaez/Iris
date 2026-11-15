@@ -40,6 +40,9 @@ MAX_NAME_LENGTH = 100
 # Letters (any script), digits, spaces and the punctuation catalogue names use.
 # Newlines and quotes are excluded: the name is embedded in a SIMBAD script line.
 _ALLOWED = re.compile(r"^[\w .+\-*'()/:\[\]]+$", re.UNICODE)
+# SIMBAD reports an unknown identifier with one of these messages; any other
+# ::error is a server-side problem and must not be remembered as "unknown".
+_SIMBAD_NOT_FOUND = re.compile(r"no known catalog|not found", re.IGNORECASE)
 _DESIGNATION = re.compile(
     r"^(?:[A-Za-z0-9]+\s+)?J"
     r"(\d{2})(\d{2})(\d{2})\.?(\d*)"
@@ -135,7 +138,11 @@ def _query_simbad(client: httpx.Client, name: str) -> dict[str, Any] | None:
         # An empty 200 is a degraded mirror, not SIMBAD saying "unknown".
         raise ResolverUnavailable("SIMBAD answered an empty body")
     if lines[0].startswith("::error"):
-        return None
+        if _SIMBAD_NOT_FOUND.search(" ".join(lines[1:])):
+            return None
+        raise ResolverUnavailable(
+            f"SIMBAD reported an error: {' '.join(lines[1:])[:200]}"
+        )
     fields = lines[0].split("|")
     if len(fields) != 3:
         raise ResolverUnavailable(f"SIMBAD answered an unexpected line: {lines[0]!r}")
@@ -238,7 +245,10 @@ def resolve_name(raw: str) -> dict[str, Any]:
                 return {**result, "query": name, "cached": False}
 
     if simbad_answered:
-        _write_cache(name, {"found": False})
+        # Remember the miss only when every provider answered; if NED was down,
+        # a NED-only name could exist, so the next request should ask again.
+        if not failures:
+            _write_cache(name, {"found": False})
         raise HTTPException(status_code=404, detail=_not_found(name))
     raise HTTPException(
         status_code=503,
