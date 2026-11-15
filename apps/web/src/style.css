@@ -2864,14 +2864,27 @@ button:disabled {
   align-items: center;
   gap: 6px;
   min-width: 140px;
+  position: relative;
 }
 
 .records-name-text {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: text;
   max-width: 220px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   font-weight: 600;
+}
+
+.records-name-text.records-muted {
+  color: var(--sky-muted);
+  font-weight: 400;
 }
 
 .records-name-edit {
@@ -2893,21 +2906,20 @@ tr:hover .records-name-edit,
   color: var(--sky-ink);
 }
 
-.records-name-form {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-}
-
 .records-name-input {
-  width: 180px;
-  padding: 5px 8px;
+  position: absolute;
+  inset: 0;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  height: 100%;
+  padding: 0 8px;
   border: 1px solid var(--sky-line-strong);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: var(--sky-bg);
   color: var(--sky-ink);
   font: inherit;
+  font-weight: 600;
 }
 
 .records-name-input:focus {
@@ -2916,7 +2928,11 @@ tr:hover .records-name-edit,
 }
 
 .records-name-error {
-  flex-basis: 100%;
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 1;
+  background: var(--sky-bg);
   margin: 0;
   color: var(--sky-danger);
   font-size: 0.75rem;

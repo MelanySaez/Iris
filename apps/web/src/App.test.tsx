@@ -73,6 +73,17 @@ describe('App workspace switch', () => {
     expect(document.querySelector('.sky-layer')?.classList.contains('layer-hidden')).toBe(true);
   });
 
+  it('hides Products and Hits columns in Records', async () => {
+    vi.mocked(api.listSelections).mockResolvedValueOnce({ items: [recorded], next_before: null });
+    window.location.hash = '#/records';
+    render(<App />);
+
+    expect(await screen.findByRole('columnheader', { name: 'Name' })).toBeTruthy();
+    expect(screen.queryByRole('columnheader', { name: 'Products' })).toBeNull();
+    expect(screen.queryByRole('columnheader', { name: 'Hits' })).toBeNull();
+    expect(document.querySelector('.records-table tbody tr')?.children).toHaveLength(8);
+  });
+
   it('rebuilds a recorded selection on the Sky map from Records', async () => {
     vi.mocked(api.listSelections).mockResolvedValueOnce({ items: [recorded], next_before: null });
     window.location.hash = '#/records';
@@ -116,6 +127,8 @@ describe('App workspace switch', () => {
 
     expect(await screen.findByText('Untitled')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Rename selection' }));
+    expect(screen.queryByRole('button', { name: 'Save' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Cancel' })).toBeNull();
     const input = screen.getByRole('textbox', { name: 'Selection name' });
     fireEvent.change(input, { target: { value: '  M101 core ' } });
     await act(async () => {
@@ -125,6 +138,22 @@ describe('App workspace switch', () => {
     expect(rename).toHaveBeenCalledWith('sel-1', 'M101 core');
     expect(await screen.findByText('M101 core')).toBeTruthy();
     expect(screen.queryByRole('textbox', { name: 'Selection name' })).toBeNull();
+  });
+
+  it('edits the title in place and saves on blur', async () => {
+    vi.mocked(api.listSelections).mockResolvedValueOnce({ items: [recorded], next_before: null });
+    const rename = vi.spyOn(api, 'renameSelection').mockResolvedValue({ ...recorded, name: 'M31' });
+    window.location.hash = '#/records';
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Untitled' }));
+    const input = screen.getByRole('textbox', { name: 'Selection name' });
+    expect(input.parentElement?.className).toBe('records-name');
+    fireEvent.change(input, { target: { value: 'M31' } });
+    await act(async () => { fireEvent.blur(input); });
+
+    expect(rename).toHaveBeenCalledWith('sel-1', 'M31');
+    expect(await screen.findByRole('button', { name: 'M31' })).toBeTruthy();
   });
 
   it('cancels renaming with Escape without saving', async () => {

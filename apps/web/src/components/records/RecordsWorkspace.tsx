@@ -97,7 +97,7 @@ interface NameCellProps {
   onRename: (selection: SelectionSummary, name: string | null) => Promise<boolean>;
 }
 
-/** Selection name with inline editing: Enter or Save stores it, Escape or Cancel discards it. */
+/** Edit in place: Enter or blur saves; Escape discards the draft. */
 function NameCell({ selection, onRename }: NameCellProps) {
   const [draft, setDraft] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -125,58 +125,56 @@ function NameCell({ selection, onRename }: NameCellProps) {
     if (saved) cancel();
   };
 
-  if (draft === null) {
-    return (
-      <div className="records-name">
-        {selection.name ? (
-          <span className="records-name-text">{selection.name}</span>
-        ) : (
-          <span className="records-muted">Untitled</span>
-        )}
-        <button
-          type="button"
-          className="records-name-edit"
-          aria-label="Rename selection"
-          title="Rename"
-          onClick={() => setDraft(selection.name ?? '')}
-        >
-          ✎
-        </button>
-      </div>
-    );
-  }
-
   return (
-    <div className="records-name-form">
-      <input
-        type="text"
-        className="records-name-input"
-        aria-label="Selection name"
-        placeholder="Untitled"
-        value={draft}
-        maxLength={MAX_SELECTION_NAME_LENGTH}
-        autoFocus
-        disabled={saving}
-        onChange={(e) => {
-          setDraft(e.target.value);
-          setProblem(null);
-        }}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') void save();
-          if (e.key === 'Escape') cancel();
-        }}
-      />
-      <button type="button" className="records-btn" disabled={saving} onClick={() => void save()}>
-        {saving ? 'Saving…' : 'Save'}
+    <div className="records-name" aria-busy={saving}>
+      <button
+        type="button"
+        className={`records-name-text${selection.name ? '' : ' records-muted'}`}
+        title="Rename"
+        onClick={() => setDraft(selection.name ?? '')}
+        tabIndex={draft === null ? 0 : -1}
+        style={draft === null ? undefined : { visibility: 'hidden' }}
+      >
+        {selection.name || 'Untitled'}
       </button>
-      <button type="button" className="records-btn" disabled={saving} onClick={cancel}>
-        Cancel
+      <button
+        type="button"
+        className="records-name-edit"
+        aria-label="Rename selection"
+        title="Rename"
+        onClick={() => setDraft(selection.name ?? '')}
+        tabIndex={draft === null ? 0 : -1}
+        style={draft === null ? undefined : { visibility: 'hidden' }}
+      >
+        ✎
       </button>
-      {problem && (
-        <p className="records-name-error" role="alert">
-          {problem}
-        </p>
+      {draft !== null && (
+        <input
+          type="text"
+          className="records-name-input"
+          aria-label="Selection name"
+          aria-invalid={problem ? true : undefined}
+          title={problem ?? 'Enter to save, Escape to cancel'}
+          placeholder="Untitled"
+          value={draft}
+          maxLength={MAX_SELECTION_NAME_LENGTH}
+          autoFocus
+          readOnly={saving}
+          onChange={(e) => {
+            setDraft(e.target.value);
+            setProblem(null);
+          }}
+          onBlur={() => void save()}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              void save();
+            }
+            if (e.key === 'Escape') cancel();
+          }}
+        />
       )}
+      {problem && <span className="records-name-error" role="alert">{problem}</span>}
     </div>
   );
 }
@@ -265,10 +263,8 @@ export function RecordsWorkspace({ onOpenPlate, onShowInSky }: RecordsWorkspaceP
               <th scope="col">Region</th>
               <th scope="col">Channels</th>
               <th scope="col">View</th>
-              <th scope="col">Products</th>
               <th scope="col">Coverage</th>
               <th scope="col">Status</th>
-              <th scope="col">Hits</th>
               <th scope="col">
                 <span className="sr-only">Actions</span>
               </th>
@@ -286,13 +282,11 @@ export function RecordsWorkspace({ onOpenPlate, onShowInSky }: RecordsWorkspaceP
                 <td className="records-mono">
                   <ViewModeCell selection={selection} />
                 </td>
-                <td>{selection.products.join(', ')}</td>
                 <td>{selection.region.coverage}</td>
                 <td>
                   <span className={`records-status status-${selection.job_status}`}>{selection.job_status}</span>
                   <FailureReason details={failureDetails(selection)} />
                 </td>
-                <td className="records-mono">{selection.hits}</td>
                 <td className="records-actions">
                   <div className="records-actions-inner">
                     {onShowInSky && (
