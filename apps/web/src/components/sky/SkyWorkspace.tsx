@@ -31,7 +31,7 @@ import {
   SPHEREX_HIPS_ROOT,
   type SpectralChannel,
 } from '../../hips';
-import { setChannelImageLayer } from '../../aladinView';
+import { pointerToIcrs, setChannelImageLayer } from '../../aladinView';
 import { createCatalogMarker } from '../../catalogMarker';
 import { installCatalogPopupControls } from '../../catalogPopup';
 import { useRgbComposite } from '../../hooks/useRgbComposite';
@@ -51,6 +51,8 @@ import {
   validateCoordinates,
 } from '../../region';
 import type { CatalogObject, JobCreateRequest, JobSnapshot, JobView, RegionRequest } from '../../types';
+import type { NearbyCatalogId, NearbyCatalogSource } from '../../nearbyCatalogs';
+import { SkyContextMenu, type SkyContextTarget } from './SkyContextMenu';
 
 interface SkyWorkspaceProps {
   activeJob: JobSnapshot | null;
@@ -134,6 +136,9 @@ export function SkyWorkspace({
   const viewerRef = useRef<AladinViewer | null>(null);
   const localCatalogRef = useRef<AladinCatalog | null>(null);
   const simbadCatalogRef = useRef<AladinLayer | null>(null);
+  const nearbyCatalogRef = useRef<AladinCatalog | null>(null);
+  const nearbyAnchorMarkerRef = useRef<unknown | null>(null);
+  const nearbyResultMarkersRef = useRef<unknown[]>([]);
   const tocatsLayerRefs = useRef<TocatsCatalogLayerRefs | null>(null);
   if (!tocatsLayerRefs.current) {
     tocatsLayerRefs.current = {
@@ -160,6 +165,10 @@ export function SkyWorkspace({
   const [currentFov, setCurrentFov] = useState<number>(180);
   const [currentFovHeight, setCurrentFovHeight] = useState<number>(180);
   const [projection, setProjection] = useState('SIN');
+  const [contextTarget, setContextTarget] = useState<SkyContextTarget | null>(null);
+  const [contextPosition, setContextPosition] = useState<{ x: number; y: number } | null>(null);
+  const contextTargetRef = useRef<SkyContextTarget | null>(null);
+  const contextPositionRef = useRef<{ x: number; y: number } | null>(null);
   const [cursorCoords, setCursorCoords] = useState<[number, number] | null>(null);
   const lastCursorUpdate = useRef(0);
   const channelRef = useRef(DEFAULT_CHANNEL_INDEX);
@@ -185,6 +194,74 @@ export function SkyWorkspace({
   searchQueryRef.current = searchQuery;
   const [recentSelections, setRecentSelections] = useState<RecentSelection[]>(getRecentSelections());
   const simbadRequestRef = useRef<AbortController | null>(null);
+
+  const clearNearbyResultMarkers = useCallback(() => {
+    const layer = nearbyCatalogRef.current;
+    if (layer) nearbyResultMarkersRef.current.forEach((source) => layer.remove(source));
+    nearbyResultMarkersRef.current = [];
+  }, []);
+
+  const handleNearbySourcesChange = useCallback((sources: NearbyCatalogSource[]) => {
+    const viewer = viewerRef.current;
+    if (!viewer) return;
+    let layer = nearbyCatalogRef.current;
+    if (!layer) {
+      layer = Aladin.catalog({
+        name: 'Temporary nearby sources',
+        color: '#ffd166',
+        sourceSize: 12,
+        shape: createCatalogMarker('#ffd166', 12, 'circle'),
+      });
+      viewer.addCatalog(layer);
+      nearbyCatalogRef.current = layer;
+    }
+    clearNearbyResultMarkers();
+    const markers = sources.map((source) => Aladin.marker(source.raDeg, source.decDeg, {
+      useMarkerDefaultIcon: false,
+    }));
+    if (markers.length) {
+      layer.addSources(markers);
+      nearbyResultMarkersRef.current = markers;
+    }
+  }, [clearNearbyResultMarkers]);
+
+  const removeNearbyAnchor = useCallback(() => {
+    const layer = nearbyCatalogRef.current;
+    if (layer && nearbyAnchorMarkerRef.current) layer.remove(nearbyAnchorMarkerRef.current);
+    nearbyAnchorMarkerRef.current = null;
+    clearNearbyResultMarkers();
+  }, [clearNearbyResultMarkers]);
+
+  const dismissContextMenu = useCallback(() => {
+    contextTargetRef.current = null;
+    contextPositionRef.current = null;
+    setContextTarget(null);
+    setContextPosition(null);
+    removeNearbyAnchor();
+  }, [removeNearbyAnchor]);
+
+  const projectToScreen = useCallback((raDeg: number, decDeg: number) => {
+    const viewer = viewerRef.current;
+    const shell = mapRef.current;
+    if (!viewer?.world2pix || !viewer.getSize || !shell) return null;
+    const pixel = viewer.world2pix(raDeg, decDeg);
+    const size = viewer.getSize();
+    const bounds = shell.getBoundingClientRect();
+    if (!pixel || pixel.length < 2 || size.length < 2 || !bounds.width || !bounds.height
+      || !Number.isFinite(pixel[0]) || !Number.isFinite(pixel[1])
+      || !Number.isFinite(size[0]) || !Number.isFinite(size[1]) || size[0] === 0 || size[1] === 0) return null;
+    return { x: (pixel[0] / size[0]) * bounds.width, y: (pixel[1] / size[1]) * bounds.height };
+  }, []);
+
+  const updateContextPosition = useCallback(() => {
+    const target = contextTargetRef.current;
+    if (!target) return;
+    const point = projectToScreen(target.raDeg, target.decDeg);
+    if (!point) return;
+    // Reproject results too: zoom can move sources while the pin stays at the center.
+    contextPositionRef.current = point;
+    setContextPosition(point);
+  }, [projectToScreen]);
 
   const handleLocalCatalogVisibility = useCallback((visible: boolean) => {
     const catalogLayer = localCatalogRef.current;
@@ -510,11 +587,15 @@ export function SkyWorkspace({
             },
             reopenPopup: (ra, dec, title, description) => viewer.showPopup?.(ra, dec, title, description),
             subscribeToViewportChanges: (callback) => {
-              viewer.on?.('positionChanged', callback);
-              viewer.on?.('resizeChanged', callback);
-              viewer.on?.('rotationChanged', callback);
-              viewer.on?.('projectionChanged', callback);
-              viewer.on?.('zoomChanged', callback);
+              const update = () => {
+                callback();
+                updateContextPosition();
+              };
+              viewer.on?.('positionChanged', update);
+              viewer.on?.('resizeChanged', update);
+              viewer.on?.('rotationChanged', update);
+              viewer.on?.('projectionChanged', update);
+              viewer.on?.('zoomChanged', update);
               return () => {
                 viewer.on?.('positionChanged', undefined);
                 viewer.on?.('resizeChanged', undefined);
@@ -694,20 +775,53 @@ export function SkyWorkspace({
   };
 
   // Convert pointer event to sky world coordinates
-  const toWorld = useCallback((e: React.PointerEvent): [number, number] | null => {
+  const toWorldAt = useCallback((clientX: number, clientY: number): [number, number] | null => {
     const el = mapRef.current;
     const viewer = viewerRef.current;
     if (!el || !viewer || !viewer.getSize || !viewer.pix2world) return null;
 
     const bounds = el.getBoundingClientRect();
     const size = viewer.getSize();
-    const x = ((e.clientX - bounds.left) / bounds.width) * size[0];
-    const y = ((e.clientY - bounds.top) / bounds.height) * size[1];
-
-    const world = viewer.pix2world(x, y);
-    if (!world || world.length < 2 || !world.every(Number.isFinite)) return null;
-    return [world[0], world[1]];
+    if (size.length < 2 || !Number.isFinite(size[0]) || !Number.isFinite(size[1])) return null;
+    return pointerToIcrs(clientX, clientY, bounds, [size[0], size[1]], (x, y) => viewer.pix2world!(x, y));
   }, []);
+
+  const toWorld = useCallback((e: React.PointerEvent): [number, number] | null =>
+    toWorldAt(e.clientX, e.clientY), [toWorldAt]);
+
+  const handleMapContextMenu = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const world = toWorldAt(event.clientX, event.clientY);
+    const bounds = mapRef.current?.getBoundingClientRect();
+    const viewer = viewerRef.current;
+    if (!world || !bounds || !viewer) return;
+
+    viewer.hidePopup?.();
+    removeNearbyAnchor();
+    let layer = nearbyCatalogRef.current;
+    if (!layer) {
+      layer = Aladin.catalog({
+        name: 'Temporary nearby sources',
+        color: '#ffd166',
+        sourceSize: 12,
+        shape: createCatalogMarker('#ffd166', 12, 'circle'),
+      });
+      viewer.addCatalog(layer);
+      nearbyCatalogRef.current = layer;
+    }
+    const anchor = Aladin.marker(world[0], world[1], {
+      useMarkerDefaultIcon: false,
+    });
+    layer.addSources([anchor]);
+    nearbyAnchorMarkerRef.current = anchor;
+    const target = { raDeg: world[0], decDeg: world[1] };
+    const point = { x: event.clientX - bounds.left, y: event.clientY - bounds.top };
+    contextTargetRef.current = target;
+    contextPositionRef.current = point;
+    setContextTarget(target);
+    setContextPosition(point);
+  }, [removeNearbyAnchor, toWorldAt]);
 
   // Pointer drag for region selection
   const handlePointerDown = (e: React.PointerEvent) => {
@@ -949,6 +1063,14 @@ export function SkyWorkspace({
     ...catalogLayers.filter((layer) => layer.visible),
     ...catalogLayers.filter((layer) => !layer.visible),
   ];
+  const visibleNearbyCatalogIds = useMemo<NearbyCatalogId[]>(() => {
+    const visible: NearbyCatalogId[] = [];
+    if (localCatalogVisible) visible.push('featured');
+    if (simbadCatalogVisible) visible.push('simbad');
+    if (tocatsLayerStates.gaia.visible) visible.push('gaia');
+    if (tocatsLayerStates.catwise.visible) visible.push('catwise');
+    return visible;
+  }, [localCatalogVisible, simbadCatalogVisible, tocatsLayerStates.gaia.visible, tocatsLayerStates.catwise.visible]);
 
   return (
     <div className="sky-workspace">
@@ -1179,15 +1301,34 @@ export function SkyWorkspace({
             event.preventDefault();
             event.stopPropagation();
           }}
-          onContextMenuCapture={(event) => {
-            event.preventDefault();
-            event.stopPropagation();
-          }}
+          onContextMenuCapture={handleMapContextMenu}
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
         >
           <div id="aladin-view" aria-label="Aladin Lite All-Sky DR1 HiPS view" />
+
+          {contextTarget && contextPosition && (
+            <div className="sky-search-origin" role="img" aria-label="Search origin: original pinned sky position"
+              style={{ left: contextPosition.x, top: contextPosition.y }}>
+              <svg viewBox="0 0 32 32" aria-hidden="true">
+                <path className="sky-search-origin__outline" d="M16 1v8m0 14v8M1 16h8m14 0h8M16 9l7 7-7 7-7-7Z" />
+                <path d="M16 1v8m0 14v8M1 16h8m14 0h8M16 9l7 7-7 7-7-7Z" />
+              </svg>
+              <span>Origin</span>
+            </div>
+          )}
+          {contextTarget && contextPosition && (
+            <SkyContextMenu
+              target={contextTarget}
+              position={contextPosition}
+              visibleCatalogIds={visibleNearbyCatalogIds}
+              onDismiss={dismissContextMenu}
+              onSourcesChange={handleNearbySourcesChange}
+              mapBoundaryRef={mapRef}
+              projectToScreen={projectToScreen}
+            />
+          )}
 
           {selectedRegion && projectedRegion && (() => {
             const cx = projectedRegion.reduce((sum, p) => sum + p[0], 0) / 4;

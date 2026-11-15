@@ -24,6 +24,22 @@ export function setChannelImageLayer(viewer: SurveyViewer, url: string): void {
   viewer.setImageLayer(url);
 }
 
+/** Convert browser client coordinates into ICRS using Aladin's canvas pixel transform. */
+export function pointerToIcrs(
+  clientX: number,
+  clientY: number,
+  bounds: { left: number; top: number; width: number; height: number },
+  viewportSize: [number, number],
+  pix2world: (x: number, y: number) => number[] | null,
+): [number, number] | null {
+  if (!bounds.width || !bounds.height || !viewportSize.every(Number.isFinite)) return null;
+  const x = ((clientX - bounds.left) / bounds.width) * viewportSize[0];
+  const y = ((clientY - bounds.top) / bounds.height) * viewportSize[1];
+  const world = pix2world(x, y);
+  if (!world || world.length < 2 || !Number.isFinite(world[0]) || !Number.isFinite(world[1])) return null;
+  return [world[0], world[1]];
+}
+
 /** Names of the two overlay layers that carry green and blue in an RGB composite. */
 export const RGB_OVERLAY_NAMES = { g: 'spherex-rgb-green', b: 'spherex-rgb-blue' } as const;
 

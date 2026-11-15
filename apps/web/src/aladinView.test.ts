@@ -1,5 +1,21 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createAndSetViewerSurvey } from './aladinView';
+import { createAndSetViewerSurvey, pointerToIcrs } from './aladinView';
+
+describe('map pointer coordinates', () => {
+  it('scales client coordinates to Aladin pixels before converting with pix2world', () => {
+    const pix2world = vi.fn(() => [42.5, -12.25]);
+    expect(pointerToIcrs(150, 75, { left: 50, top: 25, width: 200, height: 100 }, [800, 400], pix2world))
+      .toEqual([42.5, -12.25]);
+    expect(pix2world).toHaveBeenCalledWith(400, 200);
+  });
+
+  it('rejects zero-sized map bounds and invalid world coordinates', () => {
+    const pix2world = vi.fn(() => [Number.NaN, 2]);
+    expect(pointerToIcrs(1, 1, { left: 0, top: 0, width: 0, height: 10 }, [100, 100], pix2world)).toBeNull();
+    expect(pointerToIcrs(1, 1, { left: 0, top: 0, width: 10, height: 10 }, [100, 100], pix2world)).toBeNull();
+    expect(pix2world).toHaveBeenCalledTimes(1);
+  });
+});
 
 describe('Aladin viewer survey methods', () => {
   it('creates the survey on the viewer instance and prefers setBaseImageLayer', () => {
