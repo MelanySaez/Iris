@@ -18,8 +18,8 @@ Branch: `feat/contextual-assistant` · Delivery: ask-on-risk · Runners: `uv run
 
 | ID | Specs | Route | Status | Commit |
 |----|-------|-------|--------|--------|
-| T1 | S2, S3, S4, S5, S6, S7, S8 | inline | pending | |
-| T2 | S1, S3, S4, S5 | inline | pending | |
+| T1 | S2, S3, S4, S5, S6, S7, S8 | inline | done | 9eb481e |
+| T2 | S1, S3, S4, S5 | inline | done | d0ea109 |
 
 Route evidence: T2 (web widget) depends on T1's API contract, so the units are not independent; no writer trigger.
 
@@ -29,3 +29,6 @@ Route evidence: T2 (web widget) depends on T1's API contract, so the units are n
 - **L2** (2026-11-14, user): "Algo que se me olvidó mencionarte es que además necesito que maneje caché para cuando se realicen solicitudes iguales, poder consultar en este espacio sin necesidad de tener que hacer la consulta completa nuevamente."
 - **L3** (2026-11-14, user): "Necesito que desarrolles lo que te estoy mencionando del chatbot. Además de eso, como te mencionaba arriba, también debe tener sistema para utilizar caché en el caso de que existan solicitudes iguales o similares, para evitar tener que hacer la consulta directa nuevamente al modelo vía API. Puedes colocar en el environment.example la línea para definir la API key que se va a utilizar del modelo del chatbot."
 - **L4** Design: server runs a manual tool loop (one HTTP request per user turn). Server tools (catalog search, saved selections) run on the server; UI tools are validated, queued as actions and acknowledged to the model, then executed by the browser after the reply. UI state travels with each request as delimited data. Logs are JSONL (append-only, no migration). Response cache is in-memory LRU with TTL, keyed by context.
+- **L5** T1 evidence: RED (collection error, module missing) then GREEN — `tests/test_assistant.py` 37 passed with a scripted fake client (no API calls); full server suite 139 passed with the database; ruff clean on the changed files. Verified the installed SDK (`anthropic` 2.8.0) exposes `beta.messages.create(betas, fallbacks, cache_control, output_config, tools)` before use.
+- **L6** T2 evidence: RED (module missing) then GREEN — web suite 241 passed (action validation, API client, widget, App integration); typecheck and build OK; headless screenshot shows the launcher bottom right. Live backend: `/api/assistant/status` → `{"enabled": false}` (no key in the developer `.env`), so no real model call was made.
+- **L7** Not verified: a real round trip against the Anthropic API (needs `ANTHROPIC_API_KEY` and spends tokens) and the Sky command effect against Aladin (no component test drives Aladin).
