@@ -3,6 +3,8 @@
 Requests accept 1–180 arcmin. IRSA TAP remains primary; provider outages can fall
 back to known S3 products. The current local S3 index is deliberately incomplete.
 An empty unindexed query means unknown, not no observations.
+When the index has nothing either, jobs fall back to the
+[DR1 All-Sky Cube](spherex-cube-fallback.md), which has no temporal information.
 
 ## Run and configure
 
