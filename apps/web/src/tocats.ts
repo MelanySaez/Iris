@@ -4,14 +4,16 @@ export const TOCATS_CATALOGS = {
     label: 'Gaia DR3',
     catalogue: 'gaiadr3',
     color: '#b8e66e',
-    sourceSize: 10,
+    sourceSize: 12,
+    shape: 'circle',
   },
   catwise: {
     id: 'catwise',
     label: 'CatWISE2020',
     catalogue: 'catwise_mini',
     color: '#f2a3d2',
-    sourceSize: 10,
+    sourceSize: 12,
+    shape: 'rhomb',
   },
 } as const;
 

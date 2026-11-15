@@ -202,9 +202,9 @@ describe('TOCats cone queries', () => {
 });
 
 describe('TOCats marker presentation', () => {
-  it('uses catalog-colored shapes with a restrained but visible source size', () => {
-    expect(TOCATS_CATALOGS.gaia.sourceSize).toBe(10);
-    expect(TOCATS_CATALOGS.catwise.sourceSize).toBe(10);
+  it('uses catalog-colored shapes with a legible source size', () => {
+    expect(TOCATS_CATALOGS.gaia.sourceSize).toBe(12);
+    expect(TOCATS_CATALOGS.catwise.sourceSize).toBe(12);
   });
 
   it('disables Aladin’s generic marker icon without losing catalogue popups', () => {
