@@ -2,6 +2,13 @@
 
 High-performance spectral plate backend for SPHEREx DR1 Level-2 spectral images. Serves authenticated scientific cutouts discovered via IRSA TAP and sliced from local mission assets. Intentionally distinct from the SPHEREx DR1 All-Sky Cube HiPS used for the sky map.
 
+## Large-field mosaics and temporal comparison
+
+Regions now accept up to **180 arcmin (3°)**. IRSA remains primary with bounded,
+experimental S3 fallback and visible provider status. Calibrated mosaics/history
+require exact product-associated CWAVE/CBAND; WCS-WAVE alone is not sufficient.
+See the [configuration, migration and API guide](../../docs/experiments/spherex-integration.md).
+
 ## Run
 
 ```bash

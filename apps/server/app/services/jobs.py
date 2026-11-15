@@ -3,20 +3,22 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
+import os
 import threading
 import time
 import traceback
 import uuid
 from collections import OrderedDict
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import suppress
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
 import numpy as np
 
 from app.core.config import (
-    CALIBRATED,
     JOB_SNAPSHOT_LRU_SIZE,
     JOB_WORKERS,
     MAX_CHANNELS_PER_JOB,
@@ -78,7 +80,7 @@ class JobState:
     error: str | None = None
     frames: list[dict[str, Any]] = field(default_factory=list)
     cutouts: list[dict[str, Any]] = field(default_factory=list)
-    cutout_objects: dict[tuple[int, int], DerivedCutout] = field(default_factory=dict)
+    cutout_objects: dict[tuple[int, ...], DerivedCutout] = field(default_factory=dict)
     percentiles: dict[tuple[int, int, str], tuple[float, float]] = field(
         default_factory=dict
     )
@@ -88,6 +90,9 @@ class JobState:
     error_kind: str | None = None
     error_trace: str | None = None
     request_id: str | None = None
+    derived_cache_complete: bool = True
+    discovery: dict[str, Any] = field(default_factory=dict)
+    animation_reason: str | None = None
 
     def to_snapshot(self) -> dict[str, Any]:
         """Convert current job state to a serializable dictionary matching JobSnapshot."""
@@ -130,9 +135,16 @@ class JobState:
             "frames": self.frames,
             "cutouts": self.cutouts,
             "cache": {"hit": self.cache_hit},
-            "wavelength_status": WAVELENGTH_STATUS,
-            "calibrated": CALIBRATED,
-            "multi_product_mosaic": MULTI_PRODUCT_MOSAIC,
+            "wavelength_status": "calibrated_cwave_cband"
+            if self.frames and all(f.get("calibrated") for f in self.frames)
+            else WAVELENGTH_STATUS,
+            "calibrated": bool(self.frames)
+            and all(f.get("calibrated") for f in self.frames),
+            "multi_product_mosaic": "complete"
+            if self.frames and all(f.get("calibrated") for f in self.frames)
+            else MULTI_PRODUCT_MOSAIC,
+            "discovery": self.discovery,
+            "animation_reason": self.animation_reason,
         }
 
 
@@ -199,8 +211,32 @@ class JobManager:
         """Deterministic hash for deduplicating identical requests."""
         channels_str = ",".join(str(c) for c in sorted(req.channels))
         products_str = ",".join(sorted(set(req.products)))
+        calibration = os.environ.get("SPHEREX_CALIBRATION_MANIFEST", "")
+        if calibration:
+            from pathlib import Path
+
+            with suppress(OSError, ValueError, TypeError, KeyError):
+                manifest_path = Path(calibration)
+                raw = manifest_path.read_bytes()
+                digest = hashlib.sha256(raw)
+                payload = json.loads(raw)
+                entries = payload.get("products", [payload])
+                paths = {
+                    manifest_path.parent / entry["calibration_path"]
+                    for entry in entries
+                    if isinstance(entry, dict) and entry.get("calibration_path")
+                }
+                for path in sorted(paths):
+                    digest.update(str(path).encode())
+                    try:
+                        with path.open("rb") as stream:
+                            while chunk := stream.read(1024 * 1024):
+                                digest.update(chunk)
+                    except OSError:
+                        digest.update(b"missing-calibration")
+                calibration = digest.hexdigest()
         token = (
-            f"{req.ra_deg:.5f}:{req.dec_deg:.5f}:{req.size_arcmin:.3f}:"
+            f"mosaic-v2:{calibration}:{req.ra_deg:.5f}:{req.dec_deg:.5f}:{req.size_arcmin:.3f}:"
             f"{channels_str}:{products_str}:{req.mode}:{req.stretch}"
         )
         return hashlib.sha256(token.encode("utf-8")).hexdigest()[:20]
@@ -211,7 +247,7 @@ class JobManager:
             raise RegionRequestError(
                 f"Region size {req.size_arcmin} arcmin exceeds limit of "
                 f"{MAX_REGION_SIZE_ARCMIN} arcmin; "
-                "multi-product mosaicking is pending."
+                "Use a smaller region."
             )
         if req.size_arcmin < MIN_REGION_SIZE_ARCMIN:
             raise RegionRequestError(
@@ -237,9 +273,7 @@ class JobManager:
                     "(frames 50 and 51 carry no data)."
                 )
         if not (-90.0 <= req.dec_deg <= 90.0):
-            raise RegionRequestError(
-                "Declination must be between -90 and +90 degrees."
-            )
+            raise RegionRequestError("Declination must be between -90 and +90 degrees.")
         if "image" not in req.products:
             req.products.append("image")
 
@@ -278,7 +312,7 @@ class JobManager:
             snap_data = self.snapshots.read(job_id)
             if snap_data is not None and snap_data.get("status") == "ready":
                 job = self._rebuild_job_from_snapshot(snap_data, req)
-                if job.cutouts and len(job.cutout_objects) == len(job.cutouts):
+                if job.cutouts and job.derived_cache_complete:
                     logger.info(
                         "job=%s request=%s cache=disk_hit",
                         job_id,
@@ -319,7 +353,7 @@ class JobManager:
             try:
                 req = JobRequest(**snap_data.get("request", {}))
                 job = self._rebuild_job_from_snapshot(snap_data, req)
-                if job.cutouts and len(job.cutout_objects) == len(job.cutouts):
+                if job.cutouts and job.derived_cache_complete:
                     with self.lock:
                         self._put_lru(job)
                     return job
@@ -351,6 +385,8 @@ class JobManager:
             frames=snap.get("frames", []),
             cutouts=snap.get("cutouts", []),
             cache_hit=True,
+            discovery=snap.get("discovery", {}),
+            animation_reason=snap.get("animation_reason"),
         )
 
         # Cutouts are reloaded from the derived cache using the persisted source
@@ -361,8 +397,9 @@ class JobManager:
             epoch = c_meta.get("epoch")
             if det is None or epoch is None:
                 continue
-            cutout = resolve_cutout(job, det, epoch)
+            cutout = resolve_cutout(job, det, epoch, c_meta.get("channel"))
             if cutout is None:
+                job.derived_cache_complete = False
                 continue
             for p in ("image", "variance"):
                 job.percentiles[(det, epoch, p)] = compute_cutout_percentiles(
@@ -417,7 +454,8 @@ class JobManager:
         job.stage = stage
         job.events.append(event)
         logger.info(
-            "job=%s request=%s provider=%s attempt=%s/%s outcome=%s will_retry=%s detail=%s",
+            "job=%s request=%s provider=%s attempt=%s/%s "
+            "outcome=%s will_retry=%s detail=%s",
             job.id,
             job.request_id,
             provider,
@@ -427,6 +465,68 @@ class JobManager:
             will_retry,
             attempt.get("detail", ""),
         )
+        self._save_snapshot_to_disk(job)
+
+    def _run_mosaic_job(self, job: JobState, discovery: dict[str, Any]) -> None:
+        """Prepare calibrated, channel-specific epochs without retaining all arrays."""
+        from app.services.temporal_jobs import prepare_temporal_cutouts
+
+        job.status = "extracting"
+        job.progress = 30
+        job.stage = "Verifying calibration and preparing epoch mosaics"
+        job.cutouts = prepare_temporal_cutouts(
+            discovery["products"], job.request, job.events.append
+        )
+        if not job.cutouts:
+            self._fail(
+                job,
+                "calibration_unavailable",
+                "No calibrated channel mosaics are available. Supply verified "
+                "product-associated CWAVE/CBAND calibration; "
+                "WCS-WAVE is not sufficient.",
+            )
+            return
+        for cutout in job.cutouts:
+            channel, epoch = cutout["channel"], cutout["epoch"]
+            win_min, win_max = get_channel_window(channel)
+            for product in sorted(set(job.request.products)):
+                base = f"/api/jobs/{job.id}/frames/{channel}"
+                job.frames.append(
+                    {
+                        **{
+                            key: cutout[key]
+                            for key in (
+                                "channel",
+                                "detector",
+                                "epoch",
+                                "obs_id",
+                                "date_iso",
+                                "source",
+                                "calibrated",
+                                "wavelength_status",
+                                "provenance",
+                                "epoch_id",
+                            )
+                        },
+                        "product": product,
+                        "width": cutout["shape"][1],
+                        "height": cutout["shape"][0],
+                        "url": f"{base}/{product}.png?mode=full&epoch={epoch}",
+                        "slice_url": f"{base}/{product}.png?mode=slice&epoch={epoch}",
+                        "wavelengths_url": f"{base}/wavelengths.npy?epoch={epoch}",
+                        "window_um": [win_min, win_max],
+                    }
+                )
+        job.animation_reason = (
+            "Fewer than two calibrated epochs for one or more channels"
+            if any(
+                sum(c["channel"] == channel for c in job.cutouts) < 2
+                for channel in job.request.channels
+            )
+            else None
+        )
+        job.status, job.progress, job.stage = "ready", 100, "Ready"
+        job.events.append({"stage": job.stage, "at": time.time()})
         self._save_snapshot_to_disk(job)
 
     def _run_job(self, job: JobState) -> None:
@@ -448,6 +548,17 @@ class JobManager:
                 size,
                 on_attempt=lambda attempt: self._record_discovery_attempt(job, attempt),
             )
+            job.discovery = {
+                key: discovery[key]
+                for key in (
+                    "coverage",
+                    "coverage_state",
+                    "coverage_complete",
+                    "provider_trace",
+                    "warning",
+                )
+                if key in discovery
+            }
             self._notify("on_discovered", job, discovery)
             if discovery["coverage"] == "none":
                 self._fail(
@@ -462,6 +573,14 @@ class JobManager:
                     "Retry the request. "
                     f"Discovery error: {discovery.get('warning') or 'unknown'}",
                 )
+                return
+
+            if (
+                req.mode == "history"
+                or size > 60
+                or os.environ.get("SPHEREX_CALIBRATION_MANIFEST")
+            ):
+                self._run_mosaic_job(job, discovery)
                 return
 
             # Group discovered products by detector
@@ -507,9 +626,7 @@ class JobManager:
 
             # Stage 2: Downloading
             job.status = "downloading"
-            remote_downloads = [
-                prod for prod, _ in selected_targets if prod.get("source") == "remote"
-            ]
+            remote_downloads = [prod for prod, _ in selected_targets]
             total_dl = len(remote_downloads)
 
             if total_dl > 0:
@@ -520,8 +637,12 @@ class JobManager:
                     "job=%s stage=%s progress=%s", job.id, job.stage, job.progress
                 )
 
+                from app.services.temporal_jobs import download_product
+
                 dl_futures = [
-                    self.download_pool.submit(download_cutout, p["uri"])
+                    self.download_pool.submit(
+                        download_product, p, req, job.events.append, download_cutout
+                    )
                     for p in remote_downloads
                 ]
                 for done_count, fut in enumerate(dl_futures, 1):
@@ -540,7 +661,7 @@ class JobManager:
             job.events.append({"stage": job.stage, "at": time.time()})
             logger.info("job=%s stage=%s progress=%s", job.id, job.stage, job.progress)
 
-            loaded_cutouts: dict[tuple[int, int], DerivedCutout] = {}
+            loaded_cutouts: dict[tuple[int, ...], DerivedCutout] = {}
             for prod, epoch in selected_targets:
                 cutout = get_or_extract_derived(prod, ra, dec, epoch=epoch)
                 det = cutout.detector
@@ -670,9 +791,14 @@ class JobManager:
 job_manager = JobManager()
 
 
-def resolve_cutout(job: JobState, detector: int, epoch: int) -> DerivedCutout | None:
+def resolve_cutout(
+    job: JobState, detector: int, epoch: int, channel: int | None = None
+) -> DerivedCutout | None:
     """Return a job cutout from memory or the derived disk cache (never network)."""
-    cutout = job.cutout_objects.get((detector, epoch))
+    key = (detector, epoch, channel) if channel is not None else (detector, epoch)
+    cutout = job.cutout_objects.get(key)
+    if cutout is None and channel is not None:
+        cutout = job.cutout_objects.get((detector, epoch))
     if cutout is not None:
         return cutout
 
@@ -680,7 +806,9 @@ def resolve_cutout(job: JobState, detector: int, epoch: int) -> DerivedCutout | 
         (
             c
             for c in job.cutouts
-            if c.get("detector") == detector and c.get("epoch") == epoch
+            if c.get("detector") == detector
+            and c.get("epoch") == epoch
+            and (c.get("channel") is None or c.get("channel") == channel)
         ),
         None,
     )
@@ -692,5 +820,9 @@ def resolve_cutout(job: JobState, detector: int, epoch: int) -> DerivedCutout | 
         return None
 
     with job_manager.lock:
-        job.cutout_objects[(detector, epoch)] = cutout
+        # Reconstruct mosaics on demand, retaining at most four large arrays per job.
+        if channel is not None and cutout.metadata.get("calibrated"):
+            while len(job.cutout_objects) >= 4:
+                job.cutout_objects.pop(next(iter(job.cutout_objects)))
+        job.cutout_objects[key] = cutout
     return cutout

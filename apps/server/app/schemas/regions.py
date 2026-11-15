@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 class ResolveRequest(BaseModel):
     ra_deg: float
     dec_deg: float = Field(ge=-90.0, le=90.0)
-    size_arcmin: float = Field(default=6.0, ge=1.0, le=60.0)
+    size_arcmin: float = Field(default=6.0, ge=1.0, le=180.0)
 
 
 class RegionDescriptor(BaseModel):
@@ -22,13 +22,15 @@ class RegionDescriptor(BaseModel):
 
 class ProductDescriptor(BaseModel):
     id: str
-    source: Literal["remote"]
+    source: Literal["remote", "s3", "mixed"]
     detector: int
     band: str
     obs_id: str
     uri: str
     date_mjd: float
     date_iso: str
+    original_product_uri: str = ""
+    s3_url: str | None = None
 
 
 class EpochDescriptor(BaseModel):
@@ -53,3 +55,6 @@ class ResolveResponse(BaseModel):
     products: list[ProductDescriptor]
     detectors: list[DetectorSummary]
     notes: list[str]
+    coverage_complete: bool = False
+    coverage_state: str = "unknown"
+    provider_trace: list[dict[str, Any]] = Field(default_factory=list)

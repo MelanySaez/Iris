@@ -7,12 +7,12 @@ import uuid
 from fastapi import APIRouter, Depends, Query, Response
 
 from app.api.routes.consent import resolve_owner
-from app.core.config import WAVELENGTH_STATUS
 from app.schemas.jobs import JobRequest, JobSnapshot, ManifestResponse, PixelResponse
 from app.services.job_queries import (
     get_frame_npy,
     get_job_manifest,
     get_pixel_probe,
+    render_animation_gif,
     render_frame_png,
 )
 from app.services.jobs import job_manager
@@ -77,7 +77,9 @@ def get_frame_npy_route(
     body = get_frame_npy(job_id, channel, product, epoch=epoch)
     headers = {"Cache-Control": "private, max-age=3600"}
     if product in ("wavelengths", "bandwidths"):
-        headers["X-Wavelength-Status"] = WAVELENGTH_STATUS
+        headers["X-Wavelength-Status"] = job_manager.get_job(job_id).to_snapshot()[
+            "wavelength_status"
+        ]
     return Response(
         content=body,
         media_type="application/octet-stream",
@@ -103,3 +105,20 @@ def get_pixel(
 def get_manifest(job_id: str) -> ManifestResponse:
     """Return complete scientific provenance document for this job."""
     return ManifestResponse(**get_job_manifest(job_id))
+
+
+@router.get("/{job_id}/animation.gif")
+def get_animation_gif(
+    job_id: str, channel_id: int = Query(..., ge=0, le=101)
+) -> Response:
+    """Download 2–12 verified same-channel epoch mosaics as a display-only GIF."""
+    return Response(
+        content=render_animation_gif(job_id, channel_id),
+        media_type="image/gif",
+        headers={
+            "Cache-Control": "private, max-age=3600",
+            "Content-Disposition": (
+                f'attachment; filename="{job_id}-channel-{channel_id}.gif"'
+            ),
+        },
+    )

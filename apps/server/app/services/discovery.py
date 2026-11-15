@@ -6,9 +6,12 @@ import hashlib
 import io
 import json
 import logging
+import math
 import re
 import time
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
+from urllib.parse import urljoin
 
 import httpx
 from astropy.table import Table
@@ -24,8 +27,12 @@ from app.core.config import (
     TAP_SYNC_URL,
 )
 from app.exceptions.domain import RegionRequestError
+from app.services.spherex_provider import query_index
 
 logger = logging.getLogger(__name__)
+TAP_PAGE_SIZE = 400
+TAP_MAX_PAGES = 10
+
 DiscoveryAttemptObserver = Callable[[dict[str, Any]], None]
 
 
@@ -43,7 +50,7 @@ def _notify_discovery_attempt(
 
 def discovery_cache_key(ra_deg: float, dec_deg: float, size_arcmin: float) -> str:
     """Generate deterministic SHA-1 cache key for discovery results."""
-    token = f"{ra_deg:.5f}:{dec_deg:.5f}:{size_arcmin:.3f}"
+    token = f"area-v2:{ra_deg:.5f}:{dec_deg:.5f}:{size_arcmin:.3f}"
     return hashlib.sha1(token.encode("utf-8")).hexdigest()
 
 
@@ -88,6 +95,14 @@ def parse_tap_votable(
                 "band": band_name,
                 "obs_id": obs_id,
                 "uri": uri,
+                "original_product_uri": urljoin(
+                    "https://irsa.ipac.caltech.edu/", str(row["source_uri"])
+                )
+                if "source_uri" in table.colnames
+                else uri.split("?")[0],
+                "artifact_uri": str(row["source_uri"])
+                if "source_uri" in table.colnames
+                else uri.split("?")[0],
                 "date_mjd": round(mjd, 6),
                 "date_iso": date_iso,
             }
@@ -108,17 +123,21 @@ def query_irsa_tap(
         "'https://irsa.ipac.caltech.edu/' || a.uri || "
         f"'?center={ra_deg:.6f},{dec_deg:.6f}d&size={size_deg:.4f}' AS uri"
     )
-    query = f"""
-SELECT TOP 400
+    query_template = f"""
+SELECT TOP {TAP_PAGE_SIZE}
     {uri_template},
     p.time_bounds_lower,
     p.energy_bandpassname,
-    p.planeid
+    p.planeid,
+    a.uri AS source_uri
 FROM spherex.artifact a
 JOIN spherex.plane p ON a.planeid = p.planeid
-WHERE 1 = CONTAINS(POINT('ICRS', {ra_deg:.6f}, {dec_deg:.6f}), p.poly)
-ORDER BY p.time_bounds_lower
+WHERE 1 = INTERSECTS(BOX('ICRS', {ra_deg:.6f}, {dec_deg:.6f},
+    {size_deg:.6f}, {size_deg:.6f}), p.poly)
+{{cursor}}
+ORDER BY a.uri
 """
+    query = query_template.format(cursor="")
     data = {
         "REQUEST": "doQuery",
         "LANG": "ADQL",
@@ -129,6 +148,7 @@ ORDER BY p.time_bounds_lower
     last_err: str | None = None
     max_attempts = TAP_QUERY_RETRIES + 1
     for attempt in range(1, max_attempts + 1):
+        data["QUERY"] = query
         attempt_info = {
             "event_type": "discovery_attempt",
             "provider": "IRSA TAP",
@@ -141,9 +161,30 @@ ORDER BY p.time_bounds_lower
             with httpx.Client(timeout=TAP_QUERY_TIMEOUT) as client:
                 resp = client.post(TAP_SYNC_URL, data=data)
                 if resp.status_code == 200:
-                    products = parse_tap_votable(
-                        resp.content, ra_deg, dec_deg, size_arcmin
-                    )
+                    products = []
+                    seen = set()
+                    complete = False
+                    for page in range(TAP_MAX_PAGES):
+                        if page:
+                            resp = client.post(TAP_SYNC_URL, data=data)
+                            resp.raise_for_status()
+                        batch = parse_tap_votable(
+                            resp.content, ra_deg, dec_deg, size_arcmin
+                        )
+                        fresh = [p for p in batch if p["id"] not in seen]
+                        products.extend(fresh)
+                        seen.update(p["id"] for p in fresh)
+                        overflow = b"OVERFLOW" in resp.content
+                        if len(batch) < TAP_PAGE_SIZE and not overflow:
+                            complete = True
+                            break
+                        if not fresh:
+                            break
+                        cursor = batch[-1]["artifact_uri"].replace("'", "''")
+                        data["QUERY"] = query_template.format(
+                            cursor=f"AND a.uri > '{cursor}'"
+                        )
+                    products.sort(key=lambda p: (p["date_mjd"], p["id"]))
                     _notify_discovery_attempt(
                         on_attempt,
                         {
@@ -151,6 +192,7 @@ ORDER BY p.time_bounds_lower
                             "outcome": "succeeded",
                             "will_retry": False,
                             "result_count": len(products),
+                            "coverage_complete": complete,
                         },
                     )
                     return products, None
@@ -179,10 +221,12 @@ ORDER BY p.time_bounds_lower
 
 def validate_region_size(size_arcmin: float) -> None:
     """Enforce the region-size contract shared by discovery and jobs."""
+    if not math.isfinite(size_arcmin):
+        raise RegionRequestError("Region size must be finite.")
     if size_arcmin > MAX_REGION_SIZE_ARCMIN:
         raise RegionRequestError(
             f"Region size {size_arcmin} arcmin exceeds limit of "
-            f"{MAX_REGION_SIZE_ARCMIN} arcmin; multi-product mosaicking is pending."
+            f"{MAX_REGION_SIZE_ARCMIN} arcmin."
         )
     if size_arcmin < MIN_REGION_SIZE_ARCMIN:
         raise RegionRequestError(
@@ -199,6 +243,16 @@ def resolve_region(
     on_attempt: DiscoveryAttemptObserver | None = None,
 ) -> dict[str, Any]:
     """Discover available spectral image products from remote TAP."""
+    validate_region_size(size_arcmin)
+    if (
+        not math.isfinite(ra_deg)
+        or not math.isfinite(dec_deg)
+        or not -90 <= dec_deg <= 90
+    ):
+        raise RegionRequestError(
+            "Coordinates must be finite; declination must be in [-90, 90]."
+        )
+    ra_deg %= 360
     start_time = time.time()
     cache_key = discovery_cache_key(ra_deg, dec_deg, size_arcmin)
     cache_path = DISCOVERY_CACHE_DIR / f"{cache_key}.json"
@@ -218,15 +272,49 @@ def resolve_region(
         except Exception:
             pass
 
-    # Query remote TAP
-    if on_attempt is None:
-        remote_products, warning = query_irsa_tap(ra_deg, dec_deg, size_arcmin)
-    else:
-        remote_products, warning = query_irsa_tap(
-            ra_deg, dec_deg, size_arcmin, on_attempt=on_attempt
-        )
+    provider_trace: list[dict[str, Any]] = []
 
+    def observe(event: dict[str, Any]) -> None:
+        provider_trace.append(event)
+        _notify_discovery_attempt(on_attempt, event)
+
+    remote_products, warning = query_irsa_tap(
+        ra_deg, dec_deg, size_arcmin, on_attempt=observe
+    )
     products = remote_products
+    complete = warning is None and all(
+        e.get("coverage_complete", True)
+        for e in provider_trace
+        if e.get("outcome") == "succeeded"
+    )
+    coverage_state = "complete" if complete else "incomplete"
+    # query_irsa_tap's public two-tuple contract is retained. Its bounded error
+    # text is classified conservatively; parser/validation/4xx errors never fall back.
+    unavailable = bool(
+        warning
+        and re.search(
+            r"HTTP 5\d\d|(?:Read|Connect|Write|Pool)Timeout|"
+            r"ConnectError|ReadError|RemoteProtocolError",
+            warning,
+        )
+    )
+    if unavailable:
+        fallback = query_index(ra_deg, dec_deg, size_arcmin)
+        products = fallback["products"]
+        complete = bool(fallback.get("coverage_complete", False))
+        coverage_state = fallback["coverage_state"]
+        observe(
+            {
+                "event_type": "provider_fallback",
+                "provider": "S3",
+                "fallback": True,
+                "outcome": "succeeded" if products else "unavailable",
+                "coverage_state": coverage_state,
+                "coverage_complete": complete,
+                "detail": warning,
+                "result_count": len(products),
+            }
+        )
 
     # Group into detectors summary
     det_map: dict[int, list[dict[str, Any]]] = {}
@@ -256,7 +344,7 @@ def resolve_region(
 
     if products:
         coverage = "available"
-    elif warning is not None:
+    elif warning is not None or not complete:
         coverage = "unknown"
     else:
         coverage = "none"
@@ -273,14 +361,20 @@ def resolve_region(
         "cached": False,
         "query_ms": query_ms,
         "warning": warning,
+        "coverage_complete": complete,
+        "coverage_state": coverage_state,
+        "provider_trace": provider_trace,
         "products": products,
         "detectors": detectors,
-        "notes": ["Discovery via IRSA TAP; individual detector products, not a mosaic."],
+        "notes": [
+            "IRSA primary; S3 fallback is experimental and only "
+            "positively indexed footprints are known."
+        ],
     }
 
     # Save to disk cache. Only definitive outcomes are cached: a transient TAP
     # failure ("unknown") must not poison the region for the whole TTL.
-    if coverage != "unknown":
+    if coverage != "unknown" and complete:
         try:
             to_cache = dict(result)
             to_cache["cached_at"] = time.time()

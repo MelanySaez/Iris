@@ -65,7 +65,8 @@ def test_resolve_region_forwards_discovery_attempts(monkeypatch, tmp_path):
         36.9, 62.26, 1.0, force_refresh=True, on_attempt=attempts.append
     )
 
-    assert attempts == [event]
+    assert attempts[0] == event
+    assert attempts[-1]["fallback"] is True
     assert result["coverage"] == "unknown"
 
 
@@ -86,9 +87,13 @@ def test_tap_http_failures_use_exponential_backoff(monkeypatch):
     monkeypatch.setattr(discovery.httpx, "Client", lambda **kwargs: BadGatewayClient())
     monkeypatch.setattr(discovery.time, "sleep", delays.append)
 
-    products, warning = discovery.query_irsa_tap(36.9, 62.26, 1.0, on_attempt=attempts.append)
+    products, warning = discovery.query_irsa_tap(
+        36.9, 62.26, 1.0, on_attempt=attempts.append
+    )
 
     assert products == []
     assert "HTTP 502" in warning
     assert delays == [0.5, 1.0]
-    assert [event["retry_after_seconds"] for event in attempts if event["outcome"] == "failed"] == [0.5, 1.0, None]
+    assert [
+        event["retry_after_seconds"] for event in attempts if event["outcome"] == "failed"
+    ] == [0.5, 1.0, None]

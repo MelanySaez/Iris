@@ -83,7 +83,7 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
         "name": "show_region",
         "description": (
             "Open Sky centred on a square region and draw it as a draft selection. "
-            "ra_deg in [0, 360), dec_deg in [-90, 90], size_arcmin in [1, 60]. "
+            "ra_deg in [0, 360), dec_deg in [-90, 90], size_arcmin in [1, 180]. "
             "It does not start a job; the person confirms it."
         ),
         "strict": True,
@@ -176,7 +176,7 @@ def validate_ui_tool(name: str, tool_input: Any) -> dict[str, Any]:
             "type": "show_region",
             "ra_deg": _number(data["ra_deg"], "ra_deg", 0, 360, high_open=True),
             "dec_deg": _number(data["dec_deg"], "dec_deg", -90, 90),
-            "size_arcmin": _number(data["size_arcmin"], "size_arcmin", 1, 60),
+            "size_arcmin": _number(data["size_arcmin"], "size_arcmin", 1, 180),
         }
     if name == "set_channel":
         return {"type": "set_channel", "channel": _channel(data["channel"])}
