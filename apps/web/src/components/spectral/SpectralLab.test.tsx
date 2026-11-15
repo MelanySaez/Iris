@@ -381,9 +381,15 @@ describe('SpectralLab featured objects panel', () => {
     render(<SpectralLab request={null} />);
     const panel = document.querySelector('details.spectral-featured') as HTMLDetailsElement;
     expect(panel.open).toBe(false);
-    expect(panel.querySelector('summary')?.textContent).toContain('Featured objects');
+    const summary = panel.querySelector('summary') as HTMLElement;
+    expect(summary.textContent).toContain('Featured objects');
+    // The chevron is the last thing in the summary (right end); CSS turns it up when open.
+    const toggle = summary.lastElementChild as HTMLElement;
+    expect(toggle.classList.contains('spectral-featured-toggle')).toBe(true);
+    expect(toggle.querySelector('svg')).toBeTruthy();
+    expect(summary.textContent).not.toContain('▸');
 
-    fireEvent.click(panel.querySelector('summary') as HTMLElement);
+    fireEvent.click(summary);
     expect(panel.open).toBe(true);
   });
 

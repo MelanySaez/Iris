@@ -4,7 +4,7 @@ import { LAB_FEATURED } from '../../labFeatured';
 import { api, ApiError } from '../../api';
 import { runEnterLookup } from '../../searchEnter';
 import { samePixel } from '../../spectrumLabel';
-import { SearchIcon } from '../SkyIcons';
+import { ChevronDownIcon, SearchIcon } from '../SkyIcons';
 import { NameSuggestion, type ResolvedTarget, type SubmitLookup } from '../sky/NameSuggestion';
 import {
   MAX_SPECTRA,
@@ -175,11 +175,11 @@ export function SpectralLab({ request = null }: { request?: SpectrumRequest | nu
           <h2 className="spectral-heading">Add a spectrum</h2>
           <details className="spectral-featured">
             <summary>
-              <h3 className="spectral-subheading">
-                <span className="spectral-featured-toggle" aria-hidden="true">▸</span>
-                Featured objects
-              </h3>
+              <h3 className="spectral-subheading">Featured objects</h3>
               <span className="spectral-subheading-note">Well-known targets to get you started</span>
+              <span className="spectral-featured-toggle" aria-hidden="true">
+                <ChevronDownIcon />
+              </span>
             </summary>
             <ul className="spectral-catalog">
               {LAB_FEATURED.map((obj) => {
