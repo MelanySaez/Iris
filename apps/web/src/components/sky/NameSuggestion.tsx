@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ApiError } from '../../api';
 import type { SubmitResult } from '../../searchEnter';
-import type { ResolvedName } from '../../types';
+import type { ResolvedAlternative, ResolvedName } from '../../types';
 
 export interface ResolvedTarget {
   ra_deg: number;
@@ -39,7 +39,7 @@ const SOURCE_LABEL: Record<ResolvedName['source'], string> = {
   designation: 'Designation',
 };
 
-const toTarget = (r: ResolvedName): ResolvedTarget => ({
+const toTarget = (r: ResolvedName | ResolvedAlternative): ResolvedTarget => ({
   ra_deg: r.ra_deg,
   dec_deg: r.dec_deg,
   name: r.name,
@@ -139,21 +139,31 @@ export function NameSuggestion({
   if (!name || state.kind === 'idle') return null;
 
   if (state.kind === 'found') {
-    const r = state.result;
+    // The main answer (SIMBAD when it knows the name) first, then other catalogues.
+    const answers = [state.result, ...(state.result.alternatives ?? [])];
     return (
-      <button type="button" className="catalog-row name-suggestion" onClick={() => onSelect(toTarget(r))}>
-        <div className="catalog-row-top">
-          <span className="object-name">{r.name}</span>
-        </div>
-        <div className="catalog-row-bottom">
-          <span className="object-type">
-            {[r.object_type, `${r.ra_deg.toFixed(4)}°, ${r.dec_deg >= 0 ? '+' : ''}${r.dec_deg.toFixed(4)}°`]
-              .filter(Boolean)
-              .join(' · ')}
-          </span>
-          <span className="name-suggestion-source">{SOURCE_LABEL[r.source]}</span>
-        </div>
-      </button>
+      <>
+        {answers.map((r) => (
+          <button
+            key={r.source}
+            type="button"
+            className="catalog-row name-suggestion"
+            onClick={() => onSelect(toTarget(r))}
+          >
+            <div className="catalog-row-top">
+              <span className="object-name">{r.name}</span>
+            </div>
+            <div className="catalog-row-bottom">
+              <span className="object-type">
+                {[r.object_type, `${r.ra_deg.toFixed(4)}°, ${r.dec_deg >= 0 ? '+' : ''}${r.dec_deg.toFixed(4)}°`]
+                  .filter(Boolean)
+                  .join(' · ')}
+              </span>
+              <span className="name-suggestion-source">{SOURCE_LABEL[r.source]}</span>
+            </div>
+          </button>
+        ))}
+      </>
     );
   }
 

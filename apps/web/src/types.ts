@@ -340,5 +340,16 @@ export interface ResolvedName {
   /** Major axis in arcmin from SIMBAD; null for point sources. */
   size_arcmin?: number | null;
   source: 'simbad' | 'ned' | 'designation';
+  /** The same name as answered by other catalogues (NED when SIMBAD is the main answer). */
+  alternatives?: ResolvedAlternative[];
   cached: boolean;
+}
+
+export interface ResolvedAlternative {
+  name: string;
+  ra_deg: number;
+  dec_deg: number;
+  object_type: string | null;
+  size_arcmin?: number | null;
+  source: 'simbad' | 'ned';
 }

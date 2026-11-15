@@ -95,6 +95,7 @@ def test_resolves_a_catalogue_code_through_the_simbad_mirror(fake):
         "object_type": "AGN",
         "size_arcmin": None,
         "source": "simbad",
+        "alternatives": [],
         "cached": False,
     }
 
@@ -118,7 +119,7 @@ def test_falls_back_to_ned_when_simbad_does_not_know_the_name(fake):
     assert resp.status_code == 200
     assert resp.json()["source"] == "ned"
     assert resp.json()["name"] == "UGC 09913"
-    assert fake.calls == [SIMBAD_HOST, NED_HOST]
+    assert sorted(fake.calls) == sorted([SIMBAD_HOST, NED_HOST])  # asked in parallel
 
 
 def test_falls_back_to_ned_when_the_simbad_mirror_is_down(fake):
@@ -324,3 +325,94 @@ def test_cached_answers_from_before_sizes_are_refreshed(fake):
     assert body["size_arcmin"] == pytest.approx(199.53)
     assert body["cached"] is False  # the size-less entry was refreshed
     assert get("M31").json()["cached"] is True  # and the new one is reused
+
+
+# --- Experiment: show both catalogues when both know the name ---
+
+
+def test_both_catalogues_are_offered_with_simbad_first(fake):
+    fake.simbad = {"M31": "M  31|010.684708 +41.268750|AGN|199.53;70.79;  35"}
+    fake.ned = {
+        "M31": {"name": "MESSIER 031", "ra": 10.6848, "dec": 41.2691, "type": "G"}
+    }
+    body = get("M31").json()
+    assert body["source"] == "simbad"
+    assert body["name"] == "M 31"
+    assert body["alternatives"] == [
+        {
+            "name": "MESSIER 031",
+            "ra_deg": pytest.approx(10.6848),
+            "dec_deg": pytest.approx(41.2691),
+            "object_type": "G",
+            "size_arcmin": None,
+            "source": "ned",
+        }
+    ]
+    assert sorted(fake.calls) == sorted([SIMBAD_HOST, NED_HOST])
+
+
+def test_only_one_catalogue_knowing_the_name_gives_no_alternatives(fake):
+    fake.simbad = {"Betelgeuse": "* alf Ori|088.79293899 +07.40706400|RedSG"}
+    assert get("Betelgeuse").json()["alternatives"] == []
+    fake.ned = {
+        "Arp 220": {"name": "UGC 09913", "ra": 233.738, "dec": 23.5032, "type": "G"}
+    }
+    body = get("Arp 220").json()
+    assert body["source"] == "ned"
+    assert body["alternatives"] == []
+
+
+def test_both_answers_are_cached_together(fake):
+    fake.simbad = {"M31": "M  31|010.684708 +41.268750|AGN"}
+    fake.ned = {
+        "M31": {"name": "MESSIER 031", "ra": 10.6848, "dec": 41.2691, "type": "G"}
+    }
+    get("M31")
+    calls = len(fake.calls)
+    again = get("M31").json()
+    assert again["cached"] is True
+    assert [alt["source"] for alt in again["alternatives"]] == ["ned"]
+    assert len(fake.calls) == calls
+
+
+def test_hit_with_ned_down_is_not_cached_so_the_alternative_can_appear_later(fake):
+    fake.simbad = {"M31": "M  31|010.684708 +41.268750|AGN"}
+    fake.ned = "down"
+    first = get("M31").json()
+    assert first["source"] == "simbad"
+    assert first["alternatives"] == []
+    fake.ned = {
+        "M31": {"name": "MESSIER 031", "ra": 10.6848, "dec": 41.2691, "type": "G"}
+    }
+    again = get("M31").json()
+    assert again["cached"] is False
+    assert [alt["source"] for alt in again["alternatives"]] == ["ned"]
+
+
+def test_cached_answers_from_before_alternatives_are_refreshed(fake):
+    fake.simbad = {"M31": "M  31|010.684708 +41.268750|AGN"}
+    resolver._write_cache(
+        "M31",
+        {
+            "found": True,
+            "result": {
+                "name": "M 31",
+                "ra_deg": 10.684708,
+                "dec_deg": 41.26875,
+                "object_type": "AGN",
+                "size_arcmin": None,
+                "source": "simbad",
+            },
+        },
+    )
+    body = get("M31").json()
+    assert body["cached"] is False
+    assert body["alternatives"] == []
+
+
+def test_object_simbad_cannot_place_is_taken_from_ned(fake):
+    fake.simbad = {"Mystery": "NAME Mystery||Unknown"}
+    fake.ned = {"Mystery": {"name": "MYSTERY", "ra": 1.0, "dec": 2.0, "type": "G"}}
+    body = get("Mystery").json()
+    assert body["source"] == "ned"
+    assert body["alternatives"] == []
