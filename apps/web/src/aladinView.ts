@@ -24,6 +24,11 @@ export function setChannelImageLayer(viewer: SurveyViewer, url: string): void {
   viewer.setImageLayer(url);
 }
 
+/** Use Aladin's TAN code for a fresh map, while preserving any restored projection. */
+export function resolveInitialProjection(savedProjection?: string | null): string {
+  return savedProjection || 'TAN';
+}
+
 /** Convert browser client coordinates into ICRS using Aladin's canvas pixel transform. */
 export function pointerToIcrs(
   clientX: number,

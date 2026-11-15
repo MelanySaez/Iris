@@ -31,7 +31,7 @@ import {
   SPHEREX_HIPS_ROOT,
   type SpectralChannel,
 } from '../../hips';
-import { pointerToIcrs, setChannelImageLayer } from '../../aladinView';
+import { pointerToIcrs, resolveInitialProjection, setChannelImageLayer } from '../../aladinView';
 import { createCatalogMarker } from '../../catalogMarker';
 import { installCatalogPopupControls } from '../../catalogPopup';
 import { useRgbComposite } from '../../hooks/useRgbComposite';
@@ -164,7 +164,7 @@ export function SkyWorkspace({
   const [centerCoords, setCenterCoords] = useState<[number, number]>([0, 0]);
   const [currentFov, setCurrentFov] = useState<number>(180);
   const [currentFovHeight, setCurrentFovHeight] = useState<number>(180);
-  const [projection, setProjection] = useState('SIN');
+  const [projection, setProjection] = useState(resolveInitialProjection);
   const [contextTarget, setContextTarget] = useState<SkyContextTarget | null>(null);
   const [contextPosition, setContextPosition] = useState<{ x: number; y: number } | null>(null);
   const contextTargetRef = useRef<SkyContextTarget | null>(null);
@@ -562,6 +562,7 @@ export function SkyWorkspace({
         const viewer = Aladin.aladin('#aladin-view', {
           target: '0 0',
           fov: 180,
+          projection: resolveInitialProjection(),
           survey: channelVirtualHipsUrl(DEFAULT_CHANNEL_INDEX, location.origin),
           cooFrame: 'ICRS',
           showFrame: false,

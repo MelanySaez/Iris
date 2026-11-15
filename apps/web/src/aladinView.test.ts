@@ -1,5 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createAndSetViewerSurvey, pointerToIcrs } from './aladinView';
+import { createAndSetViewerSurvey, pointerToIcrs, resolveInitialProjection } from './aladinView';
+
+describe('initial map projection', () => {
+  it('defaults to Aladin tangent projection while preserving an explicit saved projection', () => {
+    expect(resolveInitialProjection()).toBe('TAN');
+    expect(resolveInitialProjection('AIT')).toBe('AIT');
+  });
+});
 
 describe('map pointer coordinates', () => {
   it('scales client coordinates to Aladin pixels before converting with pix2world', () => {
