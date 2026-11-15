@@ -394,8 +394,6 @@ button:disabled {
   gap: 20px;
   padding: 16px;
   overflow-y: auto;
-  scrollbar-width: thin;
-  scrollbar-color: var(--sky-line-strong) transparent;
   z-index: 20;
 }
 
@@ -475,8 +473,6 @@ button:disabled {
   gap: 2px;
   max-height: 220px;
   overflow-y: auto;
-  scrollbar-width: thin;
-  scrollbar-color: var(--sky-line-strong) transparent;
 }
 
 .catalog-layers-section {
@@ -2629,11 +2625,6 @@ button:disabled {
   stroke-width: 2;
 }
 
-.spectral-direct-label {
-  fill: var(--sky-ink);
-  font-size: 11px;
-}
-
 .spectral-tooltip {
   position: absolute;
   width: 208px;
@@ -2664,11 +2655,6 @@ button:disabled {
 
 .spectral-tooltip-value {
   font-family: var(--mono);
-  color: var(--sky-muted);
-}
-
-.spectral-table summary {
-  cursor: pointer;
   color: var(--sky-muted);
 }
 
@@ -4065,5 +4051,28 @@ p.name-suggestion-error {
   .assistant-guide-reticle,
   .assistant-guide-label {
     animation: none;
+  }
+}
+
+/* Scrollbars: a thin rounded thumb on a clear track, in the zinc greys of the
+   theme, brightening on hover. Chromium and Safari use the ::-webkit-scrollbar
+   rules (setting scrollbar-color would make Chromium ignore them); Firefox only
+   understands the standard properties. */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-corner { background: transparent; }
+::-webkit-scrollbar-thumb {
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background: var(--sky-line-strong) padding-box;
+}
+::-webkit-scrollbar-thumb:hover { background: #71717a padding-box; }
+::-webkit-scrollbar-thumb:active { background: var(--sky-muted) padding-box; }
+::-webkit-scrollbar-button { display: none; width: 0; height: 0; }
+
+@supports not selector(::-webkit-scrollbar) {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--sky-line-strong) transparent;
   }
 }

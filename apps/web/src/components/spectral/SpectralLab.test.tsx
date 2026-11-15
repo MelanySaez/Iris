@@ -90,6 +90,7 @@ describe('SpectralLab', () => {
 
     expect(screen.getByText('2/3 channels · tile 2858')).toBeTruthy();
     expect(screen.getByRole('img', { name: /Spectra of Andromeda Galaxy/ })).toBeTruthy();
+    expect(document.querySelector('.spectral-direct-label')).toBeNull();
     expect(getSpectrum).toHaveBeenCalledWith(10.684708, 41.26875);
   });
 
@@ -103,7 +104,7 @@ describe('SpectralLab', () => {
   });
 
   it('renders positive estimates on the log axis', async () => {
-    getSpectrum.mockResolvedValue(spectrum([10, null, 100]));
+    getSpectrum.mockResolvedValue(spectrum([10, null, 100, null, null, 400]));
     render(<SpectralLab />);
     await act(async () => fireEvent.click(catalogButton('Andromeda Galaxy')));
     fireEvent.click(screen.getByRole('button', { name: 'Log' }));
@@ -141,6 +142,31 @@ describe('SpectralLab', () => {
     expect(screen.getByText('Zoom 1.0×')).toBeTruthy();
   });
 
+  it('leaves plain wheel scrolling to the page and zooms only the chart on a pinch', async () => {
+    getSpectrum.mockResolvedValue(spectrum([10, 20, 30]));
+    render(<SpectralLab />);
+    await act(async () => fireEvent.click(catalogButton('Andromeda Galaxy')));
+    const chart = screen.getByRole('img', { name: /Spectra of Andromeda Galaxy/ });
+    vi.spyOn(chart, 'getBoundingClientRect').mockReturnValue({
+      width: 720, height: 380, left: 0, top: 0, right: 720, bottom: 380, x: 0, y: 0,
+      toJSON: () => ({}),
+    });
+    const wheel = (init: WheelEventInit) => {
+      const event = new WheelEvent('wheel', { bubbles: true, cancelable: true, clientX: 360, clientY: 150, ...init });
+      act(() => { chart.dispatchEvent(event); });
+      return event;
+    };
+
+    const scroll = wheel({ deltaY: -120 });
+    expect(scroll.defaultPrevented).toBe(false);
+    expect(screen.getByText('Zoom 1.0×')).toBeTruthy();
+
+    const pinch = wheel({ deltaY: -40, ctrlKey: true });
+    expect(pinch.defaultPrevented).toBe(true);
+    expect(screen.queryByText('Zoom 1.0×')).toBeNull();
+    expect(screen.getByText('Pinch to zoom · drag to move')).toBeTruthy();
+  });
+
   it('does not expose NHITS in the primary hover flux readout', async () => {
     getSpectrum.mockResolvedValue(spectrum([10, 20, 30]));
     render(<SpectralLab />);
@@ -169,16 +195,25 @@ describe('SpectralLab', () => {
     expect(screen.getByText('20.0 (estimated)')).toBeTruthy();
   });
 
+  it('marks a one-channel estimate with a circle and a longer one with a dashed line', async () => {
+    getSpectrum.mockResolvedValue(spectrum([10, null, 30, null, null, 60]));
+    render(<SpectralLab />);
+    await act(async () => fireEvent.click(catalogButton('Andromeda Galaxy')));
+
+    expect(document.querySelectorAll('.spectral-estimated-marker')).toHaveLength(1);
+    expect(document.querySelectorAll('.spectral-estimated-line')).toHaveLength(3);
+  });
+
   it('hides every estimate from the chart, legend and table when Show estimates is off', async () => {
     getSpectrum.mockResolvedValue(spectrum([10, null, 30]));
     render(<SpectralLab />);
     await act(async () => fireEvent.click(catalogButton('Andromeda Galaxy')));
 
-    const toggle = screen.getByRole('button', { name: 'Show estimates' });
-    expect(toggle.getAttribute('aria-pressed')).toBe('true');
+    const toggle = screen.getByRole('switch', { name: 'Show estimates' });
+    expect(toggle.getAttribute('aria-checked')).toBe('true');
     fireEvent.click(toggle);
 
-    expect(toggle.getAttribute('aria-pressed')).toBe('false');
+    expect(toggle.getAttribute('aria-checked')).toBe('false');
     expect(document.querySelector('.spectral-estimated-marker')).toBeNull();
     expect(document.querySelector('.spectral-estimated-line')).toBeNull();
     expect(screen.queryByText('Interpolated (estimated)')).toBeNull();
@@ -188,6 +223,16 @@ describe('SpectralLab', () => {
 
     fireEvent.click(toggle);
     expect(screen.getByText('20.0 (estimated)')).toBeTruthy();
+  });
+
+  it('shows the data table without having to expand it', async () => {
+    getSpectrum.mockResolvedValue(spectrum([10, 20, 30]));
+    render(<SpectralLab />);
+    await act(async () => fireEvent.click(catalogButton('Andromeda Galaxy')));
+
+    expect(screen.getByRole('heading', { name: 'Data table (3 channels)' })).toBeTruthy();
+    expect(screen.getByRole('table')).toBeTruthy();
+    expect(document.querySelector('.spectral-table details, details.spectral-table')).toBeNull();
   });
 
   it('refuses the same position twice', async () => {

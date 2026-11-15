@@ -155,7 +155,7 @@ const SPECTRAL: TourStep[] = [
     target: '[data-tour="lab-chart"]',
     placement: 'top',
     title: 'Read the chart',
-    content: 'Hover for the value of each channel, scroll to zoom and drag to move around.',
+    content: 'Hover for the value of each channel, pinch on the trackpad (or Ctrl + scroll) to zoom, and drag to move around.',
   },
   {
     id: 'lab-sidebar',
