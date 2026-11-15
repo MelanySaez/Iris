@@ -282,6 +282,22 @@ describe('api client', () => {
     );
   });
 
+  it('renames a selection with a PATCH and returns the updated record', async () => {
+    const updated = { id: 'abc-123', name: 'M101 core' };
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => updated });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(api.renameSelection('abc-123', 'M101 core')).resolves.toEqual(updated);
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/selections/abc-123',
+      expect.objectContaining({
+        method: 'PATCH',
+        headers: expect.objectContaining({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ name: 'M101 core' }),
+      }),
+    );
+  });
+
   it('surfaces the 503 detail when selection storage is disabled', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: false,

@@ -48,6 +48,10 @@ uv run pytest -q   # in apps/server, with .env sourced
 
 `POST /api/jobs` accepts an optional `view` describing how the Sky map showed the region: `{"mode": "single"}` or `{"mode": "rgb", "rgb": [r, g, b]}` (channels 0..101; `rgb` is required for `rgb` and rejected for `single`). It is display metadata: it does not change the job id or the channels the job processes. The saved selection stores the latest view it was sent as `view_mode` and `rgb_channels` (migration `0004`); a request without `view` keeps the recorded one, and selections saved before `0004` have both as `null`.
 
+### Selection names
+
+`PATCH /api/selections/{id}` with `{"name": "M101 core"}` sets the name shown in Records and returns the updated selection. The name is trimmed and limited to 80 characters (longer names get `422`); a blank name or `null` clears it, and the `name` key is required. Unknown ids get `404`. Job submissions never change the name, so selecting the same region again keeps it. Stored in `selection.name` (migration `0005`).
+
 ### Failure traceability
 
 Every failed job records where, why and how it stopped. The job snapshot (`GET /api/jobs/{id}`) and the saved selection carry:

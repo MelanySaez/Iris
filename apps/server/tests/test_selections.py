@@ -280,6 +280,63 @@ def test_list_is_paginated_by_last_seen(client):
 # -- deletion ----------------------------------------------------------------
 
 
+# -- names ------------------------------------------------------------------
+
+
+@requires_db
+def test_selection_can_be_named_renamed_and_unnamed(client):
+    job = client.post("/api/jobs", json={**region(15.25), "channels": [44]}).json()
+    saved = find_by_job(client, job["id"])
+    assert saved["name"] is None
+
+    resp = client.patch(f"/api/selections/{saved['id']}", json={"name": "  M101 core  "})
+    assert resp.status_code == 200
+    assert resp.json()["name"] == "M101 core"
+    assert resp.json()["id"] == saved["id"]
+    assert find_by_job(client, job["id"])["name"] == "M101 core"
+    assert client.get(f"/api/selections/{saved['id']}").json()["name"] == "M101 core"
+
+    renamed = client.patch(f"/api/selections/{saved['id']}", json={"name": "Whirlpool"})
+    assert renamed.json()["name"] == "Whirlpool"
+
+    for cleared in ({"name": "   "}, {"name": None}):
+        resp = client.patch(f"/api/selections/{saved['id']}", json=cleared)
+        assert resp.status_code == 200
+        assert resp.json()["name"] is None
+
+
+@requires_db
+def test_name_survives_selecting_the_same_region_again(client):
+    payload = {**region(15.75), "channels": [44]}
+    job = client.post("/api/jobs", json=payload).json()
+    saved = find_by_job(client, job["id"])
+    wait_for_outcome(client, saved["id"])
+    client.patch(f"/api/selections/{saved['id']}", json={"name": "Kept"})
+
+    client.post("/api/jobs", json=payload)
+    again = find_by_job(client, job["id"])
+    assert again["hits"] == 2
+    assert again["name"] == "Kept"
+
+
+@requires_db
+def test_invalid_names_and_unknown_selections_are_rejected(client):
+    job = client.post("/api/jobs", json={**region(15.5), "channels": [44]}).json()
+    saved = find_by_job(client, job["id"])
+
+    too_long = client.patch(f"/api/selections/{saved['id']}", json={"name": "x" * 81})
+    assert too_long.status_code == 422
+    assert client.patch(f"/api/selections/{saved['id']}", json={}).status_code == 422
+    assert find_by_job(client, job["id"])["name"] is None
+
+    exact = client.patch(f"/api/selections/{saved['id']}", json={"name": "y" * 80})
+    assert exact.status_code == 200
+
+    missing = client.patch(f"/api/selections/{uuid.uuid4()}", json={"name": "Ghost"})
+    assert missing.status_code == 404
+    assert missing.json()["detail"] == "Selection not found."
+
+
 @requires_db
 def test_delete_removes_only_the_selection(client, migrated_db):
     job = client.post("/api/jobs", json={**region(16.5), "channels": [44]}).json()

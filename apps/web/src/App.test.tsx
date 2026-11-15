@@ -50,6 +50,7 @@ const recorded: SelectionSummary = {
   job_events: null,
   view_mode: null,
   rgb_channels: null,
+  name: null,
   hits: 1,
   created_at: '2026-11-14T12:00:00Z',
   last_seen_at: '2026-11-14T12:00:00Z',
@@ -105,5 +106,40 @@ describe('App workspace switch', () => {
     expect(await screen.findByRole('columnheader', { name: 'View' })).toBeTruthy();
     expect(screen.getByText('RGB · 16/32/46').getAttribute('title')).toBe('Recorded by the backend');
     expect(screen.getByTitle('Selected before view modes were recorded').textContent).toBe('—');
+  });
+
+  it('names a selection from Records and shows the name', async () => {
+    vi.mocked(api.listSelections).mockResolvedValueOnce({ items: [recorded], next_before: null });
+    const rename = vi.spyOn(api, 'renameSelection').mockResolvedValue({ ...recorded, name: 'M101 core' });
+    window.location.hash = '#/records';
+    render(<App />);
+
+    expect(await screen.findByText('Untitled')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Rename selection' }));
+    const input = screen.getByRole('textbox', { name: 'Selection name' });
+    fireEvent.change(input, { target: { value: '  M101 core ' } });
+    await act(async () => {
+      fireEvent.keyDown(input, { key: 'Enter' });
+    });
+
+    expect(rename).toHaveBeenCalledWith('sel-1', 'M101 core');
+    expect(await screen.findByText('M101 core')).toBeTruthy();
+    expect(screen.queryByRole('textbox', { name: 'Selection name' })).toBeNull();
+  });
+
+  it('cancels renaming with Escape without saving', async () => {
+    vi.mocked(api.listSelections).mockResolvedValueOnce({ items: [recorded], next_before: null });
+    const rename = vi.spyOn(api, 'renameSelection');
+    window.location.hash = '#/records';
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Rename selection' }));
+    const input = screen.getByRole('textbox', { name: 'Selection name' });
+    fireEvent.change(input, { target: { value: 'Not saved' } });
+    fireEvent.keyDown(input, { key: 'Escape' });
+
+    expect(rename).not.toHaveBeenCalled();
+    expect(screen.queryByRole('textbox', { name: 'Selection name' })).toBeNull();
+    expect(screen.getByText('Untitled')).toBeTruthy();
   });
 });

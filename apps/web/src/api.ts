@@ -13,6 +13,7 @@ import type {
   RegionRequest,
   RegionResolveResponse,
   SelectionListResponse,
+  SelectionSummary,
   StretchMode,
 } from './types';
 
@@ -158,6 +159,15 @@ export const api = {
     if (params?.before) query.set('before', params.before);
     const qs = query.toString();
     return request<SelectionListResponse>(qs ? `/api/selections?${qs}` : '/api/selections');
+  },
+
+  /** Set or clear (null) a selection's name; returns the updated record. */
+  async renameSelection(id: string, name: string | null): Promise<SelectionSummary> {
+    return request<SelectionSummary>(`/api/selections/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name }),
+    });
   },
 
   async deleteSelection(id: string): Promise<void> {

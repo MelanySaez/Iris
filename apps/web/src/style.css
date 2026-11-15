@@ -2858,6 +2858,70 @@ button:disabled {
   color: var(--sky-muted);
 }
 
+/* Selection name: label with an edit button, or an inline editor */
+.records-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 140px;
+}
+
+.records-name-text {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.records-name-edit {
+  padding: 2px 6px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--sky-muted);
+  cursor: pointer;
+  opacity: 0.6;
+}
+
+tr:hover .records-name-edit,
+.records-name-edit:focus-visible {
+  opacity: 1;
+}
+
+.records-name-edit:hover {
+  border-color: var(--sky-line-strong);
+  color: var(--sky-ink);
+}
+
+.records-name-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.records-name-input {
+  width: 180px;
+  padding: 5px 8px;
+  border: 1px solid var(--sky-line-strong);
+  border-radius: 6px;
+  background: var(--sky-bg);
+  color: var(--sky-ink);
+  font: inherit;
+}
+
+.records-name-input:focus {
+  outline: 2px solid var(--sky-accent);
+  outline-offset: 1px;
+}
+
+.records-name-error {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--sky-danger);
+  font-size: 0.75rem;
+}
+
 .records-status.status-ready {
   color: var(--sky-accent-strong);
 }
