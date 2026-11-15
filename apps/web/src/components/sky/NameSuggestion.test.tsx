@@ -13,6 +13,7 @@ const m31: ResolvedName = {
   object_type: 'AGN',
   source: 'simbad',
   cached: false,
+  size_arcmin: 199.53,
 };
 
 function setup(query: string, resolve = vi.fn().mockResolvedValue(m31)) {
@@ -57,7 +58,7 @@ describe('NameSuggestion', () => {
     const option = screen.getByRole('button', { name: /M 31/ });
     expect(option.textContent).toBe('M 31AGN · 10.6847°, +41.2687°SIMBAD');
     fireEvent.click(option);
-    expect(onSelect).toHaveBeenCalledWith({ ra_deg: 10.684708, dec_deg: 41.26875, name: 'M 31' });
+    expect(onSelect).toHaveBeenCalledWith({ ra_deg: 10.684708, dec_deg: 41.26875, name: 'M 31', size_arcmin: 199.53 });
   });
 
   it('asks the resolver once per pause, not once per keystroke', async () => {
@@ -110,7 +111,7 @@ describe('NameSuggestion', () => {
     });
     expect(outcome).toEqual({
       kind: 'found',
-      target: { ra_deg: 10.684708, dec_deg: 41.26875, name: 'M 31' },
+      target: { ra_deg: 10.684708, dec_deg: 41.26875, name: 'M 31', size_arcmin: 199.53 },
     });
     expect(resolve).toHaveBeenCalledTimes(1);
     expect(onSelect).not.toHaveBeenCalled(); // the search box decides whether to move

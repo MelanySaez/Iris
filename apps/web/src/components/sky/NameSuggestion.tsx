@@ -7,6 +7,8 @@ export interface ResolvedTarget {
   ra_deg: number;
   dec_deg: number;
   name: string;
+  /** Major axis in arcmin, used to frame the object; null for point sources. */
+  size_arcmin?: number | null;
 }
 
 /** Called by the search box on Enter; reports what the lookup found. */
@@ -41,6 +43,7 @@ const toTarget = (r: ResolvedName): ResolvedTarget => ({
   ra_deg: r.ra_deg,
   dec_deg: r.dec_deg,
   name: r.name,
+  size_arcmin: r.size_arcmin ?? null,
 });
 
 function errorMessage(err: unknown): string {

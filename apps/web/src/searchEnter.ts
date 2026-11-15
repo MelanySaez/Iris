@@ -1,6 +1,9 @@
 /** What a name lookup triggered by Enter came back with. */
 export type SubmitResult =
-  | { kind: 'found'; target: { ra_deg: number; dec_deg: number; name: string } }
+  | {
+      kind: 'found';
+      target: { ra_deg: number; dec_deg: number; name: string; size_arcmin?: number | null };
+    }
   | { kind: 'missed' }
   /** Overtaken by newer typing or another Enter: must not move the map. */
   | { kind: 'stale' };
@@ -21,7 +24,12 @@ interface EnterLookupDeps {
   /** Increments whenever the map is sent somewhere (click, region, lookup). */
   navigationSeq: () => number;
   firstFeatured: FeaturedTarget | null;
-  goToResolved: (target: { ra_deg: number; dec_deg: number; name: string }) => void;
+  goToResolved: (target: {
+    ra_deg: number;
+    dec_deg: number;
+    name: string;
+    size_arcmin?: number | null;
+  }) => void;
   goToFeatured: (featured: FeaturedTarget) => void;
 }
 

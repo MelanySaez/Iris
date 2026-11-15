@@ -337,6 +337,8 @@ export interface ResolvedName {
   ra_deg: number;
   dec_deg: number;
   object_type: string | null;
+  /** Major axis in arcmin from SIMBAD; null for point sources. */
+  size_arcmin?: number | null;
   source: 'simbad' | 'ned' | 'designation';
   cached: boolean;
 }

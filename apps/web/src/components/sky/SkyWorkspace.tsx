@@ -37,6 +37,7 @@ import { RgbControls } from './RgbControls';
 import { SelectionActions, type SpectrumTarget } from './SelectionActions';
 import { NameSuggestion, type ResolvedTarget, type SubmitLookup } from './NameSuggestion';
 import { runEnterLookup } from '../../searchEnter';
+import { lookupView } from '../../lookupView';
 import { contextFovDeg, resolveSelectionView, saveSelectionView } from '../../selectionView';
 import { ensureServiceWorkerControl } from '../../serviceWorkerControl';
 import {
@@ -47,9 +48,6 @@ import {
   validateCoordinates,
 } from '../../region';
 import type { CatalogObject, JobCreateRequest, JobSnapshot, JobView, RegionRequest } from '../../types';
-
-/** Field of view after a name lookup: wide enough to see the object in context. */
-const NAME_LOOKUP_FOV_DEG = 1;
 
 interface SkyWorkspaceProps {
   activeJob: JobSnapshot | null;
@@ -866,10 +864,13 @@ export function SkyWorkspace({
   // Expert lookup: a resolved name moves the map like a curated object does.
   const handleResolvedName = useCallback(
     (target: ResolvedTarget) => {
-      // A wide view (1°) around the object, instead of the tight 2× region zoom.
-      handleGoto({ ra_deg: target.ra_deg, dec_deg: target.dec_deg, size_arcmin: 6 }, target.name, {
-        fovDeg: NAME_LOOKUP_FOV_DEG,
-      });
+      // Frame the whole object: view and region follow its size in SIMBAD.
+      const view = lookupView(target.size_arcmin);
+      handleGoto(
+        { ra_deg: target.ra_deg, dec_deg: target.dec_deg, size_arcmin: view.regionArcmin },
+        target.name,
+        { fovDeg: view.fovDeg },
+      );
     },
     [handleGoto],
   );
