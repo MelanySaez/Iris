@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
-import type { FormEvent, PointerEvent as ReactPointerEvent, WheelEvent as ReactWheelEvent } from 'react';
+import type { FormEvent, PointerEvent as ReactPointerEvent } from 'react';
 import { LAB_FEATURED } from '../../labFeatured';
 import { api, ApiError } from '../../api';
 import {
@@ -9,8 +9,10 @@ import {
   computeDomain,
   countNonPositive,
   lineSegments,
+  defaultEstimateGap,
   interpolateMissingFlux,
   interpolatedLineSegments,
+  estimatedRuns,
   linearScale,
   logScale,
   logTicks,
@@ -41,7 +43,7 @@ interface SpectrumEntry {
 }
 
 const CHART_HEIGHT = 380;
-const MARGIN = { top: 16, right: 96, bottom: 44, left: 64 };
+const MARGIN = { top: 16, right: 24, bottom: 44, left: 64 };
 const MAX_CHART_ZOOM = 8;
 
 function formatValue(value: number | null): string {
@@ -290,12 +292,14 @@ export function SpectralLab({ request = null }: { request?: SpectrumRequest | nu
           </div>
           <button
             type="button"
-            className={`spectral-toggle ${showEstimates ? 'active' : ''}`}
-            aria-pressed={showEstimates}
-            title="Fill gaps of up to two channels on the same detector with a straight line"
+            role="switch"
+            className="spectral-switch"
+            aria-checked={showEstimates}
+            title="Fill gaps of up to a fifth of the channels with a dashed straight line"
             onClick={() => setShowEstimates((v) => !v)}
           >
-            Show estimates
+            <span className="spectral-switch-track" aria-hidden="true"><span className="spectral-switch-thumb" /></span>
+            <span className="spectral-switch-label">Show estimates</span>
           </button>
         </div>
         <SpectrumChart entries={plotted} mode={yMode} showEstimates={showEstimates} />
@@ -310,7 +314,8 @@ interface PlottedEntry extends SpectrumEntry {
 }
 
 /** Longest run of blank channels the chart fills in; 0 shows the raw measurements only. */
-const estimateGap = (showEstimates: boolean) => (showEstimates ? 2 : 0);
+const estimateGap = (showEstimates: boolean, channels: number) =>
+  (showEstimates ? defaultEstimateGap(channels) : 0);
 
 function SpectrumChart({ entries, mode, showEstimates }: {
   entries: PlottedEntry[];
@@ -323,6 +328,41 @@ function SpectrumChart({ entries, mode, showEstimates }: {
   const [hoverChannel, setHoverChannel] = useState<number | null>(null);
   const [viewDomain, setViewDomain] = useState<{ x: [number, number] | null; y: [number, number] | null }>({ x: null, y: null });
   const dragRef = useRef<{ x: number; y: number } | null>(null);
+  const [svg, setSvg] = useState<SVGSVGElement | null>(null);
+  /** Latest pinch handler; the native listeners below read it so they never see stale scales. */
+  const pinchRef = useRef<(factor: number, clientX: number, clientY: number) => void>(() => {});
+
+  // Plain wheel scrolling belongs to the page. A trackpad pinch arrives as a
+  // wheel event with ctrlKey (Chrome, Edge, Firefox) or as gesture events
+  // (Safari); both zoom only the chart. React's onWheel is passive and cannot
+  // stop the page or the browser from zooming too, so these listeners are native.
+  useEffect(() => {
+    if (!svg) return;
+    const onWheel = (event: WheelEvent) => {
+      if (!event.ctrlKey) return;
+      event.preventDefault();
+      pinchRef.current(Math.exp(-event.deltaY * 0.01), event.clientX, event.clientY);
+    };
+    let lastScale = 1;
+    const onGestureStart = (event: Event) => {
+      event.preventDefault();
+      lastScale = 1;
+    };
+    const onGestureChange = (event: Event) => {
+      event.preventDefault();
+      const gesture = event as Event & { scale: number; clientX: number; clientY: number };
+      pinchRef.current(gesture.scale / lastScale, gesture.clientX, gesture.clientY);
+      lastScale = gesture.scale;
+    };
+    svg.addEventListener('wheel', onWheel, { passive: false });
+    svg.addEventListener('gesturestart', onGestureStart);
+    svg.addEventListener('gesturechange', onGestureChange);
+    return () => {
+      svg.removeEventListener('wheel', onWheel);
+      svg.removeEventListener('gesturestart', onGestureStart);
+      svg.removeEventListener('gesturechange', onGestureChange);
+    };
+  }, [svg]);
 
   useEffect(() => {
     const el = containerRef.current;
@@ -342,7 +382,7 @@ function SpectrumChart({ entries, mode, showEstimates }: {
   }, []);
 
   const plottedSeries = useMemo(
-    () => entries.map((e) => interpolateMissingFlux(e.data.points, estimateGap(showEstimates))),
+    () => entries.map((e) => interpolateMissingFlux(e.data.points, estimateGap(showEstimates, e.data.points.length))),
     [entries, showEstimates],
   );
   const series = plottedSeries;
@@ -398,15 +438,15 @@ function SpectrumChart({ entries, mode, showEstimates }: {
     }));
   };
 
-  const handleWheel = (event: ReactWheelEvent<SVGSVGElement>) => {
-    event.preventDefault();
-    const rect = event.currentTarget.getBoundingClientRect();
-    const localX = ((event.clientX - rect.left) / rect.width) * width;
-    const localY = ((event.clientY - rect.top) / rect.height) * CHART_HEIGHT;
-    if (localX < MARGIN.left || localX > plotRight || localY < MARGIN.top || localY > plotBottom) return;
-    setZoom(event.deltaY < 0 ? 1.2 : 1 / 1.2,
-      (localX - MARGIN.left) / plotWidth,
-      1 - (localY - MARGIN.top) / plotHeight);
+  pinchRef.current = (factor, clientX, clientY) => {
+    if (!svg || !Number.isFinite(factor) || factor <= 0) return;
+    const rect = svg.getBoundingClientRect();
+    const localX = ((clientX - rect.left) / rect.width) * width;
+    const localY = ((clientY - rect.top) / rect.height) * CHART_HEIGHT;
+    const clamp = (v: number) => Math.min(1, Math.max(0, v));
+    setZoom(factor,
+      clamp((localX - MARGIN.left) / plotWidth),
+      clamp(1 - (localY - MARGIN.top) / plotHeight));
   };
 
   const handlePointerDown = (event: ReactPointerEvent<SVGSVGElement>) => {
@@ -447,20 +487,6 @@ function SpectrumChart({ entries, mode, showEstimates }: {
     setHoverChannel(nearestChannel(reference, wavelength));
   };
 
-  // Direct labels at the last available point, nudged apart vertically.
-  const labels = entries
-    .map((e) => {
-      const last = [...e.data.points]
-        .reverse()
-        .find((p) => p.value !== null && Number.isFinite(y(p.value)));
-      return last ? { key: e.key, text: e.label, y: y(last.value as number) } : null;
-    })
-    .filter((l): l is { key: string; text: string; y: number } => l !== null)
-    .sort((a, b) => a.y - b.y);
-  for (let i = 1; i < labels.length; i += 1) {
-    labels[i].y = Math.max(labels[i].y, labels[i - 1].y + 14);
-  }
-
   const hovered = hoverChannel !== null ? reference[hoverChannel] : null;
   const tooltipLeft = hovered ? x(hovered.wavelength_um) : 0;
 
@@ -474,9 +500,10 @@ function SpectrumChart({ entries, mode, showEstimates }: {
           onClick={() => setZoom(1.5)}>+</button>
         <button type="button" className="spectral-toggle" aria-label="Reset zoom" disabled={zoomFactor <= 1.01}
           onClick={() => setViewDomain({ x: null, y: null })}>Reset</button>
-        <span className="spectral-chart-hint">Scroll to zoom · drag to move</span>
+        <span className="spectral-chart-hint">Pinch to zoom · drag to move</span>
       </div>
       <svg
+        ref={setSvg}
         width="100%"
         height={CHART_HEIGHT}
         viewBox={`0 0 ${width} ${CHART_HEIGHT}`}
@@ -486,7 +513,6 @@ function SpectrumChart({ entries, mode, showEstimates }: {
         onPointerMove={handleMove}
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerUp}
-        onWheel={handleWheel}
         onPointerLeave={(event) => { if (!dragRef.current) setHoverChannel(null); else handlePointerUp(event); }}
       >
         <defs>
@@ -528,8 +554,10 @@ function SpectrumChart({ entries, mode, showEstimates }: {
             {interpolatedLineSegments(plottedSeries[entryIndex], x, y).map((d, i) => (
               <path key={`estimated-${i}`} d={d} className="spectral-estimated-line" />
             ))}
-            {plottedSeries[entryIndex]
-              .filter((p) => p.interpolated && p.value !== null && Number.isFinite(y(p.value)))
+            {estimatedRuns(plottedSeries[entryIndex])
+              .filter((run) => run.points.length === 1)
+              .map((run) => run.points[0])
+              .filter((p) => Number.isFinite(y(p.value as number)))
               .map((p) => (
                 <circle
                   key={`estimated-${p.channel}`}
@@ -562,16 +590,14 @@ function SpectrumChart({ entries, mode, showEstimates }: {
           </g>
         )}
 
-        {labels.map((l) => (
-          <text key={l.key} className="spectral-direct-label" x={plotRight + 8} y={l.y} dominantBaseline="middle">
-            {l.text.length > 14 ? `${l.text.slice(0, 13)}…` : l.text}
-          </text>
-        ))}
       </svg>
       <div className="spectral-estimate-legend" aria-label="Flux data legend">
         <span><i className="spectral-observed-key" aria-hidden="true" />Observed</span>
         {showEstimates && (
-          <span><i className="spectral-interpolated-key" aria-hidden="true" />Interpolated (estimated)</span>
+          <>
+            <span><i className="spectral-interpolated-key" aria-hidden="true" />Interpolated (estimated)</span>
+            <span><i className="spectral-single-estimate-key" aria-hidden="true" />One estimated channel</span>
+          </>
         )}
       </div>
       {plottedSeries.some((points) => points.some((p) => p.interpolated)) && (
@@ -623,14 +649,15 @@ function SpectrumChart({ entries, mode, showEstimates }: {
 }
 
 function SpectrumTable({ entries, showEstimates }: { entries: PlottedEntry[]; showEstimates: boolean }) {
+  const tableId = useId().replace(/:/g, '');
   const channels = entries[0].data.points;
   const plottedSeries = useMemo(
-    () => entries.map((entry) => interpolateMissingFlux(entry.data.points, estimateGap(showEstimates))),
+    () => entries.map((entry) => interpolateMissingFlux(entry.data.points, estimateGap(showEstimates, entry.data.points.length))),
     [entries, showEstimates],
   );
   return (
-    <details className="spectral-table">
-      <summary>Data table ({channels.length} channels)</summary>
+    <section className="spectral-table" aria-labelledby={`${tableId}-title`}>
+      <h2 id={`${tableId}-title`} className="spectral-table-title">Data table ({channels.length} channels)</h2>
       <div className="spectral-table-scroll">
         <table>
           <thead>
@@ -664,6 +691,6 @@ function SpectrumTable({ entries, showEstimates }: { entries: PlottedEntry[]; sh
           </tbody>
         </table>
       </div>
-    </details>
+    </section>
   );
 }
