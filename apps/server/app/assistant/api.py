@@ -25,6 +25,9 @@ from app.config import (
 )
 
 MAX_MESSAGE_CHARS = 2000
+# Assistant turns echoed back as history may be longer than a question: a reply
+# the server produced must never make the next request fail.
+MAX_HISTORY_REPLY_CHARS = 20000
 MAX_MESSAGES = 21  # ten earlier exchanges plus the current question
 SIMILARITY_THRESHOLD = 0.85
 
@@ -70,7 +73,15 @@ class ChatMessage(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     role: Literal["user", "assistant"]
-    content: str = Field(min_length=1, max_length=MAX_MESSAGE_CHARS)
+    content: str = Field(min_length=1, max_length=MAX_HISTORY_REPLY_CHARS)
+
+    @model_validator(mode="after")
+    def _user_turns_are_short(self) -> ChatMessage:
+        if self.role == "user" and len(self.content) > MAX_MESSAGE_CHARS:
+            raise ValueError(
+                f"user messages are limited to {MAX_MESSAGE_CHARS} characters"
+            )
+        return self
 
 
 class Region(BaseModel):

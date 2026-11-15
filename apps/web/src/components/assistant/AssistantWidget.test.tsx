@@ -83,6 +83,23 @@ describe('AssistantWidget', () => {
     ]);
   });
 
+  it('clips very long replies before sending them back as history', async () => {
+    const chat = vi.spyOn(api, 'assistantChat').mockResolvedValueOnce({
+      conversation_id: 'c', request_id: 'r1', reply: 'y'.repeat(25000), actions: [], cached: false, cache_kind: null,
+    });
+    setup();
+    await openPanel();
+    await send('explain everything');
+    chat.mockResolvedValueOnce({
+      conversation_id: 'c', request_id: 'r2', reply: 'ok', actions: [], cached: false, cache_kind: null,
+    });
+    await send('thanks');
+
+    const history = chat.mock.calls[1][0].messages;
+    expect(history[1].role).toBe('assistant');
+    expect(history[1].content).toHaveLength(20000);
+  });
+
   it('refuses an action outside the allowlist without running it', async () => {
     vi.spyOn(api, 'assistantChat').mockResolvedValue({
       conversation_id: 'c',

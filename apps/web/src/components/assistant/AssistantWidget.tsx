@@ -10,6 +10,7 @@ import {
 /** Same limits the backend enforces. */
 const MAX_MESSAGE_CHARS = 2000;
 const MAX_HISTORY = 20;
+const MAX_HISTORY_REPLY_CHARS = 20000;
 
 export interface ActionResult {
   ok: boolean;
@@ -136,7 +137,14 @@ export function AssistantWidget({ getContext, onAction }: AssistantWidgetProps) 
   const send = async () => {
     const text = draft.trim();
     if (!text || sending || enabled === false) return;
-    const history = entries.map(({ role, content }) => ({ role, content })).slice(-MAX_HISTORY);
+    // Replies go back as history; clip them to the backend limit so a long
+    // answer can never make the next turn fail.
+    const history = entries
+      .map(({ role, content }) => ({
+        role,
+        content: role === 'assistant' ? content.slice(0, MAX_HISTORY_REPLY_CHARS) : content,
+      }))
+      .slice(-MAX_HISTORY);
     setSending(true);
     setError(null);
     setDraft('');

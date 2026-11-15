@@ -41,6 +41,8 @@ FALLBACK_BETA = "server-side-fallback-2026-07-01"
 
 REFUSAL_REPLY = "I can't help with that request."
 LEAK_REPLY = "I can't share my internal instructions."
+EMPTY_REPLY = "I don't have an answer for that."
+ACTIONS_ONLY_REPLY = "Done."
 ROUND_LIMIT_REPLY = (
     "I stopped because this request needed too many steps. Please try a simpler request."
 )
@@ -277,6 +279,9 @@ class Assistant:
             if stop == "max_tokens":
                 text = (text + " …(reply cut short)").strip()
                 cacheable = False
+            if not text:
+                # Never return an empty reply: the browser echoes it back as history.
+                text = ACTIONS_ONLY_REPLY if actions else EMPTY_REPLY
             return text, actions, cacheable
 
         self.log.write(

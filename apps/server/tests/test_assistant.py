@@ -336,6 +336,50 @@ def test_requests_over_the_limits_are_rejected(api):
     assert fake.calls == []
 
 
+def test_long_assistant_replies_can_be_sent_back_as_history(api):
+    """A reply the server produced must never make the next turn fail."""
+    client, _, fake = api([reply(text_block("ok"))])
+    long_reply = "Detailed answer. " * 400  # ~6800 characters, over the user limit
+    history = [
+        {"role": "user", "content": "explain the plate"},
+        {"role": "assistant", "content": long_reply},
+        {"role": "user", "content": "thanks"},
+    ]
+    resp = chat(client, "", messages=history)
+    assert resp.status_code == 200
+    assert fake.calls[0]["messages"][1] == {"role": "assistant", "content": long_reply}
+
+    too_long = [*history[:1], {"role": "assistant", "content": "x" * 20001}, history[2]]
+    assert chat(client, "", messages=too_long).status_code == 422
+
+
+@pytest.mark.parametrize(
+    ("blocks", "expected"),
+    [
+        ((), "I don't have an answer for that."),
+        ((text_block("   "),), "I don't have an answer for that."),
+    ],
+)
+def test_empty_model_replies_are_never_returned(api, blocks, expected):
+    client, _, _ = api([reply(*blocks)])
+    body = chat(client, "hello").json()
+    assert body["reply"] == expected
+
+
+def test_empty_reply_after_actions_confirms_them(api):
+    client, _, _ = api(
+        [
+            reply(
+                tool_block("navigate", {"workspace": "records"}, "t1"), stop="tool_use"
+            ),
+            reply(),
+        ]
+    )
+    body = chat(client, "open records").json()
+    assert body["reply"] == "Done."
+    assert body["actions"] == [{"type": "navigate", "workspace": "records"}]
+
+
 def test_rate_limit_answers_429_without_calling_the_model(api):
     client, assistant, fake = api([reply(text_block("one"))], max_requests=1)
     assert chat(client, "first question").status_code == 200
