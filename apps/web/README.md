@@ -41,6 +41,16 @@ The per-pixel `WCS-WAVE` value is **visualization-only**, not calibrated CWAVE/C
 
 The mockup supplies layout direction only. Its generated stars, epochs, historical effects and catalog are not used. Arbitrary-region SIA discovery, calibrated per-pixel channel association, multi-FITS mosaics, precomputed object assets and real historical comparison remain pending. Regions outside the local FITS explicitly report unavailable coverage.
 
+## Search by name or catalogue code
+
+Type an object name or code in **Search objects** (for example `M31`, `NGC 224`,
+`Betelgeuse`, `HD 48915`, `IRAS 02341+0934` or a `J…` designation). When typing
+pauses, the object SIMBAD/NED knows by that name appears as the first suggestion
+under the box (official name, type, position and source), above the matching
+featured objects. Click it, or press **Enter** to take the first suggestion
+right away. Partial names are not completed: SIMBAD only resolves full names or
+codes. If every resolver is down, use **Go to coordinates**.
+
 ## Sky RGB composite
 
 In the Sky channel dock, switch from **Single channel** to **RGB composite** to
