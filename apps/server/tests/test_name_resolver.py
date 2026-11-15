@@ -186,3 +186,52 @@ def test_coordinate_designations_resolve_without_any_network(fake, designation, 
 def test_invalid_names_are_rejected_before_any_lookup(fake, name):
     assert get(name).status_code == 422
     assert fake.calls == []
+
+
+# --- Review follow-ups: degraded answers must not look like definitive misses ---
+
+
+def test_empty_simbad_answer_is_an_outage_not_an_unknown_name(fake):
+    fake.simbad = {"M31": ""}  # degraded mirror: HTTP 200 with an empty body
+    resp = get("M31")
+    assert resp.status_code == 503
+    fake.simbad = {"M31": "M  31|010.684708 +41.268750|AGN"}
+    assert get("M31").status_code == 200  # nothing was cached as "unknown"
+
+
+def test_object_known_without_coordinates_says_so(fake):
+    fake.simbad = {"Mystery": "NAME Mystery||Unknown"}
+    resp = get("Mystery")
+    assert resp.status_code == 404
+    assert resp.json()["detail"] == (
+        "SIMBAD knows 'Mystery' as 'NAME Mystery' but has no coordinates for it."
+    )
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [["not", "an", "object"], {"Preferred": {"Position": {"RA": "x", "Dec": 1}}}],
+)
+def test_malformed_ned_answer_is_an_outage_not_a_crash(fake, monkeypatch, payload):
+    fake.simbad = "down"
+    original = fake.__call__
+
+    def ned_garbage(request):
+        if request.url.host == NED_HOST:
+            fake.calls.append(NED_HOST)
+            return httpx.Response(200, json=payload)
+        return original(request)
+
+    monkeypatch.setattr(
+        resolver,
+        "_make_client",
+        lambda: httpx.Client(transport=httpx.MockTransport(ned_garbage)),
+    )
+    assert get("M31").status_code == 503
+
+
+def test_designation_with_impossible_seconds_is_not_parsed_locally(fake):
+    fake.simbad = {}  # SIMBAD gets the name and does not know it
+    resp = get("J023675.95+094746.2")
+    assert resp.status_code == 404
+    assert SIMBAD_HOST in fake.calls

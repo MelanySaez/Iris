@@ -51,6 +51,10 @@ class ResolverUnavailable(Exception):
     """A provider could not be reached or answered with an error."""
 
 
+class NoCoordinates(Exception):
+    """SIMBAD knows the object (args[0] is its main id) but has no position for it."""
+
+
 def normalize_name(raw: str) -> str:
     """Trim and collapse whitespace; reject anything unsafe or empty (422)."""
     name = " ".join(raw.split())
@@ -79,8 +83,9 @@ def parse_designation(name: str) -> tuple[float, float] | None:
     dec_seconds = float(f"{ds}.{ds_frac or 0}")
     ra_deg = (int(hh) + int(mm) / 60 + ra_seconds / 3600) * 15
     dec_deg = int(dd) + int(dm) / 60 + dec_seconds / 3600
-    if not (0 <= ra_deg < 360 and dec_deg <= 90 and int(mm) < 60 and int(dm) < 60):
-        return None
+    valid_parts = int(mm) < 60 and int(dm) < 60 and ra_seconds < 60 and dec_seconds < 60
+    if not (valid_parts and 0 <= ra_deg < 360 and dec_deg <= 90):
+        return None  # not a real position: let SIMBAD judge the name
     return ra_deg, -dec_deg if sign == "-" else dec_deg
 
 
@@ -126,10 +131,18 @@ def _query_simbad(client: httpx.Client, name: str) -> dict[str, Any] | None:
     if resp.status_code != 200:
         raise ResolverUnavailable(f"SIMBAD answered HTTP {resp.status_code}")
     lines = [line.strip() for line in resp.text.splitlines() if line.strip()]
-    if not lines or lines[0].startswith("::error"):
+    if not lines:
+        # An empty 200 is a degraded mirror, not SIMBAD saying "unknown".
+        raise ResolverUnavailable("SIMBAD answered an empty body")
+    if lines[0].startswith("::error"):
         return None
+    fields = lines[0].split("|")
+    if len(fields) != 3:
+        raise ResolverUnavailable(f"SIMBAD answered an unexpected line: {lines[0]!r}")
+    main_id, coords, otype = fields
+    if not coords.strip():
+        raise NoCoordinates(" ".join(main_id.split()))
     try:
-        main_id, coords, otype = lines[0].split("|")
         ra_text, dec_text = coords.split()
         ra, dec = float(ra_text), float(dec_text)
     except ValueError:
@@ -155,16 +168,19 @@ def _query_ned(client: httpx.Client, name: str) -> dict[str, Any] | None:
         raise ResolverUnavailable(f"NED: {exc}") from None
     if payload is None:
         raise ResolverUnavailable(f"NED answered HTTP {resp.status_code}")
-    preferred = payload.get("Preferred") or {}
-    position = preferred.get("Position") or {}
-    if "RA" not in position or "Dec" not in position:
-        return None
-    return {
-        "name": " ".join(str(preferred.get("Name", name)).split()),
-        "ra_deg": float(position["RA"]),
-        "dec_deg": float(position["Dec"]),
-        "object_type": (preferred.get("ObjType") or {}).get("Value") or None,
-    }
+    try:
+        preferred = payload.get("Preferred") or {}
+        position = preferred.get("Position") or {}
+        if "RA" not in position or "Dec" not in position:
+            return None
+        return {
+            "name": " ".join(str(preferred.get("Name", name)).split()),
+            "ra_deg": float(position["RA"]),
+            "dec_deg": float(position["Dec"]),
+            "object_type": (preferred.get("ObjType") or {}).get("Value") or None,
+        }
+    except (AttributeError, TypeError, ValueError):
+        raise ResolverUnavailable("NED answered an unexpected payload") from None
 
 
 def _make_client() -> httpx.Client:
@@ -200,6 +216,14 @@ def resolve_name(raw: str) -> dict[str, Any]:
         for source, query in (("simbad", _query_simbad), ("ned", _query_ned)):
             try:
                 hit = query(client, name)
+            except NoCoordinates as known:
+                raise HTTPException(
+                    status_code=404,
+                    detail=(
+                        f"SIMBAD knows '{name}' as '{known.args[0]}' "
+                        "but has no coordinates for it."
+                    ),
+                ) from None
             except ResolverUnavailable as exc:
                 logger.warning(
                     "Name resolver %s unavailable for %r: %s", source, name, exc
