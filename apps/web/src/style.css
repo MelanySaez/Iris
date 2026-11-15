@@ -3236,7 +3236,8 @@ tr:hover .records-name-edit,
 .assistant-launcher {
   position: fixed;
   right: 20px;
-  bottom: 20px;
+  /* Rises above the cookie bar while it is shown (--consent-bar-height). */
+  bottom: calc(20px + var(--consent-bar-height, 0px));
   z-index: 80;
   display: grid;
   place-items: center;
@@ -3249,7 +3250,10 @@ tr:hover .records-name-edit,
   color: var(--sky-bg);
   box-shadow: 0 8px 28px rgba(0, 0, 0, 0.5);
   cursor: pointer;
-  transition: transform 0.15s, filter 0.15s;
+  transition:
+    transform 0.15s,
+    filter 0.15s,
+    bottom 0.35s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .assistant-launcher:hover,
@@ -3276,8 +3280,9 @@ tr:hover .records-name-edit,
 .assistant-panel {
   position: fixed;
   right: 20px;
-  bottom: 84px;
+  bottom: calc(84px + var(--consent-bar-height, 0px));
   z-index: 80;
+  transition: bottom 0.35s cubic-bezier(0.22, 1, 0.36, 1);
   display: flex;
   flex-direction: column;
   width: min(380px, calc(100vw - 40px));
@@ -3599,7 +3604,7 @@ tr:hover .records-name-edit,
     right: 10px;
     left: 10px;
     width: auto;
-    bottom: 80px;
+    bottom: calc(80px + var(--consent-bar-height, 0px));
   }
 }
 /* Name suggestion under Search objects (SIMBAD mirror / NED through the backend) */
@@ -3917,4 +3922,11 @@ p.name-suggestion-error {
 .records-consent p {
   flex: 1 1 320px;
   margin: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .assistant-launcher,
+  .assistant-panel {
+    transition: none;
+  }
 }

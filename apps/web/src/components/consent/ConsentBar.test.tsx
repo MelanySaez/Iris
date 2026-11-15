@@ -24,4 +24,16 @@ describe('ConsentBar', () => {
     expect(screen.getByRole('alert').textContent).toContain('offline');
     for (const button of screen.getAllByRole<HTMLButtonElement>('button')) expect(button.disabled).toBe(true);
   });
+
+  it('lifts the chat button by its height while shown and lets it settle back after', () => {
+    const height = vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(96);
+    const root = document.documentElement;
+
+    const { unmount } = render(<ConsentBar onChoose={vi.fn()} saving={false} error={null} />);
+    expect(root.style.getPropertyValue('--consent-bar-height')).toBe('96px');
+
+    unmount();
+    expect(root.style.getPropertyValue('--consent-bar-height')).toBe('');
+    height.mockRestore();
+  });
 });
