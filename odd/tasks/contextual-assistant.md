@@ -27,7 +27,7 @@ Branch: `feat/contextual-assistant` · Delivery: ask-on-risk · Runners: `uv run
 | T2 | S1, S3, S4, S5 | inline | done | d0ea109 |
 | T3 | S6, S7, S8 | inline | done | 7b4fa00 |
 | T4 | S9, S10, S11 | inline | done | c7797ec; 67 backend tests, 247 frontend tests; independent checks complete |
-| T5 | S1-S12 | inline integration; delegated audit/checks | checking | merge latest origin/main 6c38d95, final suites and delivery pending |
+| T5 | S1-S12 | inline integration; delegated audit/checks | done | 6ddefd1 integration; cdd7e21 cache fixes; main pushed successfully |
 
 Route evidence: T2 (web widget) depends on T1's API contract, so the units are not independent; no writer trigger.
 
@@ -52,3 +52,5 @@ Route evidence: T2 (web widget) depends on T1's API contract, so the units are n
 - **L15** Independent final audit found two S3/S6 cache blockers: unordered numeric tokens could replay the wrong RA/Dec action, and omitted map center/FOV/confirmation/job identity could return stale contextual answers. Reproduced five failing public API cases, then fixed both: action-bearing replies require exact normalized requests; numeric order is retained for similarity; cache identity includes all model-visible context and original history. Assistant module 72 passed, Ruff/diff clean. Scoped recheck confirmed both blockers fixed; final backend suite 209 passed and Ruff clean. Frontend unchanged since its 286 passing tests, TypeScript and build checks.
 
 - **L16** Final independent recheck passed both cache blockers. Provider inference and browser/Aladin visual effects were not exercised; local health/status passed. No failed automated checks remain. Delivery to main/origin is authorized and pending.
+
+- **L17** Delivery confirmed: main fast-forwarded to cdd7e21 and origin/main accepted 6c38d95..cdd7e21. Native assessment medium/under_budget (no native review due). Functional checks and independent audit complete; live model inference and visual Aladin checks remain explicitly unverified. Risk: items 2 and 5 (guardrails and dependencies).
