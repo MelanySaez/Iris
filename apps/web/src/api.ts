@@ -3,6 +3,7 @@ import type {
   CatalogResponse,
   ChannelsResponse,
   CubeSpectrumResponse,
+  ResolvedName,
   FrameRenderMode,
   HealthResponse,
   JobCreateRequest,
@@ -83,6 +84,11 @@ export const api = {
 
   async getCatalog(): Promise<CatalogResponse> {
     return request<CatalogResponse>('/api/catalog');
+  },
+
+  async resolveName(name: string, signal?: AbortSignal): Promise<ResolvedName> {
+    const query = new URLSearchParams({ name });
+    return request<ResolvedName>(`/api/resolve?${query.toString()}`, { signal });
   },
 
   async getSpectrum(raDeg: number, decDeg: number): Promise<CubeSpectrumResponse> {

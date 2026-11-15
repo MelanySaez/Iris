@@ -1,12 +1,14 @@
 """Resolve object names and catalogue codes (M31, NGC 224, HD 48915...) to positions.
 
-Resolution order, first hit wins:
+Resolution order:
 
 1. Coordinate-based designations (``J023650.95+094746.2``, ``2MASS J05551028-0724254``)
    are parsed locally: the designation *is* the position, so no network is needed.
 2. Disk cache of earlier answers (shared by every user of this server).
-3. SIMBAD, through the Harvard CfA mirror (the CDS primary has been unavailable).
-4. NED (NASA/IPAC), which only knows extragalactic objects.
+3. SIMBAD (through the Harvard CfA mirror; the CDS primary has been unavailable)
+   and NED (NASA/IPAC, extragalactic objects only), asked at the same time.
+   SIMBAD's answer is the main result; NED's is listed in ``alternatives`` when
+   it knows the name too, so the user can choose either.
 
 A name is reported as unknown (404) only when SIMBAD itself answered "not found";
 if SIMBAD could not be reached, a NED miss is not definitive and the result is 503.
@@ -20,6 +22,7 @@ import json
 import logging
 import re
 import time
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 import httpx
@@ -43,6 +46,8 @@ _ALLOWED = re.compile(r"^[\w .+\-*'()/:\[\]]+$", re.UNICODE)
 # SIMBAD reports an unknown identifier with one of these messages; any other
 # ::error is a server-side problem and must not be remembered as "unknown".
 _SIMBAD_NOT_FOUND = re.compile(r"no known catalog|not found", re.IGNORECASE)
+# Keys every cached hit must have; older entries without them are refreshed.
+_CURRENT_RESULT_KEYS = {"size_arcmin", "alternatives"}
 _DESIGNATION = re.compile(
     r"^(?:[A-Za-z0-9]+\s+)?J"
     r"(\d{2})(\d{2})(\d{2})\.?(\d*)"
@@ -203,6 +208,18 @@ def _major_axis(dims: str) -> float | None:
     return value if value > 0 else None
 
 
+def _ask(query, client: httpx.Client, name: str) -> tuple[str, Any]:
+    """One provider's outcome: ("hit", result), ("miss", None),
+    ("no_coordinates", main_id) or ("down", error)."""
+    try:
+        hit = query(client, name)
+    except NoCoordinates as known:
+        return "no_coordinates", known.args[0]
+    except ResolverUnavailable as exc:
+        return "down", exc
+    return ("hit", hit) if hit is not None else ("miss", None)
+
+
 def _make_client() -> httpx.Client:
     return httpx.Client(timeout=NAME_RESOLVER_TIMEOUT, follow_redirects=True)
 
@@ -222,16 +239,17 @@ def resolve_name(raw: str) -> dict[str, Any]:
             "object_type": None,
             "size_arcmin": None,
             "source": "designation",
+            "alternatives": [],
             "cached": False,
         }
 
     cached = _read_cache(name)
-    # Hits cached before sizes were recorded lack size_arcmin: ask again so the
-    # map can frame the object instead of reusing a size-less answer for 30 days.
+    # Hits cached before sizes or alternatives were recorded: ask again so the
+    # answer has the current shape instead of reusing an old one for 30 days.
     if (
         cached is not None
         and cached.get("found")
-        and "size_arcmin" not in cached["result"]
+        and not cached["result"].keys() >= _CURRENT_RESULT_KEYS
     ):
         cached = None
     if cached is not None:
@@ -239,33 +257,42 @@ def resolve_name(raw: str) -> dict[str, Any]:
             raise HTTPException(status_code=404, detail=_not_found(name))
         return {**cached["result"], "query": name, "cached": True}
 
-    failures: list[str] = []
-    simbad_answered = False
-    with _make_client() as client:
-        for source, query in (("simbad", _query_simbad), ("ned", _query_ned)):
-            try:
-                hit = query(client, name)
-            except NoCoordinates as known:
-                raise HTTPException(
-                    status_code=404,
-                    detail=(
-                        f"SIMBAD knows '{name}' as '{known.args[0]}' "
-                        "but has no coordinates for it."
-                    ),
-                ) from None
-            except ResolverUnavailable as exc:
-                logger.warning(
-                    "Name resolver %s unavailable for %r: %s", source, name, exc
-                )
-                failures.append(source)
-                continue
-            if source == "simbad":
-                simbad_answered = True
-            if hit is not None:
-                result = {**hit, "source": source}
-                _write_cache(name, {"found": True, "result": result})
-                return {**result, "query": name, "cached": False}
+    # Both catalogues are asked at once; SIMBAD's answer is preferred and NED's
+    # is offered as an alternative when it knows the name too.
+    with _make_client() as client, ThreadPoolExecutor(max_workers=2) as pool:
+        pending = [
+            (source, pool.submit(_ask, query, client, name))
+            for source, query in (("simbad", _query_simbad), ("ned", _query_ned))
+        ]
+        outcomes = {source: future.result() for source, future in pending}
 
+    hits: list[dict[str, Any]] = []
+    failures: list[str] = []
+    for source, (kind, value) in outcomes.items():
+        if kind == "hit":
+            hits.append({**value, "source": source})
+        elif kind == "down":
+            logger.warning("Name resolver %s unavailable for %r: %s", source, name, value)
+            failures.append(source)
+
+    if hits:
+        result = {**hits[0], "alternatives": hits[1:]}
+        # Cache only complete answers: if a catalogue was down, the next request
+        # asks again so its alternative can still appear.
+        if not failures:
+            _write_cache(name, {"found": True, "result": result})
+        return {**result, "query": name, "cached": False}
+
+    simbad_kind, simbad_value = outcomes["simbad"]
+    if simbad_kind == "no_coordinates":
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                f"SIMBAD knows '{name}' as '{simbad_value}' "
+                "but has no coordinates for it."
+            ),
+        )
+    simbad_answered = simbad_kind != "down"
     if simbad_answered:
         # Remember the miss only when every provider answered; if NED was down,
         # a NED-only name could exist, so the next request should ask again.
