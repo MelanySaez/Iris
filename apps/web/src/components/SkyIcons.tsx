@@ -9,6 +9,14 @@ function Icon({ children }: { children: ReactNode }) {
   );
 }
 
+export function SearchIcon() {
+  return <Icon><circle cx="10.5" cy="10.5" r="6" /><path d="m15 15 5 5" /></Icon>;
+}
+
+export function WarningIcon() {
+  return <Icon><path d="M12 4 21 19.5H3Z" /><path d="M12 10v4.2" /><path d="M12 17h.01" /></Icon>;
+}
+
 export function PanIcon() {
   return <Icon><path d="M12 3v18M3 12h18M12 3 9.5 5.5M12 3l2.5 2.5M21 12l-2.5-2.5M21 12l-2.5 2.5M12 21l-2.5-2.5M12 21l2.5-2.5M3 12l2.5-2.5M3 12l2.5 2.5" /></Icon>;
 }

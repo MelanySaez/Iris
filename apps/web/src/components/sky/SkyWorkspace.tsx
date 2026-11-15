@@ -41,7 +41,7 @@ import type { SpectrumOrigin } from '../../spectrumLabel';
 import { NameSuggestion, type ResolvedTarget, type SubmitLookup } from './NameSuggestion';
 import { runEnterLookup } from '../../searchEnter';
 import { lookupView } from '../../lookupView';
-import { AllSkyIcon, PanIcon, RegionIcon, ZoomInIcon, ZoomOutIcon } from '../SkyIcons';
+import { AllSkyIcon, PanIcon, RegionIcon, SearchIcon, WarningIcon, ZoomInIcon, ZoomOutIcon } from '../SkyIcons';
 import { contextFovDeg, resolveSelectionView, saveSelectionView } from '../../selectionView';
 import type { AssistantAction, AssistantUiContext } from '../../assistant';
 import { ensureServiceWorkerControl } from '../../serviceWorkerControl';
@@ -1200,7 +1200,7 @@ export function SkyWorkspace({
           </p>
           <div className="search-box">
             <span className="search-icon" aria-hidden="true">
-              🔍
+              <SearchIcon />
             </span>
             <input
               id="catalog-search"
@@ -1432,7 +1432,7 @@ export function SkyWorkspace({
           {/* Region error message */}
           {regionError && (
             <div className="region-banner-alert float" role="alert">
-              <span className="banner-icon">⚠️</span>
+              <span className="banner-icon" aria-hidden="true"><WarningIcon /></span>
               <span>{regionError}</span>
               <button
                 type="button"

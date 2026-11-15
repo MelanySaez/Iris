@@ -444,9 +444,14 @@ button:disabled {
 .search-icon {
   position: absolute;
   left: 10px;
-  font-size: 12px;
+  display: flex;
+  color: var(--sky-muted);
   pointer-events: none;
-  opacity: 0.6;
+}
+
+.search-icon .sky-icon {
+  width: 14px;
+  height: 14px;
 }
 
 .rail-input {
@@ -758,6 +763,9 @@ button:disabled {
 }
 
 /* Region Exceeds Banner */
+.region-banner-alert .banner-icon { display: flex; }
+.region-banner-alert .banner-icon .sky-icon { width: 16px; height: 16px; }
+
 .region-banner-alert {
   position: absolute;
   top: 16px;
@@ -3672,6 +3680,7 @@ p.name-suggestion-error {
 
 .landing-nav { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; justify-content: space-between; padding: 20px clamp(16px, 5vw, 64px); background: linear-gradient(#000 40%, transparent); }
 .landing-brand { display: inline-flex; align-items: center; gap: 10px; font-size: 20px; font-weight: 800; letter-spacing: -0.01em; }
+.landing-brand .iris-logo { width: 28px; height: 28px; }
 .landing-nav nav { display: flex; gap: 24px; }
 .landing-nav nav button { padding: 6px 0; font-family: var(--mono); font-size: 11px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--sky-muted); }
 .landing-nav nav button:hover { color: var(--sky-ink); }
