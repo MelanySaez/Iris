@@ -171,4 +171,47 @@ describe('App workspace switch', () => {
     expect(screen.queryByRole('textbox', { name: 'Selection name' })).toBeNull();
     expect(screen.getByText('Untitled')).toBeTruthy();
   });
+
+  it('lets the assistant drive the interface through validated actions', async () => {
+    vi.spyOn(api, 'assistantStatus').mockResolvedValue({ enabled: true, model: 'test-model' });
+    const outcome = vi.spyOn(api, 'reportAssistantOutcome').mockResolvedValue(undefined);
+    vi.spyOn(api, 'assistantChat').mockResolvedValue({
+      conversation_id: 'c',
+      request_id: 'r1',
+      reply: 'Showing it in Sky.',
+      actions: [
+        { type: 'navigate', workspace: 'records' },
+        { type: 'show_region', ra_deg: 210.8, dec_deg: 54.35, size_arcmin: 12 },
+        { type: 'navigate', workspace: 'plate' },
+      ],
+      cached: false,
+      cache_kind: null,
+    });
+    render(<App />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open assistant' }));
+    const box = await screen.findByRole('textbox', { name: 'Message the assistant' });
+    fireEvent.change(box, { target: { value: 'show M101' } });
+    await act(async () => {
+      fireEvent.keyDown(box, { key: 'Enter' });
+    });
+
+    expect(await screen.findByText('Showing it in Sky.')).toBeTruthy();
+    // show_region reaches Sky as a command (a draft, never a confirmed job) and opens Sky.
+    expect(skyProps).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        assistantCommands: [
+          { id: 1, action: { type: 'show_region', ra_deg: 210.8, dec_deg: 54.35, size_arcmin: 12 } },
+        ],
+      }),
+    );
+    await waitFor(() => expect(window.location.hash).toBe('#/sky'));
+    // Plate needs an active job, so that action is reported as failed.
+    expect(outcome).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'failed', action: { type: 'navigate', workspace: 'plate' } }),
+    );
+    expect(api.assistantChat).toHaveBeenCalledWith(
+      expect.objectContaining({ context: expect.objectContaining({ workspace: 'sky' }) }),
+    );
+  });
 });

@@ -19,3 +19,4 @@ AGENTS.md
 # Local environment (template: .env.example)
 .env
 !.env.example
+apps/server/data/logs/

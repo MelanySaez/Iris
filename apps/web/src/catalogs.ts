@@ -32,7 +32,7 @@ export const HIPS_CATALOG_PROVIDERS = {
 } as const;
 
 export const LOCAL_CATALOG_STYLE = {
-  name: 'PlanetX featured objects',
+  name: 'Iris featured objects',
   color: '#ffd36e',
   sourceSize: 16,
   shape: 'rhomb',

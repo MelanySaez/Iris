@@ -42,6 +42,7 @@ import { runEnterLookup } from '../../searchEnter';
 import { lookupView } from '../../lookupView';
 import { AllSkyIcon, PanIcon, RegionIcon, ZoomInIcon, ZoomOutIcon } from '../SkyIcons';
 import { contextFovDeg, resolveSelectionView, saveSelectionView } from '../../selectionView';
+import type { AssistantAction, AssistantUiContext } from '../../assistant';
 import { ensureServiceWorkerControl } from '../../serviceWorkerControl';
 import {
   computeRegionFromPoints,
@@ -62,7 +63,18 @@ interface SkyWorkspaceProps {
   onRetryJob: () => void;
   /** Rebuild a recorded selection on the map; each request id is applied once. */
   restoreRequest?: SelectionRestoreRequest | null;
+  /** Assistant actions for the map, applied once each and in order of id. */
+  assistantCommands?: AssistantSkyCommand[];
+  /** Reports the map state the assistant reads as context. */
+  onStateChange?: (state: SkyUiState) => void;
 }
+
+export interface AssistantSkyCommand {
+  id: number;
+  action: Extract<AssistantAction, { type: 'show_region' | 'set_channel' | 'set_color_mode' }>;
+}
+
+export type SkyUiState = Omit<AssistantUiContext, 'workspace' | 'active_job_id'>;
 
 export interface SelectionRestoreRequest {
   id: number;
@@ -131,6 +143,8 @@ export function SkyWorkspace({
   onOpenPlate,
   onViewSpectrum,
   restoreRequest = null,
+  assistantCommands,
+  onStateChange,
 }: SkyWorkspaceProps) {
   const mapRef = useRef<HTMLDivElement>(null);
   const viewerRef = useRef<AladinViewer | null>(null);
@@ -208,9 +222,9 @@ export function SkyWorkspace({
     if (!layer) {
       layer = Aladin.catalog({
         name: 'Temporary nearby sources',
-        color: '#ffd166',
+        color: '#f5b041',
         sourceSize: 12,
-        shape: createCatalogMarker('#ffd166', 12, 'circle'),
+        shape: createCatalogMarker('#f5b041', 12, 'circle'),
       });
       viewer.addCatalog(layer);
       nearbyCatalogRef.current = layer;
@@ -804,9 +818,9 @@ export function SkyWorkspace({
     if (!layer) {
       layer = Aladin.catalog({
         name: 'Temporary nearby sources',
-        color: '#ffd166',
+        color: '#f5b041',
         sourceSize: 12,
-        shape: createCatalogMarker('#ffd166', 12, 'circle'),
+        shape: createCatalogMarker('#f5b041', 12, 'circle'),
       });
       viewer.addCatalog(layer);
       nearbyCatalogRef.current = layer;
@@ -984,6 +998,54 @@ export function SkyWorkspace({
         : 'Selection rebuilt from its coordinates (no saved view)',
     );
   }, [restoreRequest, aladinReady, projection, rgbMode, currentChannel, setRgbMode, handleChannelChange]);
+
+  // Apply assistant commands in order. Draft regions are never confirmed here:
+  // the person still presses "Confirm region" to start a job.
+  const appliedAssistantId = useRef(0);
+  useEffect(() => {
+    if (!assistantCommands?.length || !aladinReady || !viewerRef.current) return;
+    const viewer = viewerRef.current;
+    let rgbOn = rgbMode;
+    for (const { id, action } of assistantCommands) {
+      if (id <= appliedAssistantId.current) continue;
+      appliedAssistantId.current = id;
+      if (action.type === 'show_region') {
+        const fovDeg = contextFovDeg(action.size_arcmin);
+        viewer.gotoRaDec?.(action.ra_deg, action.dec_deg);
+        viewer.setFoV?.(fovDeg);
+        setCenterCoords([action.ra_deg, action.dec_deg]);
+        setCurrentFov(fovDeg);
+        setMode('pan');
+        setRegionError(null);
+        setSelectedRegion({ ra_deg: action.ra_deg, dec_deg: action.dec_deg, size_arcmin: action.size_arcmin });
+        setRegionConfirmed(false);
+      } else if (action.type === 'set_channel') {
+        if (rgbOn) {
+          setRgbMode(false);
+          rgbOn = false;
+        }
+        handleChannelChange(action.channel);
+      } else if (action.mode === 'rgb') {
+        setRgbMode(true, { r: action.rgb[0], g: action.rgb[1], b: action.rgb[2] });
+        rgbOn = true;
+      } else if (rgbOn) {
+        setRgbMode(false);
+        rgbOn = false;
+      }
+    }
+  }, [assistantCommands, aladinReady, rgbMode, setRgbMode, handleChannelChange]);
+
+  // Let the assistant read the map state (a cheap ref update in the parent).
+  useEffect(() => {
+    onStateChange?.({
+      channel: currentChannel,
+      color_mode: rgbMode && rgb ? 'rgb' : 'single',
+      ...(rgbMode && rgb ? { rgb: [rgb.r, rgb.g, rgb.b] as [number, number, number] } : {}),
+      ...(selectedRegion ? { selected_region: selectedRegion, region_confirmed: regionConfirmed } : {}),
+      center: centerCoords,
+      fov_deg: currentFov,
+    });
+  }, [onStateChange, currentChannel, rgbMode, rgb, selectedRegion, regionConfirmed, centerCoords, currentFov]);
 
   // Zoom controls
   const handleZoom = (factor: number) => {

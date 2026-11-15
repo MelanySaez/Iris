@@ -1,3 +1,4 @@
+import type { AssistantAction, AssistantUiContext } from './assistant';
 import type {
   CatalogObject,
   CatalogResponse,
@@ -17,6 +18,33 @@ import type {
   SelectionSummary,
   StretchMode,
 } from './types';
+
+export interface AssistantChatRequest {
+  conversation_id: string;
+  messages: { role: 'user' | 'assistant'; content: string }[];
+  context: AssistantUiContext;
+}
+
+export interface AssistantChatResponse {
+  conversation_id: string;
+  request_id: string;
+  reply: string;
+  /** Validated by the backend; validated again before running them. */
+  actions: AssistantAction[];
+  cached: boolean;
+  cache_kind: 'exact' | 'similar' | null;
+}
+
+/** One line of the assistant's audit log; fields depend on `event`. */
+export type AssistantLogEntry = { ts: string; event: string } & Record<string, unknown>;
+
+export interface AssistantOutcome {
+  conversation_id: string;
+  request_id?: string;
+  action: Record<string, unknown>;
+  status: 'executed' | 'rejected' | 'failed';
+  detail?: string;
+}
 
 export class ApiError extends Error {
   readonly status: number;
@@ -173,6 +201,35 @@ export const api = {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name }),
+    });
+  },
+
+  async assistantStatus(): Promise<{ enabled: boolean; model: string | null }> {
+    return request('/api/assistant/status');
+  },
+
+  async assistantChat(body: AssistantChatRequest): Promise<AssistantChatResponse> {
+    return request<AssistantChatResponse>('/api/assistant/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+  },
+
+  async assistantLogs(params?: { limit?: number; conversationId?: string }): Promise<{ items: AssistantLogEntry[] }> {
+    const query = new URLSearchParams();
+    if (params?.limit !== undefined) query.set('limit', String(params.limit));
+    if (params?.conversationId) query.set('conversation_id', params.conversationId);
+    const qs = query.toString();
+    return request(qs ? `/api/assistant/logs?${qs}` : '/api/assistant/logs');
+  },
+
+  /** Tell the backend log whether the browser ran or refused an assistant action. */
+  async reportAssistantOutcome(body: AssistantOutcome): Promise<void> {
+    return request<void>('/api/assistant/events', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
     });
   },
 

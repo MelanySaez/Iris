@@ -153,6 +153,11 @@ _store: SelectionStore | None = None
 _recorder: SelectionRecorder | None = None
 
 
+def current_store() -> SelectionStore | None:
+    """The configured selection store, or None when records are disabled."""
+    return _store
+
+
 def configure_selections(url: str | None, manager: JobManager) -> SelectionStore | None:
     """Enable (or, with ``url=None``, disable) selection persistence."""
     global _store, _recorder

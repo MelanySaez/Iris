@@ -6,11 +6,11 @@
   max-height: min(calc(100% - 1rem), 28rem);
   overflow: auto;
   padding: 0.85rem;
-  border: 1px solid rgba(140, 180, 220, 0.26);
-  border-radius: 0.8rem;
-  background: rgba(8, 17, 30, 0.96);
-  color: #e7f0fa;
-  box-shadow: 0 1rem 2.5rem rgba(0, 0, 0, 0.42);
+  border: 1px solid var(--sky-glass-border);
+  border-radius: var(--radius-lg);
+  background: var(--sky-glass-bg);
+  color: var(--sky-ink);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
   backdrop-filter: blur(16px);
   font-size: 0.8rem;
 }
@@ -20,16 +20,26 @@
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  color: #f0f6ff;
+  color: var(--sky-accent);
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
 .sky-context-menu__close {
   border: 0;
   background: transparent;
-  color: #aebed0;
+  color: var(--sky-muted);
   font-size: 1.25rem;
   line-height: 1;
   cursor: pointer;
+}
+
+.sky-context-menu__close:hover,
+.sky-context-menu__close:focus-visible {
+  color: var(--sky-ink);
 }
 
 .sky-context-menu__coordinates,
@@ -37,29 +47,35 @@
 .sky-context-menu__status,
 .sky-context-menu__error {
   margin: 0.45rem 0 0.7rem;
-  color: #aebed0;
+  color: var(--sky-muted);
+  font-family: var(--mono);
   font-variant-numeric: tabular-nums;
 }
 
 .sky-context-menu__radius {
   margin-top: -0.35rem;
+  color: var(--sky-faint);
+  font-size: 0.72rem;
 }
 
 .sky-context-menu__search {
   width: 100%;
-  padding: 0.55rem 0.7rem;
-  border: 1px solid rgba(112, 190, 255, 0.4);
-  border-radius: 0.5rem;
-  background: rgba(43, 127, 188, 0.24);
-  color: #dff2ff;
+  padding: 0.5rem 0.7rem;
+  border: 1px solid var(--sky-accent);
+  border-radius: var(--radius-md);
+  background: var(--sky-accent);
+  color: var(--sky-bg);
   font: inherit;
-  font-weight: 650;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
   cursor: pointer;
 }
 
 .sky-context-menu__search:hover:not(:disabled),
 .sky-context-menu__search:focus-visible {
-  background: rgba(43, 127, 188, 0.42);
+  filter: brightness(1.12);
 }
 
 .sky-context-menu__search:disabled {
@@ -68,7 +84,7 @@
 }
 
 .sky-context-menu__error {
-  color: #ffb6a8;
+  color: var(--sky-danger);
 }
 
 .sky-context-menu__results,
@@ -83,7 +99,12 @@
 .sky-context-menu__results > li > strong {
   display: block;
   margin-bottom: 0.25rem;
-  color: #9ed9ff;
+  color: var(--sky-warm);
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
 .sky-context-menu__results ul li {
@@ -91,12 +112,13 @@
   justify-content: space-between;
   gap: 0.5rem;
   padding: 0.32rem 0.4rem;
-  border-radius: 0.35rem;
-  background: rgba(255, 255, 255, 0.045);
+  border-radius: var(--radius-sm);
+  background: var(--sky-raised);
 }
 
 .sky-context-menu__source-coordinates {
-  color: #aebed0;
+  color: var(--sky-muted);
+  font-family: var(--mono);
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
@@ -104,13 +126,15 @@
 .sky-context-menu__hint {
   display: block;
   margin-top: 0.75rem;
-  color: #8293a5;
-  font-size: 0.7rem;
+  color: var(--sky-faint);
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.04em;
 }
 
 @media (prefers-reduced-motion: no-preference) {
   .sky-context-menu__search {
-    transition: background-color 120ms ease;
+    transition: filter 120ms ease;
   }
 }
 
@@ -123,21 +147,21 @@
   height: 32px;
   transform: translate(-50%, -50%);
   pointer-events: none;
-  color: #f1f8ff;
+  color: var(--sky-ink);
 }
 
 .sky-search-origin svg {
   display: block;
   width: 32px;
   height: 32px;
-  fill: #08111e;
+  fill: var(--sky-bg);
   stroke: currentColor;
   stroke-width: 2;
   stroke-linecap: round;
 }
 
 .sky-search-origin .sky-search-origin__outline {
-  stroke: #08111e;
+  stroke: var(--sky-bg);
   stroke-width: 5;
 }
 
@@ -147,11 +171,15 @@
   left: 50%;
   transform: translateX(-50%);
   padding: 2px 5px;
-  border-radius: 3px;
-  background: #08111e;
-  color: #f1f8ff;
-  font-size: 11px;
-  font-weight: 650;
+  border: 1px solid var(--sky-line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--sky-bg);
+  color: var(--sky-ink);
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
   white-space: nowrap;
 }
 
@@ -160,7 +188,7 @@
   flex-wrap: wrap;
   gap: 0.35rem 0.75rem;
   margin: 0.65rem 0;
-  color: #c9d9e9;
+  color: var(--sky-muted);
   font-size: 0.72rem;
 }
 
@@ -174,17 +202,17 @@
   width: 18px;
   height: 18px;
   fill: none;
-  stroke: #f1f8ff;
+  stroke: var(--sky-ink);
   stroke-width: 1.5;
 }
 
 .sky-context-menu__legend span:last-child svg {
-  stroke: #ffd166;
+  stroke: #f5b041;
 }
 
 @keyframes nearby-panel-reveal {
-  from { opacity: 0.65; clip-path: inset(0 0 6px 0 round 0.8rem); }
-  to { opacity: 1; clip-path: inset(0 round 0.8rem); }
+  from { opacity: 0.65; clip-path: inset(0 0 6px 0 round var(--radius-lg)); }
+  to { opacity: 1; clip-path: inset(0 round var(--radius-lg)); }
 }
 
 @media (prefers-reduced-motion: no-preference) {

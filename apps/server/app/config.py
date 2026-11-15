@@ -86,3 +86,24 @@ for directory in (
     NAME_CACHE_DIR,
 ):
     directory.mkdir(parents=True, exist_ok=True)
+
+
+# Contextual assistant: any OpenAI-compatible chat model, through the OpenAI SDK.
+# ASSISTANT_API_KEY and ASSISTANT_MODEL enable it (read at request time in
+# app/assistant/api.py); ASSISTANT_BASE_URL points to a compatible provider.
+def _env_int(name: str, default: int) -> int:
+    try:
+        return int(os.environ.get(name, default))
+    except ValueError:
+        return default
+
+
+# Sent as `max_tokens` only when set; leave unset to use the provider default.
+ASSISTANT_MAX_TOKENS = _env_int("ASSISTANT_MAX_TOKENS", 0) or None
+ASSISTANT_MAX_TOOL_ROUNDS = _env_int("ASSISTANT_MAX_TOOL_ROUNDS", 6)
+ASSISTANT_RATE_LIMIT_PER_MINUTE = _env_int("ASSISTANT_RATE_LIMIT_PER_MINUTE", 20)
+ASSISTANT_CACHE_TTL_SECONDS = _env_int("ASSISTANT_CACHE_TTL_SECONDS", 3600)
+ASSISTANT_CACHE_MAX_ENTRIES = _env_int("ASSISTANT_CACHE_MAX_ENTRIES", 256)
+ASSISTANT_LOG_PATH = Path(
+    os.environ.get("ASSISTANT_LOG_PATH", DATA_DIR / "logs" / "assistant.jsonl")
+).resolve()

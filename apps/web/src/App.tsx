@@ -3,7 +3,14 @@ import { api, ApiError } from './api';
 import { TopBar } from './components/TopBar';
 import { PlateWorkspace } from './components/plate/PlateWorkspace';
 import { RecordsWorkspace } from './components/records/RecordsWorkspace';
-import { SkyWorkspace, type SelectionRestoreRequest } from './components/sky/SkyWorkspace';
+import {
+  SkyWorkspace,
+  type AssistantSkyCommand,
+  type SelectionRestoreRequest,
+  type SkyUiState,
+} from './components/sky/SkyWorkspace';
+import { AssistantWidget, type ActionResult } from './components/assistant/AssistantWidget';
+import type { AssistantAction, AssistantUiContext } from './assistant';
 import { SpectralLab, type SpectrumRequest } from './components/spectral/SpectralLab';
 import type { SpectrumTarget } from './components/sky/SelectionActions';
 import { useJobPoller } from './hooks/useJobPoller';
@@ -94,6 +101,45 @@ export function App() {
     [navigate],
   );
 
+  // Assistant: reads the interface through skyStateRef (no re-render on every
+  // map update) and drives it with validated actions.
+  const skyStateRef = useRef<SkyUiState>({});
+  const handleSkyState = useCallback((state: SkyUiState) => {
+    skyStateRef.current = state;
+  }, []);
+  const [assistantCommands, setAssistantCommands] = useState<AssistantSkyCommand[]>([]);
+  const assistantCommandId = useRef(0);
+
+  const getAssistantContext = (): AssistantUiContext => {
+    const { center, ...sky } = skyStateRef.current;
+    return {
+      workspace: route.type,
+      ...sky,
+      ...(center && center.every(Number.isFinite)
+        ? { center: [((center[0] % 360) + 360) % 360, center[1]] as [number, number] }
+        : {}),
+      ...(activeJobId ? { active_job_id: activeJobId } : {}),
+    };
+  };
+
+  const handleAssistantAction = (action: AssistantAction): ActionResult => {
+    if (action.type === 'navigate') {
+      if (action.workspace === 'plate') {
+        if (!activeJobId) return { ok: false, detail: 'No active job to open in Plate' };
+        navigate({ type: 'plate', jobId: activeJobId });
+      } else {
+        navigate(`#/${action.workspace}`);
+      }
+      return { ok: true };
+    }
+    assistantCommandId.current += 1;
+    const command = { id: assistantCommandId.current, action };
+    // Keep a short tail; SkyWorkspace applies each id once.
+    setAssistantCommands((prev) => [...prev, command].slice(-20));
+    navigate('#/sky');
+    return { ok: true };
+  };
+
   const handleOpenPlate = (jobId: string) => {
     navigate({ type: 'plate', jobId });
   };
@@ -141,6 +187,8 @@ export function App() {
             onOpenPlate={handleOpenPlate}
             onViewSpectrum={handleViewSpectrum}
             restoreRequest={restoreRequest}
+            assistantCommands={assistantCommands}
+            onStateChange={handleSkyState}
             onRetryJob={handleRetryJob}
           />
         </div>
@@ -183,6 +231,8 @@ export function App() {
           </div>
         )}
       </div>
+
+      <AssistantWidget getContext={getAssistantContext} onAction={handleAssistantAction} />
     </div>
   );
 }

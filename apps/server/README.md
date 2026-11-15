@@ -79,6 +79,27 @@ To run with a custom local spectral asset:
 SPHEREX_SPECTRAL_FITS=/path/to/level2.fits uv run uvicorn app.main:app --reload
 ```
 
+## Contextual assistant
+
+A chat assistant (bubble in the bottom-right corner of the web app) that works with any model you choose behind an OpenAI-compatible Chat Completions API, through the official OpenAI SDK. Set `ASSISTANT_API_KEY` and `ASSISTANT_MODEL` in `.env`, plus `ASSISTANT_BASE_URL` for providers other than OpenAI (OpenRouter, Groq, Together, Ollama, vLLM, LM Studio…). The model must support tool calling. There is no default model; until both values are set the assistant endpoints answer `503` and nothing else changes. Limits are configurable (`ASSISTANT_*`, see `.env.example`). Restart the server after changing them.
+
+| Endpoint | Purpose |
+|----------|---------|
+| `POST /api/assistant/chat` | One user turn: `{conversation_id, messages, context}` → `{reply, actions, cached, cache_kind, request_id}`. |
+| `GET /api/assistant/logs?limit=&conversation_id=` | Logged events, newest first. |
+| `POST /api/assistant/events` | The browser reports whether it executed or rejected an action. |
+| `GET /api/assistant/status` | `{enabled, model}`. |
+
+When introducing the app or answering questions about its authors, the assistant includes all four project authors with their GitHub profiles and the Iris repository link. Specific feature and navigation answers do not repeat the credits unless requested.
+
+How it works (`app/assistant/`):
+
+- **System prompt** (`prompt.py`): the general instruction for Planet X. It is a frozen string sent first, so providers with automatic prefix caching (such as OpenAI) can reuse it.
+- **Tools** (`tools.py`): `search_catalog` and `list_saved_selections` run on the server and only read data; `navigate`, `show_region`, `set_channel` and `set_color_mode` are validated and returned as `actions` that the browser runs after the reply. No tool starts jobs, renames or deletes; `show_region` only draws a draft that the person confirms.
+- **Guardrails** (`guardrails.py`, `service.py`): the UI context and tool results reach the model as delimited data (`<ui_context>`, `<tool_data>`); user-written names are sanitized; every tool input is validated against an allowlist and ranges (and again in the browser); detected instruction overrides and requests to modify/delete application code in any user turn are blocked before cache lookup, model calls or tools, with an empty action list and a `prompt_injection_blocked` log event. Matching handles case, accents and invisible format characters; tool-result injection patterns are still logged rather than blocked. These are heuristic checks, not complete protection against every rephrasing; a canary blocks replies that leak the system prompt; requests are limited in length (2000 characters), history (21 messages), tool rounds (6) and rate (20 per minute per client); refusals get a safe reply.
+- **Response cache** (`cache.py`): equal requests (normalized text) and similar ones (≥ 0.85 word overlap with the same numbers in the same order) in the same context (all reported UI state, including map centre, field of view, selection confirmation, active job identity and earlier turns) are answered from memory without calling the model, for up to `ASSISTANT_CACHE_TTL_SECONDS`. Only exact requests replay cached UI actions; similarity matching applies to replies without actions. Answers that read saved selections, refusals and truncated replies are not cached.
+- **Logs** (`logbook.py`): an append-only JSONL file (`data/logs/assistant.jsonl`, git-ignored) with one line per request, model call (model served, finish reason, input/output and cached tokens when the provider reports them, latency), tool call, UI action, cache hit, guardrail event, error and UI outcome. It stores message previews (first 200 characters) but never the API key.
+
 ## Endpoints
 
 All endpoints are mounted under `/api`:
