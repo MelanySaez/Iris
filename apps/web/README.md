@@ -45,6 +45,10 @@ The per-pixel `WCS-WAVE` value is **visualization-only**, not calibrated CWAVE/C
 
 The mockup supplies layout direction only. Its generated stars, epochs, historical effects and catalog are not used. Arbitrary-region SIA discovery, calibrated per-pixel channel association, multi-FITS mosaics, precomputed object assets and real historical comparison remain pending. Regions without remote IRSA TAP coverage report unavailable coverage.
 
+## Landing page
+
+The app opens on a landing page (`#/`): a full-screen star field, **Explore the Sky** (opens the viewer at `#/sky`), a short "A little context before you explore" block and links to the official SPHEREx and IRSA sources. **Guided Tour** is shown as coming soon. Deep links such as `#/sky` or `#/plate/<id>` open the viewer directly. The star field stays still when the system asks for reduced motion.
+
 ## Search by name or catalogue code
 
 Type an object name or code in **Search objects** (for example `M31`, `NGC 224`,
