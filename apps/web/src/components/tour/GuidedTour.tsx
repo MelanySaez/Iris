@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { ACTIONS, Joyride, STATUS, type EventData } from 'react-joyride';
-import { TOUR_STEPS } from './tourSteps';
+import { TOURS, type TourId } from './tourSteps';
 
 export const TOUR_SEEN_KEY = 'iris_tour_seen';
 
@@ -29,17 +29,19 @@ function isOnScreen(selector: string): boolean {
 }
 
 interface GuidedTourProps {
+  /** Which workspace's tour to run. */
+  tour: TourId;
   run: boolean;
   /** Called when the tour is finished or skipped. */
   onEnd: () => void;
 }
 
 /** React Joyride tour over the viewer, styled with the Iris palette. */
-export function GuidedTour({ run, onEnd }: GuidedTourProps) {
+export function GuidedTour({ tour, run, onEnd }: GuidedTourProps) {
   // Re-evaluated each time the tour starts, so it adapts to the current layout.
   const steps = useMemo(
-    () => (run ? TOUR_STEPS.filter((step) => isOnScreen(String(step.target))) : TOUR_STEPS),
-    [run],
+    () => (run ? TOURS[tour].filter((step) => isOnScreen(String(step.target))) : TOURS[tour]),
+    [run, tour],
   );
 
   const handleEvent = (data: EventData) => {

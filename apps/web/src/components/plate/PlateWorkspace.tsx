@@ -429,7 +429,7 @@ export function PlateWorkspace({
       {/* Main 3-column Grid */}
       <div className="plate-columns-layout">
         {/* Column 1: Plate Sheet (260 px) */}
-        <aside className="plate-sheet" aria-label="Plate Metadata Sheet">
+        <aside className="plate-sheet" aria-label="Plate Metadata Sheet" data-tour="plate-record">
           <div className="sheet-header">
             <h2 className="sheet-title">Plate Record</h2>
             <span className="sheet-badge num">{currentDetectorStr}</span>
@@ -568,7 +568,7 @@ export function PlateWorkspace({
         {/* Column 2: Plate Stage (Center) */}
         <main className="plate-stage" aria-label="Plate Viewport">
           {/* Controls Bar */}
-          <div className="stage-controls-bar">
+          <div className="stage-controls-bar" data-tour="plate-image">
             {/* Left: Product tabs (underlined text tabs) */}
             <div className="stage-product-tabs" role="tablist" aria-label="Cutout Products">
               <button
@@ -842,7 +842,7 @@ export function PlateWorkspace({
           </div>
 
           {/* Epoch Strip (Bottom of center stage) */}
-          <div className="stage-epoch-strip">
+          <div className="stage-epoch-strip" data-tour="plate-epochs">
             {!hasCutout ? (
               <span className="epoch-single-note">
                 No epochs loaded for {currentDetectorStr}
@@ -910,6 +910,7 @@ export function PlateWorkspace({
         <aside
           ref={railContainerRef}
           className="spectral-rail"
+          data-tour="plate-channels"
           tabIndex={0}
           onKeyDown={handleRailKeyDown}
           aria-label="102-channel spectral rail"
@@ -981,7 +982,7 @@ export function PlateWorkspace({
           </div>
 
           {/* Live Pixel Readout Card */}
-          <div className="pixel-readout-card" aria-live="polite">
+          <div className="pixel-readout-card" aria-live="polite" data-tour="plate-readout">
             <div className="readout-header">
               <h3 className="readout-title">Pixel Readout</h3>
               {probeTarget ? (

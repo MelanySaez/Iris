@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { FormEvent, PointerEvent as ReactPointerEvent, WheelEvent as ReactWheelEvent } from 'react';
-import { api, ApiError, CURATED_CATALOG_FALLBACK } from '../../api';
+import { LAB_FEATURED } from '../../labFeatured';
+import { api, ApiError } from '../../api';
 import {
   MAX_SPECTRA,
   SERIES_COLORS,
@@ -22,7 +23,7 @@ import {
   zoomDomainAt,
 } from '../../spectrum';
 import type { YScaleMode } from '../../spectrum';
-import type { CatalogObject, CubeSpectrumResponse } from '../../types';
+import type { CubeSpectrumResponse } from '../../types';
 import './SpectralLab.css';
 
 interface SpectrumEntry {
@@ -57,12 +58,12 @@ export interface SpectrumRequest {
 }
 
 export function SpectralLab({ request = null }: { request?: SpectrumRequest | null } = {}) {
-  const [catalog, setCatalog] = useState<CatalogObject[]>(CURATED_CATALOG_FALLBACK);
   const [entries, setEntries] = useState<SpectrumEntry[]>([]);
   const [raText, setRaText] = useState('');
   const [decText, setDecText] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
   const [yMode, setYMode] = useState<YScaleMode>('linear');
+  const [showEstimates, setShowEstimates] = useState(true);
   const [sidebarVisible, setSidebarVisible] = useState(true);
   const requestCounter = useRef(0);
   // Source of truth for entries between renders: two clicks before React
@@ -73,20 +74,6 @@ export function SpectralLab({ request = null }: { request?: SpectrumRequest | nu
     setEntries(entriesRef.current);
   }, []);
 
-  useEffect(() => {
-    let active = true;
-    void api
-      .getCatalog()
-      .then((res) => {
-        if (active && res.objects.length) setCatalog(res.objects);
-      })
-      .catch(() => {
-        // Keep the curated fallback list.
-      });
-    return () => {
-      active = false;
-    };
-  }, []);
 
   const addSpectrum = useCallback(
     (label: string, ra: number, dec: number) => {
@@ -152,10 +139,12 @@ export function SpectralLab({ request = null }: { request?: SpectrumRequest | nu
     <div className={`spectral-lab${sidebarVisible ? '' : ' sidebar-collapsed'}`}>
       <aside id="spectra-sidebar" className="spectral-sidebar" aria-label="Spectra to compare"
         aria-hidden={!sidebarVisible} inert={!sidebarVisible}>
-        <section>
+        <section data-tour="lab-add">
           <h2 className="spectral-heading">Add a spectrum</h2>
+          <h3 className="spectral-subheading">Featured objects</h3>
+          <p className="spectral-subheading-note">Well-known targets to get you started</p>
           <ul className="spectral-catalog">
-            {catalog.map((obj) => {
+            {LAB_FEATURED.map((obj) => {
               const taken = entries.some((e) => e.key === spectrumKey(obj.ra_deg, obj.dec_deg));
               return (
                 <li key={obj.id}>
@@ -165,13 +154,17 @@ export function SpectralLab({ request = null }: { request?: SpectrumRequest | nu
                     onClick={() => addSpectrum(obj.name, obj.ra_deg, obj.dec_deg)}
                     title={`RA ${obj.ra_deg.toFixed(3)}°, Dec ${obj.dec_deg.toFixed(3)}°`}
                   >
-                    <span>{obj.name}</span>
+                    <span className="spectral-catalog-names">
+                      <span className="spectral-catalog-title">{obj.name}</span>
+                      <span className="spectral-catalog-subtitle">{obj.catalogue}</span>
+                    </span>
                     <span className="spectral-catalog-type">{taken ? 'added' : obj.type}</span>
                   </button>
                 </li>
               );
             })}
           </ul>
+          <h3 className="spectral-subheading spectral-subheading-coords">Or enter coordinates</h3>
           <form className="spectral-coords" onSubmit={handleSubmit} noValidate>
             <label>
               RA (deg)
@@ -200,7 +193,7 @@ export function SpectralLab({ request = null }: { request?: SpectrumRequest | nu
           )}
         </section>
 
-        <section>
+        <section data-tour="lab-compare">
           <h2 className="spectral-heading">
             Comparing {entries.length}/{MAX_SPECTRA}
           </h2>
@@ -255,13 +248,15 @@ export function SpectralLab({ request = null }: { request?: SpectrumRequest | nu
       <button
         type="button"
         className="spectral-sidebar-toggle"
+        data-tour="lab-sidebar"
         aria-label={`${sidebarVisible ? 'Hide' : 'Show'} sidebar`}
         aria-expanded={sidebarVisible}
         aria-controls="spectra-sidebar"
         onClick={() => setSidebarVisible((visible) => !visible)}
       >
         <svg aria-hidden="true" viewBox="0 0 16 16" focusable="false">
-          <path d={sidebarVisible ? 'M10 3 5 8l5 5' : 'M6 3l5 5-5 5'} />
+          {/* One arrow, rotated by CSS when collapsed, so it turns instead of jumping. */}
+          <path d="M10 3 5 8l5 5" />
         </svg>
         <span>{sidebarVisible ? 'Hide' : 'Show'}</span>
       </button>
@@ -278,7 +273,7 @@ export function SpectralLab({ request = null }: { request?: SpectrumRequest | nu
           SPHEREx Spectrophotometry Tool for science-grade spectra. Gaps are channels with no
           coverage at that pixel.
         </p>
-        <div className="spectral-controls">
+        <div className="spectral-controls" data-tour="lab-axis">
           <div className="spectral-toolbar" role="group" aria-label="Brightness axis scale">
             <span className="spectral-muted">Brightness axis</span>
             {(['linear', 'log'] as const).map((mode) => (
@@ -293,9 +288,18 @@ export function SpectralLab({ request = null }: { request?: SpectrumRequest | nu
               </button>
             ))}
           </div>
+          <button
+            type="button"
+            className={`spectral-toggle ${showEstimates ? 'active' : ''}`}
+            aria-pressed={showEstimates}
+            title="Fill gaps of up to two channels on the same detector with a straight line"
+            onClick={() => setShowEstimates((v) => !v)}
+          >
+            Show estimates
+          </button>
         </div>
-        <SpectrumChart entries={plotted} mode={yMode} />
-        {plotted.length > 0 && <SpectrumTable entries={plotted} />}
+        <SpectrumChart entries={plotted} mode={yMode} showEstimates={showEstimates} />
+        {plotted.length > 0 && <SpectrumTable entries={plotted} showEstimates={showEstimates} />}
       </main>
     </div>
   );
@@ -305,7 +309,14 @@ interface PlottedEntry extends SpectrumEntry {
   data: CubeSpectrumResponse;
 }
 
-function SpectrumChart({ entries, mode }: { entries: PlottedEntry[]; mode: YScaleMode }) {
+/** Longest run of blank channels the chart fills in; 0 shows the raw measurements only. */
+const estimateGap = (showEstimates: boolean) => (showEstimates ? 2 : 0);
+
+function SpectrumChart({ entries, mode, showEstimates }: {
+  entries: PlottedEntry[];
+  mode: YScaleMode;
+  showEstimates: boolean;
+}) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartId = useId().replace(/:/g, '');
   const [width, setWidth] = useState(720);
@@ -316,16 +327,23 @@ function SpectrumChart({ entries, mode }: { entries: PlottedEntry[]; mode: YScal
   useEffect(() => {
     const el = containerRef.current;
     if (!el || typeof ResizeObserver === 'undefined') return;
+    // While the sidebar animates the width changes every frame: redraw at most once per frame.
+    let frame = 0;
     const observer = new ResizeObserver(([entry]) => {
-      setWidth(Math.max(280, Math.floor(entry.contentRect.width)));
+      const next = Math.max(280, Math.floor(entry.contentRect.width));
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => setWidth(next));
     });
     observer.observe(el);
-    return () => observer.disconnect();
+    return () => {
+      cancelAnimationFrame(frame);
+      observer.disconnect();
+    };
   }, []);
 
   const plottedSeries = useMemo(
-    () => entries.map((e) => interpolateMissingFlux(e.data.points)),
-    [entries],
+    () => entries.map((e) => interpolateMissingFlux(e.data.points, estimateGap(showEstimates))),
+    [entries, showEstimates],
   );
   const series = plottedSeries;
   const domain = useMemo(() => computeDomain(series, mode), [series, mode]);
@@ -340,7 +358,7 @@ function SpectrumChart({ entries, mode }: { entries: PlottedEntry[]; mode: YScal
 
   if (!domain) {
     return (
-      <div ref={containerRef} className="spectral-chart spectral-chart-empty">
+      <div ref={containerRef} className="spectral-chart spectral-chart-empty" data-tour="lab-chart">
         <p className="spectral-muted">
           {hasNonPositiveEstimate
             ? 'Interpolated estimate at or below zero cannot be shown on a log axis; switch to Linear or see its value in the data table.'
@@ -447,7 +465,7 @@ function SpectrumChart({ entries, mode }: { entries: PlottedEntry[]; mode: YScal
   const tooltipLeft = hovered ? x(hovered.wavelength_um) : 0;
 
   return (
-    <div ref={containerRef} className="spectral-chart">
+    <div ref={containerRef} className="spectral-chart" data-tour="lab-chart">
       <div className="spectral-chart-zoom" role="group" aria-label="Chart zoom controls">
         <button type="button" className="spectral-toggle" aria-label="Zoom out" disabled={zoomFactor <= 1.01}
           onClick={() => setZoom(1 / 1.5)}>−</button>
@@ -552,7 +570,9 @@ function SpectrumChart({ entries, mode }: { entries: PlottedEntry[]; mode: YScal
       </svg>
       <div className="spectral-estimate-legend" aria-label="Flux data legend">
         <span><i className="spectral-observed-key" aria-hidden="true" />Observed</span>
-        <span><i className="spectral-interpolated-key" aria-hidden="true" />Interpolated (estimated)</span>
+        {showEstimates && (
+          <span><i className="spectral-interpolated-key" aria-hidden="true" />Interpolated (estimated)</span>
+        )}
       </div>
       {plottedSeries.some((points) => points.some((p) => p.interpolated)) && (
         <p className="spectral-chart-note" role="note">
@@ -602,11 +622,11 @@ function SpectrumChart({ entries, mode }: { entries: PlottedEntry[]; mode: YScal
   );
 }
 
-function SpectrumTable({ entries }: { entries: PlottedEntry[] }) {
+function SpectrumTable({ entries, showEstimates }: { entries: PlottedEntry[]; showEstimates: boolean }) {
   const channels = entries[0].data.points;
   const plottedSeries = useMemo(
-    () => entries.map((entry) => interpolateMissingFlux(entry.data.points)),
-    [entries],
+    () => entries.map((entry) => interpolateMissingFlux(entry.data.points, estimateGap(showEstimates))),
+    [entries, showEstimates],
   );
   return (
     <details className="spectral-table">

@@ -49,9 +49,8 @@
   background: currentColor;
 }
 
-.spectral-lab.sidebar-collapsed .spectral-main {
-  width: 100%;
-}
+/* .spectral-main is flex: 1, so it follows the sidebar's width as it animates.
+   (A width: 100% here made it jump to full width before the sidebar had moved.) */
 
 .spectral-lab,
 .spectral-main,
@@ -63,16 +62,41 @@
 
 .spectral-sidebar {
   box-sizing: border-box;
-  transition: width 220ms cubic-bezier(0.16, 1, 0.3, 1), flex-basis 220ms cubic-bezier(0.16, 1, 0.3, 1), padding 220ms ease, opacity 160ms ease;
+  /* Opening: visible at once, then width and content ease in. */
+  transition:
+    width 300ms cubic-bezier(0.22, 1, 0.36, 1),
+    padding 300ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-right-width 300ms ease,
+    opacity 220ms ease,
+    visibility 0s linear 0s;
+}
+
+/* Content keeps its width while the panel narrows, so text never re-wraps mid-animation;
+   it drifts left and fades instead. */
+.spectral-sidebar > * {
+  min-width: 268px;
+  transition: opacity 200ms ease, transform 300ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .spectral-lab.sidebar-collapsed .spectral-sidebar {
+  /* Only width collapses: flex-basis would jump from auto to 0 without animating. */
   width: 0;
-  flex-basis: 0;
   padding-inline: 0;
-  border: 0;
+  border-right-width: 0;
   opacity: 0;
   visibility: hidden;
+  /* Closing: stay visible until the width has finished shrinking. */
+  transition:
+    width 300ms cubic-bezier(0.22, 1, 0.36, 1),
+    padding 300ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-right-width 300ms ease,
+    opacity 220ms ease 60ms,
+    visibility 0s linear 300ms;
+}
+
+.spectral-lab.sidebar-collapsed .spectral-sidebar > * {
+  opacity: 0;
+  transform: translateX(-16px);
 }
 
 .spectral-sidebar-toggle {
@@ -107,6 +131,32 @@
   stroke: currentColor;
   stroke-width: 1.8;
 }
+
+.spectral-sidebar-toggle { transition: background-color 150ms ease, color 150ms ease; }
+.spectral-sidebar-toggle svg { transition: transform 300ms cubic-bezier(0.22, 1, 0.36, 1); }
+.spectral-sidebar-toggle[aria-expanded="false"] svg { transform: rotate(180deg); }
+
+/* Spectra entering the comparison slide in; hiding one fades it. */
+@keyframes spectral-item-in { from { opacity: 0; transform: translateY(-4px); } }
+.spectral-legend li { animation: spectral-item-in 220ms cubic-bezier(0.22, 1, 0.36, 1); }
+.spectral-legend-text { transition: opacity 200ms ease; }
+.spectral-legend .spectral-swatch { transition: opacity 200ms ease, transform 200ms ease; }
+.spectral-legend li.is-hidden .spectral-swatch { opacity: 0.4; transform: scale(0.85); }
+
+/* Featured rows, axis toggles and zoom buttons ease their state changes. */
+.spectral-catalog button,
+.spectral-toggle,
+.spectral-icon-btn,
+.spectral-coords button {
+  transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease, opacity 200ms ease, transform 120ms ease;
+}
+.spectral-catalog button:active:not(:disabled),
+.spectral-toggle:active:not(:disabled),
+.spectral-coords button:active { transform: scale(0.98); }
+
+/* The chart area fades in when the first spectrum replaces the empty state. */
+@keyframes spectral-fade { from { opacity: 0; } }
+.spectral-chart { animation: spectral-fade 260ms ease; }
 
 .spectral-controls {
   display: flex;
@@ -175,5 +225,13 @@
 
 @media (prefers-reduced-motion: reduce) {
   .spectral-loading::before { animation: none; }
-  .spectral-sidebar { transition: none; }
+  .spectral-sidebar,
+  .spectral-lab.sidebar-collapsed .spectral-sidebar,
+  .spectral-sidebar > *,
+  .spectral-sidebar-toggle svg { transition: none; }
+  .spectral-legend li,
+  .spectral-chart { animation: none; }
+  .spectral-catalog button:active,
+  .spectral-toggle:active,
+  .spectral-coords button:active { transform: none; }
 }

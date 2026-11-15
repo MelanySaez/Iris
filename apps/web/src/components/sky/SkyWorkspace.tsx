@@ -1,11 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import Aladin, { type AladinCatalog, type AladinLayer, type AladinSource, type AladinViewer } from 'aladin-lite';
+import Aladin, { type AladinCatalog, type AladinViewer } from 'aladin-lite';
 import { api, CURATED_CATALOG_FALLBACK } from '../../api';
 import {
   FEATURED_OBJECTS,
   featuredObjectPopup,
-  HIPS_CATALOG_PROVIDERS,
-  isDuplicateRemoteSource,
   LOCAL_CATALOG_STYLE,
 } from '../../catalogs';
 import { TocatsCatalogClient, TocatsViewportCache, TOCATS_CATALOGS, type TocatsCatalogId } from '../../tocats';
@@ -32,12 +30,14 @@ import {
   type SpectralChannel,
 } from '../../hips';
 import { pointerToIcrs, resolveInitialProjection, setChannelImageLayer } from '../../aladinView';
+import { useSimbadViewportLayer, type SimbadLayerStatus } from '../../hooks/useSimbadViewportLayer';
 import { createCatalogMarker } from '../../catalogMarker';
 import { installCatalogPopupControls } from '../../catalogPopup';
 import { useRgbComposite } from '../../hooks/useRgbComposite';
 import { RgbControls } from './RgbControls';
 import { SelectionActions, type SpectrumTarget } from './SelectionActions';
 import { RegionConfirmBar } from './RegionConfirmBar';
+import type { SpectrumOrigin } from '../../spectrumLabel';
 import { NameSuggestion, type ResolvedTarget, type SubmitLookup } from './NameSuggestion';
 import { runEnterLookup } from '../../searchEnter';
 import { lookupView } from '../../lookupView';
@@ -150,7 +150,6 @@ export function SkyWorkspace({
   const mapRef = useRef<HTMLDivElement>(null);
   const viewerRef = useRef<AladinViewer | null>(null);
   const localCatalogRef = useRef<AladinCatalog | null>(null);
-  const simbadCatalogRef = useRef<AladinLayer | null>(null);
   const nearbyCatalogRef = useRef<AladinCatalog | null>(null);
   const nearbyAnchorMarkerRef = useRef<unknown | null>(null);
   const nearbyResultMarkersRef = useRef<unknown[]>([]);
@@ -193,7 +192,7 @@ export function SkyWorkspace({
   const [simbadCatalogVisible, setSimbadCatalogVisible] = useState(false);
   const [simbadCatalogLoading, setSimbadCatalogLoading] = useState(false);
   const [simbadCatalogStatus, setSimbadCatalogStatus] = useState(
-    'Enable to load SIMBAD sources progressively for the current view.',
+    'Enable to show SIMBAD objects in the current view (Harvard mirror).',
   );
   const [tocatsLayerStates, setTocatsLayerStates] = useState<Record<TocatsCatalogId, TocatsLayerState>>(
     () => ({ ...INITIAL_TOCATS_LAYER_STATES }),
@@ -208,7 +207,6 @@ export function SkyWorkspace({
   const searchQueryRef = useRef('');
   searchQueryRef.current = searchQuery;
   const [recentSelections, setRecentSelections] = useState<RecentSelection[]>(getRecentSelections());
-  const simbadRequestRef = useRef<AbortController | null>(null);
 
   const clearNearbyResultMarkers = useCallback(() => {
     const layer = nearbyCatalogRef.current;
@@ -287,64 +285,12 @@ export function SkyWorkspace({
     setLocalCatalogVisible(visible);
   }, []);
 
-  const handleSimbadCatalogVisibility = useCallback(async (visible: boolean) => {
-    const provider = HIPS_CATALOG_PROVIDERS.simbad;
-    const viewer = viewerRef.current;
-    if (!viewer) return;
-
+  // SIMBAD layer: queried through the Harvard mirror for the visible field (useSimbadViewportLayer).
+  const handleSimbadCatalogVisibility = useCallback((visible: boolean) => {
+    setSimbadCatalogVisible(visible);
     if (!visible) {
-      simbadRequestRef.current?.abort();
-      simbadRequestRef.current = null;
-      simbadCatalogRef.current?.hide();
       setSimbadCatalogLoading(false);
-      setSimbadCatalogVisible(false);
       setSimbadCatalogStatus('SIMBAD catalog hidden.');
-      return;
-    }
-
-    const existingCatalog = simbadCatalogRef.current;
-    if (existingCatalog) {
-      existingCatalog.show();
-      setSimbadCatalogVisible(true);
-      setSimbadCatalogStatus('SIMBAD HiPS is active; Aladin loads sources for the visible sky tiles.');
-      return;
-    }
-
-    const controller = new AbortController();
-    simbadRequestRef.current = controller;
-    const timeout = window.setTimeout(() => controller.abort(), 8000);
-    setSimbadCatalogVisible(true);
-    setSimbadCatalogLoading(true);
-    setSimbadCatalogStatus('Checking the SIMBAD HiPS catalog…');
-
-    try {
-      const response = await fetch(`${provider.url}/properties`, { signal: controller.signal });
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const properties = await response.text();
-      if (!properties.toLowerCase().includes('hips_frame=')) {
-        throw new Error('The service did not return HiPS catalog metadata.');
-      }
-
-      const catalogLayer = Aladin.catalogHiPS(provider.url, {
-        name: provider.name,
-        color: provider.color,
-        sourceSize: provider.sourceSize,
-        shape: createCatalogMarker(provider.color, provider.sourceSize, 'circle'),
-        onClick: 'showTable',
-        filter: (source: AladinSource) => !isDuplicateRemoteSource(source),
-      });
-      viewer.addCatalog(catalogLayer);
-      simbadCatalogRef.current = catalogLayer;
-      setSimbadCatalogStatus('SIMBAD HiPS is active; Aladin loads sources for the visible sky tiles.');
-    } catch {
-      setSimbadCatalogVisible(false);
-      setSimbadCatalogStatus(
-        'SIMBAD HiPS could not be reached (network or CORS). Enable the layer to retry; featured objects remain available.',
-      );
-    } finally {
-      window.clearTimeout(timeout);
-      if (simbadRequestRef.current === controller) simbadRequestRef.current = null;
-      setSimbadCatalogLoading(false);
     }
   }, []);
 
@@ -358,6 +304,20 @@ export function SkyWorkspace({
       return { ...current, [catalogId]: next };
     });
   }, []);
+
+  const handleSimbadStatus = useCallback((status: SimbadLayerStatus) => {
+    setSimbadCatalogLoading(status.loading);
+    setSimbadCatalogStatus(status.message);
+  }, []);
+  useSimbadViewportLayer({
+    visible: simbadCatalogVisible,
+    aladinReady,
+    viewerRef,
+    centerCoords,
+    fovWidth: currentFov,
+    fovHeight: currentFovHeight,
+    onStatus: handleSimbadStatus,
+  });
 
   useTocatsCatalogViewport({
     catalogId: 'gaia',
@@ -466,6 +426,8 @@ export function SkyWorkspace({
   const [selectedRegion, setSelectedRegion] = useState<RegionRequest | null>(null);
   // A drawn or adjusted region stays a draft until the user confirms it.
   const [regionConfirmed, setRegionConfirmed] = useState(true);
+  // Object a region was created from (search, featured, recent): names its spectrum while the centre is on it.
+  const [regionOrigin, setRegionOrigin] = useState<SpectrumOrigin | null>(null);
   const regionEdit = useRef<{
     kind: 'move' | 'resize';
     startWorld: [number, number];
@@ -677,7 +639,6 @@ export function SkyWorkspace({
 
     return () => {
       active = false;
-      simbadRequestRef.current?.abort();
       disposePopupControls?.();
       if (timer) window.clearInterval(timer);
     };
@@ -746,6 +707,7 @@ export function SkyWorkspace({
       setRegionError(null);
       setSelectedRegion(target);
       setRegionConfirmed(true);
+      setRegionOrigin(name ? { name, ra_deg: target.ra_deg, dec_deg: target.dec_deg } : null);
 
       if (viewerRef.current) {
         viewerRef.current.gotoRaDec?.(target.ra_deg, target.dec_deg);
@@ -1103,10 +1065,10 @@ export function SkyWorkspace({
       status: localCatalogStatus, onToggle: handleLocalCatalogVisibility,
     },
     {
-      id: 'simbad', name: 'SIMBAD HiPS', description: 'Known objects in the visible sky',
-      visible: simbadCatalogVisible, disabled: !aladinReady || simbadCatalogLoading,
+      id: 'simbad', name: 'SIMBAD', description: 'Known objects in the visible sky (Harvard mirror)',
+      visible: simbadCatalogVisible, disabled: !aladinReady,
       busy: simbadCatalogLoading, status: simbadCatalogStatus,
-      onToggle: (visible: boolean) => { void handleSimbadCatalogVisibility(visible); },
+      onToggle: (visible: boolean) => handleSimbadCatalogVisibility(visible),
     },
     {
       id: 'gaia', name: 'Gaia DR3', description: 'Astrometric sources in this sky region',
@@ -1582,6 +1544,7 @@ export function SkyWorkspace({
 
           <SelectionActions
             selection={selectedRegion}
+            origin={regionOrigin}
             confirmed={regionConfirmed}
             activeJobId={activeJob?.id ?? null}
             onOpenPlate={onOpenPlate}
