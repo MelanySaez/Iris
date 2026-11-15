@@ -6,9 +6,9 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
-from fastapi import HTTPException
+from app.exceptions.domain import ChannelCatalogUnavailableError
 
-from app.channels import (
+from app.services.channels import (
     build_channel_table,
     get_channel_catalog,
     get_channel_window,
@@ -21,6 +21,13 @@ FIXTURE_PATH = Path(__file__).parent / "fixtures" / "hips-properties.txt"
 @pytest.fixture
 def properties_text() -> str:
     return FIXTURE_PATH.read_text(encoding="utf-8")
+
+
+@pytest.fixture
+def channel_catalog(monkeypatch: pytest.MonkeyPatch, properties_text: str):
+    catalog = get_channel_catalog(override_text=properties_text)
+    monkeypatch.setattr("app.services.channels.get_channel_catalog", lambda: catalog)
+    return catalog
 
 
 def test_parse_properties_text(properties_text: str):
@@ -59,15 +66,15 @@ def test_channel_table_structure_and_bands(properties_text: str):
     assert channels[-1]["wavelength_um"] == 4.988
 
 
-def test_channel_window():
+def test_channel_window(channel_catalog):
     win_min, win_max = get_channel_window(0)
     assert win_min < win_max
     assert win_min <= 0.753 <= win_max
 
 
-def test_channel_window_is_half_the_local_spacing():
+def test_channel_window_is_half_the_local_spacing(channel_catalog):
     """Slice rule: |lambda - center| <= 0.5 * local channel spacing."""
-    from app.channels import get_channel
+    from app.services.channels import get_channel
 
     for index in (0, 20, 44, 101):
         channel = get_channel(index)
@@ -84,10 +91,10 @@ def test_channel_stale_cache_and_503(tmp_path: Path, properties_text: str):
 
     # With missing cache and network failure, raises 503
     with (
-        patch("app.channels.HIPS_PROPERTIES_CACHE_PATH", cache_file),
+        patch("app.services.channels.HIPS_PROPERTIES_CACHE_PATH", cache_file),
         patch("httpx.Client.get", side_effect=RuntimeError("Network down")),
     ):
-        with pytest.raises(HTTPException) as exc_info:
+        with pytest.raises(ChannelCatalogUnavailableError) as exc_info:
             get_channel_catalog(force_refresh=True)
         assert exc_info.value.status_code == 503
 
@@ -115,7 +122,7 @@ def test_channel_stale_cache_and_503(tmp_path: Path, properties_text: str):
     )
 
     with (
-        patch("app.channels.HIPS_PROPERTIES_CACHE_PATH", cache_file),
+        patch("app.services.channels.HIPS_PROPERTIES_CACHE_PATH", cache_file),
         patch("httpx.Client.get", side_effect=RuntimeError("Network down")),
     ):
         cat = get_channel_catalog(force_refresh=True)

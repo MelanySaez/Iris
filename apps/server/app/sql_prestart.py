@@ -4,7 +4,7 @@ from sqlalchemy import Engine, select
 from sqlalchemy.orm import Session
 from tenacity import after_log, before_log, retry, stop_after_attempt, wait_fixed
 
-from app.selections.db import get_database_url, get_engine
+from app.core.database import get_database_url, get_engine
 
 
 logging.basicConfig(level=logging.INFO)

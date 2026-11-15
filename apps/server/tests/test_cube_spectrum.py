@@ -16,7 +16,7 @@ import pytest
 from astropy.io import fits
 from fastapi.testclient import TestClient
 
-import app.cube_spectrum as cube
+import app.services.cube_spectrum as cube
 from app.main import app
 
 RA, DEC = 148.888, 69.065  # M81

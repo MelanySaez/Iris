@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from app.jobs import job_manager
-from app.selections.api import configure_selections
+from app.services.jobs import job_manager
+from app.services.selections import configure_selections
 
 
 @pytest.fixture(scope="session", autouse=True)

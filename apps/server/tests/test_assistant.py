@@ -13,17 +13,17 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
-from app.assistant.api import get_assistant
-from app.assistant.cache import ResponseCache, normalize_query
-from app.assistant.guardrails import (
+from app.api.deps import get_assistant
+from app.services.assistant.cache import ResponseCache, normalize_query
+from app.services.assistant.guardrails import (
     RateLimiter,
     detect_injection,
     sanitize_untrusted,
 )
-from app.assistant.logbook import AssistantLog
-from app.assistant.prompt import CANARY, SYSTEM_PROMPT
-from app.assistant.service import Assistant
-from app.assistant.tools import ToolInputError, validate_ui_tool
+from app.repositories.assistant_log import AssistantLog
+from app.services.assistant.prompt import CANARY, SYSTEM_PROMPT
+from app.services.assistant.service import Assistant
+from app.services.assistant.tools import ToolInputError, validate_ui_tool
 from app.main import app
 
 CONVERSATION = "3f1c2a4e-0b7d-4c55-9a6e-1d2f3a4b5c6d"
@@ -281,16 +281,16 @@ def test_server_tool_results_are_wrapped_as_untrusted_data(api):
     client, _, fake = api(
         [
             reply(
-                tool_block("search_catalog", {"query": "local"}, "t1"), stop="tool_use"
+                tool_block("search_catalog", {"query": "M101"}, "t1"), stop="tool_use"
             ),
-            reply(text_block("Found the local sample.")),
+            reply(text_block("Found M101.")),
         ]
     )
-    chat(client, "find the local sample")
+    chat(client, "find M101")
     content = tool_messages(fake.calls[1])[0]["content"]
     assert content.startswith("<tool_data>") and content.endswith("</tool_data>")
     data = json.loads(content.removeprefix("<tool_data>").removesuffix("</tool_data>"))
-    assert data["results"][0]["id"] == "local-dr1-sample"
+    assert data["results"][0]["id"] == "m101-field"
 
 
 def test_tool_loop_is_capped(api):

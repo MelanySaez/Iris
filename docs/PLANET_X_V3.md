@@ -62,7 +62,6 @@ Base path `/api`. CORS for the Vite origins. JSON unless stated.
   "status": "ok",
   "version": "0.2.0",
   "products": ["DR1 All-Sky Cube HiPS", "Level-2 spectral image cutouts"],
-  "local_assets": true,
   "network": "configured"
 }
 ```
@@ -97,7 +96,6 @@ and notebooks):
 
 | id | name | ra | dec | type | note |
 | --- | --- | --- | --- | --- | --- |
-| `local-dr1-sample` | Local DR1 sample | 270.693033 | 61.876516 | SPHEREx field | Covered by the local D2 FITS |
 | `m81-field` | M81 field | 210.80227 | 54.34895 | Galaxy field | Notebook TAP demo field |
 | `spherex-demo-field` | SPHEREx demo field | 304.693509 | 42.443687 | SPHEREx field | Notebook SIA demo field |
 | `wise-0855` | WISE 0855−0714 | 133.7951 | −7.2451 | Brown dwarf | Coldest known brown dwarf |
@@ -120,7 +118,7 @@ Response:
 
 Request `{ra_deg, dec_deg, size_arcmin}` (size 1..30).
 
-Does discovery only: local asset coverage plus IRSA TAP. Cached per rounded
+Does discovery only through IRSA TAP. Cached per rounded
 region for 6 hours. Returns 200 even when discovery fails, with a `warning`.
 
 ```json
@@ -305,16 +303,18 @@ cutouts. `flag_definitions` is the union of per-cutout `MP_*` definitions.
 
 ```
 apps/server/app/
-  __init__.py
-  config.py        # paths, timeouts, caps, cache dirs
-  channels.py      # HiPS properties fetch/parse/cache
-  catalog.py       # curated objects + precomputed detection
-  discovery.py     # local footprint + IRSA TAP + JSON cache
-  fits_assets.py   # cutout download cache, FITS → arrays, WCS-WAVE, flag bits
-  render.py        # PNG rendering, stretch, slice alpha, flag masks
-  jobs.py          # job manager, stages, thread pool, job cache
-  models.py        # pydantic request/response models
-  main.py          # FastAPI routes
+  alembic/         # database migrations
+  api/             # routes, dependencies, middleware, router
+  core/            # typed settings and database setup
+  exceptions/      # domain errors and HTTP mapping
+  models/          # SQLAlchemy ORM models
+  repositories/    # PostgreSQL and file-backed persistence
+  schemas/         # Pydantic request/response models
+  services/        # business logic and provider adapters
+  utils/           # shared helpers
+  initial_data.py  # runtime bootstrap
+  main.py          # FastAPI application entry point
+  sql_prestart.py  # database prestart helper
 scripts/warm_catalog.py   # precompute demo objects into the same disk cache
 tests/                    # pytest, no network
 ```
@@ -327,15 +327,10 @@ data/cache/discovery/<sha1>.json
 data/cache/cutouts/<sha1>.fits
 data/cache/derived/<sha1>.npz
 data/cache/jobs/<sha1>.json          # optional snapshot
-data/level2_*.fits                   # local asset (read-only)
 ```
 
 Caps: max 8 channels, max 12 cutout downloads per job, 4 download workers,
 connect 10 s, read 90 s, 2 retries. Job registry LRU 32 in memory.
-
-The local FITS is registered as a product for detector 2 when the requested
-box is fully inside its footprint. Prefer the local asset over a remote download
-for the same detector in `latest` mode.
 
 ## 6. Frontend contract (`apps/web`)
 
@@ -384,7 +379,7 @@ numerals. A thin dark ribbon at the top with `← Sky` and the plate id.
 Three columns:
 
 1. **Plate sheet (left, 260 px)** — object/region name, RA/Dec, FOV, detector,
-   obs_id, observation date, source (`local`/`remote`), units, LVF statement,
+   obs_id, observation date, remote source, units, LVF statement,
    flag-bit legend, provenance disclosure.
 2. **Plate stage (center)** — the cutout on a charcoal matte, displayed as an
    inverted grayscale plate (black sources on white) like a photographic plate.
@@ -419,11 +414,11 @@ job for the same region with the extra products. Show the prepare state inline.
 Backend: `uv run ruff check app tests`, `uv run pytest -q`.
 
 - Channel parsing from a fixture properties file.
-- Flag-bit extraction from the local FITS header.
-- Local footprint coverage + cutout slice + WCS-WAVE per-pixel map.
+- Flag-bit extraction from remote FITS headers.
+- IRSA coverage discovery + cutout extraction + WCS-WAVE per-pixel map.
 - Render: full PNG, slice RGBA, flags bit mask.
-- API: health, channels (fixture), catalog, job lifecycle against the local
-  asset, pixel probe, manifest, 404/409 paths. No network in tests.
+- API: health, channels (fixture), catalog, remote-product job lifecycle,
+  pixel probe, manifest, 404/409 paths. No network in tests.
 - Smoke test with real TAP is manual and reported honestly.
 
 Frontend: `pnpm typecheck`, `pnpm test`, `pnpm build`.

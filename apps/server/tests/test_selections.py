@@ -20,11 +20,11 @@ from alembic.config import Config
 from fastapi.testclient import TestClient
 from sqlalchemy import make_url, text
 
-from app.jobs import job_manager
+from app.services.jobs import job_manager
 from app.main import app
-from app.selections.api import configure_selections
-from app.selections.db import get_database_url, get_engine
-from app.selections.store import normalize_region
+from app.services.selections import configure_selections
+from app.core.database import get_database_url, get_engine
+from app.repositories.selection import normalize_region
 
 DATABASE_URL = get_database_url()
 SERVER_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -42,9 +42,9 @@ def schema_url(url: str, schema: str) -> str:
 def mock_external_network():
     """Never call IRSA TAP or download cutouts over the network."""
     with (
-        patch("app.discovery.query_irsa_tap", return_value=([], None)),
-        patch("app.fits_assets.download_cutout", side_effect=RuntimeError("No network")),
-        patch("app.jobs.download_cutout", side_effect=RuntimeError("No network")),
+        patch("app.services.discovery.query_irsa_tap", return_value=([], None)),
+        patch("app.services.fits.download_cutout", side_effect=RuntimeError("No network")),
+        patch("app.services.jobs.download_cutout", side_effect=RuntimeError("No network")),
     ):
         yield
 
@@ -236,7 +236,7 @@ def test_discovered_products_are_stored_with_derived_fields(client):
         "detectors": [],
         "notes": [],
     }
-    with patch("app.jobs.resolve_region", return_value=discovery):
+    with patch("app.services.jobs.resolve_region", return_value=discovery):
         job = client.post("/api/jobs", json={**region(12.5), "channels": [44]}).json()
         saved = find_by_job(client, job["id"])
         detail = wait_for_outcome(client, saved["id"])
@@ -433,7 +433,7 @@ class _OrderObserver:
 
 def test_submission_is_notified_before_the_job_can_finish():
     """Even a job that finishes instantly must be recorded before its outcome."""
-    from app.models import JobRequest
+    from app.schemas.jobs import JobRequest
 
     observer = _OrderObserver()
     job_manager.add_observer(observer)
@@ -456,7 +456,7 @@ class _FakeStore:
         self.calls: list[tuple] = []
 
     def record_submission(self, job_id, req, status, *, new_attempt):
-        from app.selections.store import SubmissionResult
+        from app.repositories.selection import SubmissionResult
 
         self.calls.append(("submission", job_id, status, new_attempt))
         return SubmissionResult(
@@ -469,9 +469,9 @@ class _FakeStore:
 
 def _fake_manifest(manifest):
     return (
-        patch("app.selections.recorder.get_job_manifest", return_value=manifest),
+        patch("app.services.selections.get_job_manifest", return_value=manifest),
         patch(
-            "app.selections.recorder.ManifestResponse",
+            "app.services.selections.ManifestResponse",
             side_effect=lambda **kw: type(
                 "M", (), {"model_dump": lambda self, mode: kw}
             )(),
@@ -481,9 +481,9 @@ def _fake_manifest(manifest):
 
 def test_cached_terminal_job_records_its_outcome_when_its_row_is_new():
     """A cache hit never runs again: a freshly created row needs the outcome now."""
-    from app.jobs import JobState
-    from app.models import JobRequest
-    from app.selections.recorder import SelectionRecorder
+    from app.services.jobs import JobState
+    from app.schemas.jobs import JobRequest
+    from app.services.selections import SelectionRecorder
 
     store = _FakeStore(inserted=True)
     job = JobState(id="cached-job", request=JobRequest(**region(20.5)), status="ready")
@@ -500,9 +500,9 @@ def test_cached_terminal_job_records_its_outcome_when_its_row_is_new():
 
 def test_repeated_cache_hit_does_not_rebuild_the_outcome():
     """An existing row already holds the outcome: only the hit is counted."""
-    from app.jobs import JobState
-    from app.models import JobRequest
-    from app.selections.recorder import SelectionRecorder
+    from app.services.jobs import JobState
+    from app.schemas.jobs import JobRequest
+    from app.services.selections import SelectionRecorder
 
     store = _FakeStore(inserted=False, stored_status="ready")
     job = JobState(id="cached-job", request=JobRequest(**region(20.5)), status="ready")
@@ -515,9 +515,9 @@ def test_repeated_cache_hit_does_not_rebuild_the_outcome():
 
 
 def test_new_attempt_is_submitted_as_a_reset():
-    from app.jobs import JobState
-    from app.models import JobRequest
-    from app.selections.recorder import SelectionRecorder
+    from app.services.jobs import JobState
+    from app.schemas.jobs import JobRequest
+    from app.services.selections import SelectionRecorder
 
     store = _FakeStore(inserted=False)
     job = JobState(id="new-job", request=JobRequest(**region(20.5)))
@@ -537,7 +537,7 @@ def test_tests_run_inside_a_throwaway_schema(client, migrated_db):
 
 
 def test_other_tests_do_not_record_selections_by_default():
-    from app.selections.recorder import SelectionRecorder
+    from app.services.selections import SelectionRecorder
 
     assert not any(isinstance(o, SelectionRecorder) for o in job_manager.observers)
 
@@ -561,9 +561,9 @@ def test_invalid_database_url_is_never_logged_with_its_password(caplog):
 
 
 def test_failed_outcome_stores_the_job_error():
-    from app.jobs import JobState
-    from app.models import JobRequest
-    from app.selections.recorder import SelectionRecorder
+    from app.services.jobs import JobState
+    from app.schemas.jobs import JobRequest
+    from app.services.selections import SelectionRecorder
 
     calls: list[tuple] = []
 
@@ -590,15 +590,15 @@ def test_failed_outcome_stores_the_job_error():
 
 @requires_db
 def test_resubmission_clears_the_previous_error(client):
-    from app.models import JobRequest
-    from app.selections.api import get_store
+    from app.schemas.jobs import JobRequest
+    from app.services.selections import get_selection_repository
 
     payload = {**region(22.5), "channels": [44]}
     job = client.post("/api/jobs", json=payload).json()
     saved = find_by_job(client, job["id"])
     assert wait_for_outcome(client, saved["id"])["job_error"] is not None
 
-    result = get_store().record_submission(
+    result = get_selection_repository().record_submission(
         job["id"], JobRequest(**payload), "queued", new_attempt=True
     )
     assert result.inserted is False
@@ -615,15 +615,15 @@ def test_resubmission_clears_the_previous_error(client):
 @requires_db
 def test_cache_hit_never_overwrites_a_recorded_outcome(client):
     """A late cache-hit write (e.g. a duplicate submit) keeps status and error."""
-    from app.models import JobRequest
-    from app.selections.api import get_store
+    from app.schemas.jobs import JobRequest
+    from app.services.selections import get_selection_repository
 
     payload = {**region(23.5), "channels": [44]}
     job = client.post("/api/jobs", json=payload).json()
     saved = find_by_job(client, job["id"])
     final = wait_for_outcome(client, saved["id"])
 
-    get_store().record_submission(
+    get_selection_repository().record_submission(
         job["id"], JobRequest(**payload), "discovering", new_attempt=False
     )
     detail = client.get(f"/api/selections/{saved['id']}").json()
@@ -634,11 +634,11 @@ def test_cache_hit_never_overwrites_a_recorded_outcome(client):
 
 @requires_db
 def test_record_submission_reports_whether_the_row_was_created(client):
-    from app.models import JobRequest
-    from app.selections.api import get_store
+    from app.schemas.jobs import JobRequest
+    from app.services.selections import get_selection_repository
 
     req = JobRequest(**region(24.5), channels=[44])
-    store = get_store()
+    store = get_selection_repository()
     first = store.record_submission(
         "fresh-row-000000001", req, "ready", new_attempt=False
     )
@@ -651,9 +651,9 @@ def test_record_submission_reports_whether_the_row_was_created(client):
 
 def test_cache_hit_heals_a_row_stuck_in_an_intermediate_status():
     """If the outcome write was lost, a later cache hit stores it."""
-    from app.jobs import JobState
-    from app.models import JobRequest
-    from app.selections.recorder import SelectionRecorder
+    from app.services.jobs import JobState
+    from app.schemas.jobs import JobRequest
+    from app.services.selections import SelectionRecorder
 
     store = _FakeStore(inserted=False, stored_status="discovering")
     job = JobState(
@@ -677,13 +677,13 @@ def test_cache_hit_heals_a_row_stuck_in_an_intermediate_status():
 
 @requires_db
 def test_lost_outcome_is_recovered_on_the_next_cache_hit(client):
-    from app.jobs import JobState
-    from app.models import JobRequest
-    from app.selections.api import get_store
-    from app.selections.recorder import SelectionRecorder
+    from app.services.jobs import JobState
+    from app.schemas.jobs import JobRequest
+    from app.services.selections import get_selection_repository
+    from app.services.selections import SelectionRecorder
 
     req = JobRequest(**region(26.5), channels=[44])
-    store = get_store()
+    store = get_selection_repository()
     store.record_submission("stuck-row-0000000001", req, "discovering", new_attempt=True)
 
     job = JobState(
@@ -701,9 +701,9 @@ def test_lost_outcome_is_recovered_on_the_next_cache_hit(client):
 
 
 def test_outcome_carries_stage_kind_trace_and_timeline():
-    from app.jobs import JobState
-    from app.models import JobRequest
-    from app.selections.recorder import SelectionRecorder
+    from app.services.jobs import JobState
+    from app.schemas.jobs import JobRequest
+    from app.services.selections import SelectionRecorder
 
     seen: dict = {}
 

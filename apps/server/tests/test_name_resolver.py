@@ -9,7 +9,7 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 
-import app.name_resolver as resolver
+import app.services.names as resolver
 from app.main import app
 
 SIMBAD_HOST = "simbad.cfa.harvard.edu"

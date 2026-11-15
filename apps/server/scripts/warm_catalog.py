@@ -13,9 +13,9 @@ SERVER_ROOT = Path(__file__).resolve().parent.parent
 if str(SERVER_ROOT) not in sys.path:
     sys.path.insert(0, str(SERVER_ROOT))
 
-from app.catalog import CURATED_OBJECTS  # noqa: E402
-from app.jobs import job_manager  # noqa: E402
-from app.models import JobRequest  # noqa: E402
+from app.services.catalog import CURATED_OBJECTS  # noqa: E402
+from app.services.jobs import job_manager  # noqa: E402
+from app.schemas.jobs import JobRequest  # noqa: E402
 
 # Old catalog ids and the id that replaced them, so stale commands fail loudly.
 RENAMED_IDS = {
@@ -55,7 +55,7 @@ def parse_args() -> argparse.Namespace:
         "--objects",
         type=str,
         default="",
-        help="Comma-separated list of object IDs (e.g. local-dr1-sample,m101-field).",
+        help="Comma-separated list of object IDs (e.g. m101-field,m81).",
     )
     parser.add_argument(
         "--channels",

@@ -1,0 +1,688 @@
+"""Job execution, lifecycle, threading, LRU memory cache, and snapshot persistence."""
+
+from __future__ import annotations
+
+import hashlib
+import logging
+import threading
+import time
+import traceback
+from collections import OrderedDict
+from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass, field
+from typing import Any, Protocol
+
+import numpy as np
+
+from app.core.config import (
+    CALIBRATED,
+    JOB_SNAPSHOT_LRU_SIZE,
+    JOB_WORKERS,
+    MAX_CHANNELS_PER_JOB,
+    MAX_CUTOUT_DOWNLOADS_PER_JOB,
+    MAX_DOWNLOAD_WORKERS,
+    MAX_REGION_SIZE_ARCMIN,
+    MIN_REGION_SIZE_ARCMIN,
+    MULTI_PRODUCT_MOSAIC,
+    WAVELENGTH_STATUS,
+)
+from app.exceptions.domain import (
+    ChannelOutOfRangeError,
+    RegionRequestError,
+)
+from app.repositories.job_snapshots import JobSnapshotRepository
+from app.schemas.jobs import JobRequest
+from app.services.channels import get_channel, get_channel_window
+from app.services.discovery import resolve_region
+from app.services.fits import (
+    DerivedCutout,
+    download_cutout,
+    get_or_extract_derived,
+    load_derived_cutout,
+)
+from app.services.rendering import compute_cutout_percentiles
+from app.utils.tracing import request_id_var
+
+logger = logging.getLogger("uvicorn.error")
+
+# error_kind for an unexpected exception, by the stage that was running.
+UNEXPECTED_ERROR_KINDS = {
+    "downloading": "download_failed",
+    "extracting": "extraction_failed",
+    "rendering": "render_failed",
+}
+TRACE_MAX_LINES = 30
+TRACE_MAX_CHARS = 6000
+
+
+def _trimmed_traceback() -> str:
+    """Current exception traceback, keeping the innermost frames and the error."""
+    lines = traceback.format_exc().rstrip().splitlines()
+    if len(lines) > TRACE_MAX_LINES:
+        lines = [lines[0], "  ..."] + lines[-(TRACE_MAX_LINES - 2) :]
+    text = "\n".join(lines)
+    return text if len(text) <= TRACE_MAX_CHARS else "...\n" + text[-TRACE_MAX_CHARS:]
+
+
+@dataclass
+class JobState:
+    """Internal runtime state for an active or completed job."""
+
+    id: str
+    request: JobRequest
+    status: str = "queued"
+    progress: int = 0
+    stage: str = "Queued"
+    error: str | None = None
+    frames: list[dict[str, Any]] = field(default_factory=list)
+    cutouts: list[dict[str, Any]] = field(default_factory=list)
+    cutout_objects: dict[tuple[int, int], DerivedCutout] = field(default_factory=dict)
+    percentiles: dict[tuple[int, int, str], tuple[float, float]] = field(
+        default_factory=dict
+    )
+    events: list[dict[str, Any]] = field(default_factory=list)
+    cache_hit: bool = False
+    failed_stage: str | None = None
+    error_kind: str | None = None
+    error_trace: str | None = None
+    request_id: str | None = None
+
+    def to_snapshot(self) -> dict[str, Any]:
+        """Convert current job state to a serializable dictionary matching JobSnapshot."""
+        ch_items = []
+        for c in self.request.channels:
+            try:
+                ch = get_channel(c)
+                ch_items.append(
+                    {
+                        "index": ch["index"],
+                        "wavelength_um": ch["wavelength_um"],
+                        "bandwidth_um": ch["bandwidth_um"],
+                        "detector": ch["band"],
+                        "available": ch["available"],
+                    }
+                )
+            except Exception:
+                pass
+
+        return {
+            "id": self.id,
+            "status": self.status,
+            "progress": self.progress,
+            "stage": self.stage,
+            "events": list(self.events),
+            "error": self.error,
+            "failed_stage": self.failed_stage,
+            "error_kind": self.error_kind,
+            "error_trace": self.error_trace,
+            "request_id": self.request_id,
+            "request": self.request.model_dump(),
+            "region": {
+                "ra_deg": self.request.ra_deg,
+                "dec_deg": self.request.dec_deg,
+                "size_arcmin": self.request.size_arcmin,
+                "fov_deg": round(self.request.size_arcmin / 60.0, 4),
+            },
+            "channels": ch_items,
+            "products": sorted(set(self.request.products)),
+            "frames": self.frames,
+            "cutouts": self.cutouts,
+            "cache": {"hit": self.cache_hit},
+            "wavelength_status": WAVELENGTH_STATUS,
+            "calibrated": CALIBRATED,
+            "multi_product_mosaic": MULTI_PRODUCT_MOSAIC,
+        }
+
+
+class JobObserver(Protocol):
+    """Port notified about job lifecycle events (e.g. selection persistence).
+
+    Observers must not influence job processing: any exception they raise is
+    logged and swallowed by the manager.
+    """
+
+    def on_submitted(
+        self, job: JobState, is_new: bool, request: JobRequest | None = None
+    ) -> None:
+        """``is_new`` is False for cache hits: the job will not run again.
+
+        ``request`` is the request just submitted. On a cache hit it can differ
+        from ``job.request`` in fields outside the job id, such as ``view``.
+        """
+
+    def on_discovered(self, job: JobState, discovery: dict[str, Any]) -> None: ...
+
+    def on_finished(self, job: JobState) -> None: ...
+
+
+class JobManager:
+    """Thread-safe manager for job lifecycle, LRU snapshots, and pool workers."""
+
+    def __init__(self) -> None:
+        self.lock = threading.RLock()
+        self.jobs: OrderedDict[str, JobState] = OrderedDict()
+        self.pool = ThreadPoolExecutor(
+            max_workers=JOB_WORKERS, thread_name_prefix="planetx-jobs"
+        )
+        self.download_pool = ThreadPoolExecutor(
+            max_workers=MAX_DOWNLOAD_WORKERS, thread_name_prefix="cutout-dl"
+        )
+        self.observers: list[JobObserver] = []
+        self.snapshots = JobSnapshotRepository()
+
+    def add_observer(self, observer: JobObserver) -> None:
+        """Register an observer for job lifecycle events."""
+        self.observers.append(observer)
+
+    def remove_observer(self, observer: JobObserver) -> None:
+        """Unregister a previously added observer (no-op when absent)."""
+        if observer in self.observers:
+            self.observers.remove(observer)
+
+    def _notify(self, event: str, *args: Any) -> None:
+        """Deliver an event to every observer; failures never affect the job."""
+        for observer in list(self.observers):
+            try:
+                getattr(observer, event)(*args)
+            except Exception:
+                logger.exception("job observer %s failed on %s", observer, event)
+
+    def compute_job_id(self, req: JobRequest) -> str:
+        """Deterministic hash for deduplicating identical requests."""
+        channels_str = ",".join(str(c) for c in sorted(req.channels))
+        products_str = ",".join(sorted(set(req.products)))
+        token = (
+            f"{req.ra_deg:.5f}:{req.dec_deg:.5f}:{req.size_arcmin:.3f}:"
+            f"{channels_str}:{products_str}:{req.mode}:{req.stretch}"
+        )
+        return hashlib.sha256(token.encode("utf-8")).hexdigest()[:20]
+
+    def validate_request(self, req: JobRequest) -> None:
+        """Validate request against contract caps and physical constraints."""
+        if req.size_arcmin > MAX_REGION_SIZE_ARCMIN:
+            raise RegionRequestError(
+                f"Region size {req.size_arcmin} arcmin exceeds limit of "
+                f"{MAX_REGION_SIZE_ARCMIN} arcmin; "
+                "multi-product mosaicking is pending."
+            )
+        if req.size_arcmin < MIN_REGION_SIZE_ARCMIN:
+            raise RegionRequestError(
+                f"Region size {req.size_arcmin} arcmin must be at least "
+                f"{MIN_REGION_SIZE_ARCMIN} arcmin."
+            )
+        if not (1 <= len(req.channels) <= MAX_CHANNELS_PER_JOB):
+            raise RegionRequestError(
+                f"Requested channels count {len(req.channels)} must be between "
+                f"1 and {MAX_CHANNELS_PER_JOB}."
+            )
+        for index in req.channels:
+            try:
+                info = get_channel(index)
+            except ChannelOutOfRangeError:
+                raise RegionRequestError(
+                    f"Channel index {index} is out of range; the DR1 cube "
+                    "provides channels 0..101."
+                ) from None
+            if not info["available"]:
+                raise RegionRequestError(
+                    f"Channel {index} is blank in the DR1 All-Sky Cube "
+                    "(frames 50 and 51 carry no data)."
+                )
+        if not (-90.0 <= req.dec_deg <= 90.0):
+            raise RegionRequestError(
+                "Declination must be between -90 and +90 degrees."
+            )
+        if "image" not in req.products:
+            req.products.append("image")
+
+    def submit(self, req: JobRequest) -> JobState:
+        """Submit a job or retrieve an active/cached one, notifying observers.
+
+        Observers hear about the submission before a new job is scheduled, so
+        no lifecycle event can reach them ahead of ``on_submitted``.
+        """
+        job, is_new = self._submit(req)
+        self._notify("on_submitted", job, is_new, req)
+        if is_new:
+            self.pool.submit(self._run_job, job)
+        return job
+
+    def _submit(self, req: JobRequest) -> tuple[JobState, bool]:
+        """Find an active/cached job or register a new one (not yet scheduled)."""
+        self.validate_request(req)
+        job_id = self.compute_job_id(req)
+
+        with self.lock:
+            # Check in-memory LRU
+            if job_id in self.jobs:
+                job = self.jobs[job_id]
+                if job.status == "failed":
+                    # A failed attempt is not a cache entry: let the caller retry.
+                    del self.jobs[job_id]
+                else:
+                    logger.info(
+                        "job=%s request=%s cache=memory_hit", job_id, request_id_var.get()
+                    )
+                    self.jobs.move_to_end(job_id)
+                    return job, False
+
+            # Check disk snapshot cache
+            snap_data = self.snapshots.read(job_id)
+            if snap_data is not None and snap_data.get("status") == "ready":
+                job = self._rebuild_job_from_snapshot(snap_data, req)
+                if job.cutouts and len(job.cutout_objects) == len(job.cutouts):
+                    logger.info(
+                        "job=%s request=%s cache=disk_hit",
+                        job_id,
+                        request_id_var.get(),
+                    )
+                    job.cache_hit = True
+                    self._put_lru(job)
+                    return job, False
+
+            # Create new job
+            job = JobState(id=job_id, request=req, request_id=request_id_var.get())
+            self._put_lru(job)
+            logger.info(
+                "job=%s request=%s stage=queued channels=%s size_arcmin=%s",
+                job.id,
+                job.request_id,
+                req.channels,
+                req.size_arcmin,
+            )
+            return job, True
+
+    def _put_lru(self, job: JobState) -> None:
+        """Insert or refresh job in memory LRU cache."""
+        self.jobs[job.id] = job
+        self.jobs.move_to_end(job.id)
+        while len(self.jobs) > JOB_SNAPSHOT_LRU_SIZE:
+            self.jobs.popitem(last=False)
+
+    def get_job(self, job_id: str) -> JobState:
+        """Retrieve job from memory LRU or rebuild from disk cache; 404 if missing."""
+        with self.lock:
+            if job_id in self.jobs:
+                self.jobs.move_to_end(job_id)
+                return self.jobs[job_id]
+
+        snap_data = self.snapshots.read(job_id)
+        if snap_data is not None:
+            try:
+                req = JobRequest(**snap_data.get("request", {}))
+                job = self._rebuild_job_from_snapshot(snap_data, req)
+                if job.cutouts and len(job.cutout_objects) == len(job.cutouts):
+                    with self.lock:
+                        self._put_lru(job)
+                    return job
+                raise JobNotFoundError(
+                    f"Job {job_id} snapshot is stale: its derived cutout cache "
+                    "is incomplete. Submit the request again to rebuild it."
+                )
+            except JobNotFoundError:
+                raise
+            except Exception:
+                pass
+
+        raise JobNotFoundError(f"Unknown or expired job {job_id}")
+
+    def _rebuild_job_from_snapshot(
+        self,
+        snap: dict[str, Any],
+        req: JobRequest,
+    ) -> JobState:
+        """Reconstruct job state and re-link derived cutouts from the disk cache."""
+        job = JobState(
+            id=snap["id"],
+            request=req,
+            status=snap.get("status", "ready"),
+            progress=snap.get("progress", 100),
+            stage=snap.get("stage", "Ready"),
+            events=snap.get("events", []),
+            error=snap.get("error"),
+            frames=snap.get("frames", []),
+            cutouts=snap.get("cutouts", []),
+            cache_hit=True,
+        )
+
+        # Cutouts are reloaded from the derived cache using the persisted source
+        # URI. If an entry was evicted, the frame routes report it honestly
+        # instead of re-downloading from a guessed URL.
+        for c_meta in job.cutouts:
+            det = c_meta.get("detector")
+            epoch = c_meta.get("epoch")
+            if det is None or epoch is None:
+                continue
+            cutout = resolve_cutout(job, det, epoch)
+            if cutout is None:
+                continue
+            for p in ("image", "variance"):
+                job.percentiles[(det, epoch, p)] = compute_cutout_percentiles(
+                    getattr(cutout, p), is_variance=(p == "variance")
+                )
+
+        return job
+
+    def _save_snapshot_to_disk(self, job: JobState) -> None:
+        """Persist this job's snapshot through the snapshot repository."""
+        self.snapshots.write(job.id, job.to_snapshot())
+
+    def _fail(
+        self, job: JobState, kind: str, message: str, trace: str | None = None
+    ) -> None:
+        """Mark the job failed, keeping where (stage), why (kind) and how (trace)."""
+        job.failed_stage = job.status
+        job.error_kind = kind
+        job.error = message
+        job.error_trace = trace
+        job.status = "failed"
+        job.progress = 100
+        job.stage = "Failed"
+        job.events.append({"stage": job.stage, "at": time.time()})
+        logger.info(
+            "job=%s request=%s stage=Failed failed_stage=%s error_kind=%s",
+            job.id,
+            job.request_id,
+            job.failed_stage,
+            kind,
+        )
+        self._save_snapshot_to_disk(job)
+
+    def _record_discovery_attempt(self, job: JobState, attempt: dict[str, Any]) -> None:
+        """Append upstream retry details to the polled job trace."""
+        provider = str(attempt.get("provider") or "Discovery provider")
+        number = attempt.get("attempt", "?")
+        maximum = attempt.get("max_attempts", "?")
+        outcome = attempt.get("outcome", "unknown")
+        will_retry = bool(attempt.get("will_retry", False))
+
+        if outcome == "started":
+            stage = f"{provider} · Attempt {number} of {maximum} in progress"
+        elif outcome == "failed" and will_retry:
+            stage = f"{provider} · Attempt {number} of {maximum} failed; retrying"
+        elif outcome == "failed":
+            stage = f"{provider} · Attempt {number} of {maximum} failed"
+        else:
+            stage = f"{provider} · Attempt {number} of {maximum} succeeded"
+
+        event = {**attempt, "stage": stage, "at": time.time()}
+        job.stage = stage
+        job.events.append(event)
+        logger.info(
+            "job=%s request=%s provider=%s attempt=%s/%s outcome=%s will_retry=%s detail=%s",
+            job.id,
+            job.request_id,
+            provider,
+            number,
+            maximum,
+            outcome,
+            will_retry,
+            attempt.get("detail", ""),
+        )
+        self._save_snapshot_to_disk(job)
+
+    def _run_job(self, job: JobState) -> None:
+        """Complete workflow for a queued job: discover, download, extract, render."""
+        try:
+            req = job.request
+            ra, dec, size = req.ra_deg, req.dec_deg, req.size_arcmin
+
+            # Stage 1: Discovering
+            job.status = "discovering"
+            job.progress = 10
+            job.stage = "Discovering products"
+            job.events.append({"stage": job.stage, "at": time.time()})
+            logger.info("job=%s stage=%s progress=%s", job.id, job.stage, job.progress)
+
+            discovery = resolve_region(
+                ra,
+                dec,
+                size,
+                on_attempt=lambda attempt: self._record_discovery_attempt(job, attempt),
+            )
+            self._notify("on_discovered", job, discovery)
+            if discovery["coverage"] == "none":
+                self._fail(
+                    job, "no_coverage", "No SPHEREx coverage found for this region."
+                )
+                return
+            if discovery["coverage"] == "unknown":
+                self._fail(
+                    job,
+                    "discovery_unavailable",
+                    "Coverage could not be determined: IRSA TAP discovery failed. "
+                    "Retry the request. "
+                    f"Discovery error: {discovery.get('warning') or 'unknown'}",
+                )
+                return
+
+            # Group discovered products by detector
+            prods_by_det: dict[int, list[dict[str, Any]]] = {}
+            for p in discovery["products"]:
+                prods_by_det.setdefault(p["detector"], []).append(p)
+
+            # Determine detectors required by requested channels
+            needed_dets = sorted(set((c // 17) + 1 for c in req.channels))
+
+            # Select products per detector based on mode (latest vs history)
+            selected_targets: list[tuple[dict[str, Any], int]] = []
+            for det in needed_dets:
+                prods = prods_by_det.get(det, [])
+                if not prods:
+                    continue
+
+                if req.mode == "latest":
+                    # Use the newest available remote product.
+                    sorted_prods = sorted(prods, key=lambda x: x["date_mjd"])
+                    selected_targets.append((sorted_prods[-1], 0))
+                else:
+                    # History mode: up to 2 distinct epochs (first and last date)
+                    sorted_prods = sorted(prods, key=lambda x: x["date_mjd"])
+                    if len(sorted_prods) == 1:
+                        selected_targets.append((sorted_prods[0], 0))
+                    else:
+                        selected_targets.append((sorted_prods[0], 0))
+                        selected_targets.append((sorted_prods[-1], 1))
+
+            if not selected_targets:
+                self._fail(
+                    job,
+                    "no_detector_coverage",
+                    f"None of the requested channels {req.channels} have "
+                    "available detector coverage.",
+                )
+                return
+
+            # Enforce max cutout downloads cap
+            if len(selected_targets) > MAX_CUTOUT_DOWNLOADS_PER_JOB:
+                selected_targets = selected_targets[:MAX_CUTOUT_DOWNLOADS_PER_JOB]
+
+            # Stage 2: Downloading
+            job.status = "downloading"
+            remote_downloads = [
+                prod for prod, _ in selected_targets if prod.get("source") == "remote"
+            ]
+            total_dl = len(remote_downloads)
+
+            if total_dl > 0:
+                job.progress = 20
+                job.stage = f"Downloading DR1 cutouts 0/{total_dl}"
+                job.events.append({"stage": job.stage, "at": time.time()})
+                logger.info(
+                    "job=%s stage=%s progress=%s", job.id, job.stage, job.progress
+                )
+
+                dl_futures = [
+                    self.download_pool.submit(download_cutout, p["uri"])
+                    for p in remote_downloads
+                ]
+                for done_count, fut in enumerate(dl_futures, 1):
+                    fut.result()
+                    job.progress = 20 + int(40 * (done_count / total_dl))
+                    job.stage = f"Downloading DR1 cutouts {done_count}/{total_dl}"
+                    job.events.append({"stage": job.stage, "at": time.time()})
+                    logger.info(
+                        "job=%s stage=%s progress=%s", job.id, job.stage, job.progress
+                    )
+
+            # Stage 3: Extracting
+            job.status = "extracting"
+            job.progress = 65
+            job.stage = "Extracting LVF map"
+            job.events.append({"stage": job.stage, "at": time.time()})
+            logger.info("job=%s stage=%s progress=%s", job.id, job.stage, job.progress)
+
+            loaded_cutouts: dict[tuple[int, int], DerivedCutout] = {}
+            for prod, epoch in selected_targets:
+                cutout = get_or_extract_derived(prod, ra, dec, epoch=epoch)
+                det = cutout.detector
+                loaded_cutouts[(det, epoch)] = cutout
+
+            job.cutout_objects = loaded_cutouts
+
+            # Stage 4: Rendering & assembling frames/cutouts
+            job.status = "rendering"
+            job.progress = 85
+            job.stage = "Rendering frames"
+            job.events.append({"stage": job.stage, "at": time.time()})
+            logger.info("job=%s stage=%s progress=%s", job.id, job.stage, job.progress)
+
+            # Precalculate percentiles per cutout
+            cutouts_meta_list: list[dict[str, Any]] = []
+            for (det, epoch), cutout in loaded_cutouts.items():
+                p_lo, p_hi = compute_cutout_percentiles(cutout.image, is_variance=False)
+                job.percentiles[(det, epoch, "image")] = (p_lo, p_hi)
+                v_lo, v_hi = compute_cutout_percentiles(cutout.variance, is_variance=True)
+                job.percentiles[(det, epoch, "variance")] = (v_lo, v_hi)
+
+                w_finite = cutout.wavelength[np.isfinite(cutout.wavelength)]
+                b_finite = cutout.bandwidth[np.isfinite(cutout.bandwidth)]
+
+                cutouts_meta_list.append(
+                    {
+                        "detector": det,
+                        "epoch": epoch,
+                        "obs_id": cutout.obs_id,
+                        "date_iso": cutout.date_iso,
+                        "source": cutout.source,
+                        "uri": cutout.uri,
+                        "version": cutout.metadata.get("version", ""),
+                        "shape": [int(cutout.image.shape[0]), int(cutout.image.shape[1])],
+                        "pixel_scale_arcsec": cutout.metadata.get(
+                            "pixel_scale_arcsec", 6.13
+                        ),
+                        "wavelength_min_um": round(
+                            float(np.min(w_finite)) if w_finite.size else 0.0, 4
+                        ),
+                        "wavelength_max_um": round(
+                            float(np.max(w_finite)) if w_finite.size else 0.0, 4
+                        ),
+                        "bandwidth_median_um": round(
+                            float(np.median(b_finite)) if b_finite.size else 0.0, 4
+                        ),
+                        "image_unit": cutout.metadata.get("units", {}).get(
+                            "image", "MJy / sr"
+                        ),
+                        "variance_unit": cutout.metadata.get("units", {}).get(
+                            "variance", "MJy2 / sr2"
+                        ),
+                        "flags_defined": bool(cutout.metadata.get("flag_bits")),
+                        "flag_bits": cutout.metadata.get("flag_bits", []),
+                    }
+                )
+
+            # Build frames list
+            frames_list: list[dict[str, Any]] = []
+            for c in req.channels:
+                det = (c // 17) + 1
+                try:
+                    get_channel(c)
+                except Exception:
+                    continue
+                win_min, win_max = get_channel_window(c)
+
+                # For each epoch available for this detector
+                for epoch in (0, 1):
+                    if (det, epoch) not in loaded_cutouts:
+                        continue
+                    cutout = loaded_cutouts[(det, epoch)]
+                    h, w = cutout.image.shape
+
+                    for p in sorted(set(req.products)):
+                        base_url = f"/api/jobs/{job.id}/frames/{c}"
+                        f_url = f"{base_url}/{p}.png?mode=full&epoch={epoch}"
+                        s_url = f"{base_url}/{p}.png?mode=slice&epoch={epoch}"
+                        w_url = f"{base_url}/wavelengths.npy?epoch={epoch}"
+                        frames_list.append(
+                            {
+                                "channel": c,
+                                "product": p,
+                                "detector": det,
+                                "epoch": epoch,
+                                "obs_id": cutout.obs_id,
+                                "date_iso": cutout.date_iso,
+                                "source": cutout.source,
+                                "width": int(w),
+                                "height": int(h),
+                                "url": f_url,
+                                "slice_url": s_url,
+                                "wavelengths_url": w_url,
+                                "window_um": [win_min, win_max],
+                            }
+                        )
+
+            job.cutouts = cutouts_meta_list
+            job.frames = frames_list
+            job.status = "ready"
+            job.progress = 100
+            job.stage = "Ready"
+            job.events.append({"stage": job.stage, "at": time.time()})
+            logger.info("job=%s stage=%s progress=%s", job.id, job.stage, job.progress)
+
+            self._save_snapshot_to_disk(job)
+
+        except Exception as exc:
+            logger.exception(
+                "Error processing job %s (request=%s, stage=%s): %s",
+                job.id,
+                job.request_id,
+                job.status,
+                exc,
+            )
+            self._fail(
+                job,
+                UNEXPECTED_ERROR_KINDS.get(job.status, "unexpected"),
+                f"{type(exc).__name__}: {exc}",
+                trace=_trimmed_traceback(),
+            )
+        finally:
+            self._notify("on_finished", job)
+
+
+job_manager = JobManager()
+
+
+def resolve_cutout(job: JobState, detector: int, epoch: int) -> DerivedCutout | None:
+    """Return a job cutout from memory or the derived disk cache (never network)."""
+    cutout = job.cutout_objects.get((detector, epoch))
+    if cutout is not None:
+        return cutout
+
+    meta = next(
+        (
+            c
+            for c in job.cutouts
+            if c.get("detector") == detector and c.get("epoch") == epoch
+        ),
+        None,
+    )
+    if meta is None or not meta.get("uri"):
+        return None
+
+    cutout = load_derived_cutout(meta["uri"], detector, epoch)
+    if cutout is None:
+        return None
+
+    with job_manager.lock:
+        job.cutout_objects[(detector, epoch)] = cutout
+    return cutout

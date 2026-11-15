@@ -12,7 +12,7 @@ spec = importlib.util.spec_from_file_location("warm_catalog", SCRIPT)
 warm_catalog = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(warm_catalog)
 
-OBJECTS = [{"id": "local-dr1-sample"}, {"id": "m101-field"}, {"id": "m81"}]
+OBJECTS = [{"id": "m101-field"}, {"id": "m81"}]
 
 
 def test_no_ids_selects_every_object():
@@ -20,9 +20,9 @@ def test_no_ids_selects_every_object():
 
 
 def test_known_ids_select_in_catalog_order():
-    assert warm_catalog.select_objects(OBJECTS, " m81 , local-dr1-sample") == [
+    assert warm_catalog.select_objects(OBJECTS, " m81 , m101-field") == [
         OBJECTS[0],
-        OBJECTS[2],
+        OBJECTS[1],
     ]
 
 
@@ -41,5 +41,5 @@ def test_unknown_id_is_refused_instead_of_warming_nothing():
         warm_catalog.select_objects(OBJECTS, "m81,nope")
     assert str(exc.value) == (
         "Unknown catalog object id(s): nope. "
-        "Valid ids: local-dr1-sample, m101-field, m81."
+        "Valid ids: m101-field, m81."
     )

@@ -7,7 +7,7 @@ import io
 import numpy as np
 from PIL import Image
 
-from app.render import (
+from app.services.rendering import (
     compute_cutout_percentiles,
     render_flags,
     render_frame_product,

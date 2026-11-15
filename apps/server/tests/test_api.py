@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import time
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
+from app.services.channels import get_channel_catalog
 
 SAMPLE = {"ra_deg": 270.693033497, "dec_deg": 61.876515912, "size_arcmin": 4.0}
 
@@ -17,8 +19,8 @@ SAMPLE = {"ra_deg": 270.693033497, "dec_deg": 61.876515912, "size_arcmin": 4.0}
 def mock_external_network():
     """Guarantee that tests never call IRSA TAP or download cutouts over network."""
     with (
-        patch("app.discovery.query_irsa_tap", return_value=([], None)),
-        patch("app.fits_assets.download_cutout", side_effect=RuntimeError("No network")),
+        patch("app.services.discovery.query_irsa_tap", return_value=([], None)),
+        patch("app.services.fits.download_cutout", side_effect=RuntimeError("No network")),
     ):
         yield
 
@@ -37,7 +39,10 @@ def wait_until_ready(client: TestClient, job_id: str, timeout: float = 10.0) -> 
 
 def test_channels_endpoint():
     client = TestClient(app)
-    resp = client.get("/api/channels")
+    properties = Path(__file__).parent / "fixtures" / "hips-properties.txt"
+    catalog = get_channel_catalog(override_text=properties.read_text(encoding="utf-8"))
+    with patch("app.api.routes.channels.get_channel_catalog", return_value=catalog):
+        resp = client.get("/api/channels")
     assert resp.status_code == 200
     data = resp.json()
     assert data["source"]["depth"] == 102
@@ -51,9 +56,8 @@ def test_catalog_endpoint():
     resp = client.get("/api/catalog")
     assert resp.status_code == 200
     objects = resp.json()["objects"]
-    assert len(objects) >= 8
+    assert len(objects) == 8
     obj_ids = [o["id"] for o in objects]
-    assert "local-dr1-sample" in obj_ids
     by_id = {o["id"]: o for o in objects}
     # The notebook demo field at (210.80227, 54.34895) is M101, not M81.
     assert "m81-field" not in by_id
@@ -99,7 +103,7 @@ def test_discovery_failure_is_reported_as_unknown_not_missing():
         "detectors": [],
         "notes": [],
     }
-    with patch("app.jobs.resolve_region", return_value=unknown):
+    with patch("app.services.jobs.resolve_region", return_value=unknown):
         job_id = client.post("/api/jobs", json=payload).json()["id"]
         snapshot = wait_until_ready(client, job_id)
 
@@ -109,10 +113,12 @@ def test_discovery_failure_is_reported_as_unknown_not_missing():
 
 
 def test_trace_and_expanded_region_contract():
-    from app.models import JobRequest
+    from app.schemas.jobs import JobRequest
 
     client = TestClient(app)
-    assert client.get("/api/health").headers["x-request-id"]
+    health = client.get("/api/health")
+    assert health.headers["x-request-id"]
+    assert "local_assets" not in health.json()
     assert JobRequest(**{**SAMPLE, "size_arcmin": 60}).size_arcmin == 60
     assert client.post("/api/jobs", json={**SAMPLE, "size_arcmin": 61}).status_code == 422
 
@@ -141,8 +147,8 @@ def test_api_error_paths():
 
 
 def test_failed_job_is_replaced_and_rerun_on_resubmit():
-    from app.jobs import JobState, job_manager
-    from app.models import JobRequest
+    from app.services.jobs import JobState, job_manager
+    from app.schemas.jobs import JobRequest
 
     req = JobRequest(**NO_COVERAGE, channels=[20], products=["image"])
     job_id = job_manager.compute_job_id(req)
@@ -186,7 +192,7 @@ def test_discovery_outage_is_classified_as_unavailable():
         "products": [],
     }
     client = TestClient(app)
-    with patch("app.jobs.resolve_region", return_value=discovery):
+    with patch("app.services.jobs.resolve_region", return_value=discovery):
         _, snap = _submit_and_wait(
             client, {**NO_COVERAGE, "ra_deg": 12.25, "channels": [44]}
         )
@@ -227,7 +233,7 @@ def test_discovery_attempt_trace_is_returned_in_job_snapshot():
         }
 
     client = TestClient(app)
-    with patch("app.jobs.resolve_region", side_effect=unavailable_with_attempts):
+    with patch("app.services.jobs.resolve_region", side_effect=unavailable_with_attempts):
         _, snap = _submit_and_wait(
             client, {**NO_COVERAGE, "ra_deg": 12.75, "channels": [44]}
         )
@@ -258,8 +264,8 @@ def test_unexpected_error_keeps_stage_kind_and_traceback():
     }
     client = TestClient(app)
     with (
-        patch("app.jobs.resolve_region", return_value=discovery),
-        patch("app.jobs.download_cutout", side_effect=RuntimeError("No network")),
+        patch("app.services.jobs.resolve_region", return_value=discovery),
+        patch("app.services.jobs.download_cutout", side_effect=RuntimeError("No network")),
     ):
         _, snap = _submit_and_wait(
             client, {**NO_COVERAGE, "ra_deg": 13.25, "channels": [44]}
@@ -301,7 +307,7 @@ def _discovery_with(detector: int, source: str) -> dict:
 def test_channels_without_detector_coverage_are_classified():
     # Channel 44 needs detector 3; discovery only found detector 1.
     client = TestClient(app)
-    with patch("app.jobs.resolve_region", return_value=_discovery_with(1, "remote")):
+    with patch("app.services.jobs.resolve_region", return_value=_discovery_with(1, "remote")):
         _, snap = _submit_and_wait(
             client, {**NO_COVERAGE, "ra_deg": 15.25, "channels": [44]}
         )
@@ -312,7 +318,7 @@ def test_channels_without_detector_coverage_are_classified():
 
 def test_crash_during_discovery_falls_back_to_unexpected():
     client = TestClient(app)
-    with patch("app.jobs.resolve_region", side_effect=RuntimeError("TAP crashed")):
+    with patch("app.services.jobs.resolve_region", side_effect=RuntimeError("TAP crashed")):
         _, snap = _submit_and_wait(
             client, {**NO_COVERAGE, "ra_deg": 16.25, "channels": [44]}
         )
@@ -324,8 +330,8 @@ def test_crash_during_discovery_falls_back_to_unexpected():
 def test_extraction_crash_is_classified():
     client = TestClient(app)
     with (
-        patch("app.jobs.resolve_region", return_value=_discovery_with(3, "local")),
-        patch("app.jobs.get_or_extract_derived", side_effect=ValueError("bad WCS")),
+        patch("app.services.jobs.resolve_region", return_value=_discovery_with(3, "remote")),
+        patch("app.services.jobs.get_or_extract_derived", side_effect=ValueError("bad WCS")),
     ):
         _, snap = _submit_and_wait(
             client, {**NO_COVERAGE, "ra_deg": 17.25, "channels": [44]}
@@ -339,10 +345,10 @@ def test_render_crash_is_classified():
     cutout = MagicMock(detector=3)
     client = TestClient(app)
     with (
-        patch("app.jobs.resolve_region", return_value=_discovery_with(3, "local")),
-        patch("app.jobs.get_or_extract_derived", return_value=cutout),
+        patch("app.services.jobs.resolve_region", return_value=_discovery_with(3, "remote")),
+        patch("app.services.jobs.get_or_extract_derived", return_value=cutout),
         patch(
-            "app.jobs.compute_cutout_percentiles", side_effect=RuntimeError("no pixels")
+            "app.services.jobs.compute_cutout_percentiles", side_effect=RuntimeError("no pixels")
         ),
     ):
         _, snap = _submit_and_wait(
@@ -357,8 +363,8 @@ def test_render_crash_is_classified():
 
 
 def test_view_does_not_change_the_job_id():
-    from app.jobs import job_manager
-    from app.models import JobRequest
+    from app.services.jobs import job_manager
+    from app.schemas.jobs import JobRequest
 
     base = {"ra_deg": 10.0, "dec_deg": 5.0, "size_arcmin": 6.0, "channels": [44]}
     single = {"mode": "single"}

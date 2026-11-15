@@ -13,7 +13,7 @@ uv run uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 
 Every job submission is saved as a selection record in PostgreSQL (SQLAlchemy + Alembic). Storage is optional: when `DATABASE_URL` is unset or invalid, jobs still work and `/api/selections` answers 503. A driverless `postgresql://` URL is accepted and uses psycopg 3. Saving runs inside `POST /api/jobs`, so an unreachable database can delay a submission by up to 3 seconds (connect timeout).
 
-1. Create the two environment files from their templates. The root `.env` configures the container (`DB_PORT`, 5433 by default so it does not clash with a system PostgreSQL, plus `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`). `apps/server/.env` configures the backend (`DATABASE_URL`, optional `SPHEREX_SPECTRAL_FITS`); keep its credentials and port in sync with the root file:
+1. Create the two environment files from their templates. The root `.env` configures the container (`DB_PORT`, 5433 by default so it does not clash with a system PostgreSQL, plus `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`). `apps/server/.env` configures the backend (`DATABASE_URL`, `CORS_ORIGINS`, and optional assistant settings); keep its credentials and port in sync with the root file:
 
    ```bash
    # from the repository root
@@ -28,20 +28,19 @@ Every job submission is saved as a selection record in PostgreSQL (SQLAlchemy + 
    ```
 
    Using a native PostgreSQL instead: `createuser -P iris && createdb -O iris iris`, then point `DATABASE_URL` at its port.
-3. Export the backend variables and apply the migrations. The server does not load `.env` by itself, so source it in every shell that runs it:
+3. Apply the migrations. Pydantic Settings loads `apps/server/.env` when commands run from `apps/server`; process environment variables take precedence over values in the file:
 
    ```bash
    cd apps/server
-   set -a && source .env && set +a
    uv run alembic upgrade head
    ```
 
-4. Start the server in the same shell (it reads `DATABASE_URL`).
+4. Start the server from `apps/server`; it reads the same `.env` settings automatically.
 
 The project uses a single database. Selection tests use `DATABASE_URL` but never touch its data: each run creates a throwaway schema (`test_<random>`), applies the migrations there and drops it at the end. Without `DATABASE_URL` those tests are skipped.
 
 ```bash
-uv run pytest -q   # in apps/server, with .env sourced
+uv run pytest -q   # in apps/server
 ```
 
 ### View mode
@@ -71,20 +70,14 @@ docker compose exec db psql -U iris -P pager=off -c \
   "select job_id, failed_stage, error_kind, job_error from selection where job_status = 'failed';"
 ```
 
-After changing the models in `app/selections/orm.py`, create a migration with `uv run alembic revision --autogenerate -m "<message>"` and review it before committing.
-
-To run with a custom local spectral asset:
-
-```bash
-SPHEREX_SPECTRAL_FITS=/path/to/level2.fits uv run uvicorn app.main:app --reload
-```
+After changing the ORM models in `app/models/selection.py`, create a migration with `uv run alembic revision --autogenerate -m "<message>"` and review it before committing.
 
 ## Contextual assistant
 
 A chat assistant (bubble in the bottom-right corner of the web app) that works with any model you choose behind an OpenAI-compatible Chat Completions API, through the official OpenAI SDK. Set `ASSISTANT_API_KEY` and `ASSISTANT_MODEL` in `.env`, plus `ASSISTANT_BASE_URL` for providers other than OpenAI (OpenRouter, Groq, Together, Ollama, vLLM, LM Studio…). The model must support tool calling. There is no default model; until both values are set the assistant endpoints answer `503` and nothing else changes. Limits are configurable (`ASSISTANT_*`, see `.env.example`). Restart the server after changing them.
 
 | Endpoint | Purpose |
-|----------|---------|
+| ---------- | --------- |
 | `POST /api/assistant/chat` | One user turn: `{conversation_id, messages, context}` → `{reply, actions, cached, cache_kind, request_id}`. |
 | `GET /api/assistant/logs?limit=&conversation_id=` | Logged events, newest first. |
 | `POST /api/assistant/events` | The browser reports whether it executed or rejected an action. |
@@ -104,7 +97,7 @@ How it works (`app/assistant/`):
 
 All endpoints are mounted under `/api`:
 
-- `GET /api/health`: Health status, supported products, and local asset availability.
+- `GET /api/health`: Health status and supported products.
 - `GET /api/channels`: Authoritative 102-channel catalog derived from the official SPHEREx DR1 All-Sky Cube HiPS `properties`. Blank frames 50 and 51 are explicitly marked `available: false`.
 - `GET /api/catalog`: Curated astronomical demo objects with `precomputed` cache indicators.
 - `GET /api/spectrum?ra=&dec=`: Quick-look 102-channel spectrum (MJy/sr) at one ICRS position, sampled from the DR1 All-Sky Cube `fits-cube` HiPS tile (order 5) that contains it. The ~320 MB tile is never downloaded: the backend walks its FITS headers and reads the pixel's `IMAGE`, `NHITS` and `FLAGS` values with HTTP multipart byte-range requests. Channels without coverage return `value: null`, `available: false`. The payload is labelled `quick_look: true`, `calibrated: false`: it is a mosaic pixel profile, not forced photometry of a source. Tile layouts and spectra are cached under `data/cache/cube/` for 7 days; each pixel read also checks the tile size against the cached layout and rebuilds it if IRSA republished the tile. Returns 404 when no tile covers the position and 502 when IRSA fails, ignores range requests, answers with more than 1 MiB for a range read, or serves a tile that cannot be parsed.
@@ -135,7 +128,6 @@ All caching is stored under `apps/server/data/`:
 
 ```console
 data/
-├── level2_*.fits                       # Read-only local FITS asset
 └── cache/
     ├── hips-properties.json            # 7-day cached HiPS cube properties
     ├── discovery/<sha1>.json           # 6-hour cached IRSA TAP discovery results
@@ -151,7 +143,7 @@ data/
 To precompute and warm the derived cache for curated catalog objects without running the HTTP server:
 
 ```bash
-uv run python scripts/warm_catalog.py --objects local-dr1-sample,m81-field --channels 20,44 --mode latest
+uv run python scripts/warm_catalog.py --objects m101-field,m81 --channels 20,44 --mode latest
 ```
 
 Options:

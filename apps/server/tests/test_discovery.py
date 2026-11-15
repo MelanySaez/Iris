@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app import discovery
+from app.services import discovery
 
 
 def test_tap_query_reports_each_retry(monkeypatch):
@@ -58,7 +58,6 @@ def test_resolve_region_forwards_discovery_attempts(monkeypatch, tmp_path):
         return [], "IRSA TAP returned HTTP 502"
 
     monkeypatch.setattr(discovery, "DISCOVERY_CACHE_DIR", tmp_path)
-    monkeypatch.setattr(discovery, "check_local_footprint", lambda *args: False)
     monkeypatch.setattr(discovery, "query_irsa_tap", fail_query)
     attempts = []
 

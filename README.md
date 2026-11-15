@@ -23,7 +23,7 @@ local settings, so a local change touches only that service. Copy them once
 | Template | Used by | Declares |
 |----------|---------|----------|
 | `.env.example` | `docker compose` / `podman compose` | `DB_PORT` (5433), `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` |
-| `apps/server/.env.example` | backend, migrations, tests | `DATABASE_URL`, optional `SPHEREX_SPECTRAL_FITS` |
+| `apps/server/.env.example` | backend, migrations, tests | `DATABASE_URL`, `CORS_ORIGINS`, assistant settings |
 | `apps/web/.env.example` | Vite | `NODE_ENV` |
 
 ```bash
@@ -43,13 +43,12 @@ Selection records need PostgreSQL. Start it and apply the migrations once
 ```bash
 docker compose up -d --wait db   # or: podman compose up -d --wait db
 cd apps/server
-set -a && source .env && set +a  # export DATABASE_URL
 uv run alembic upgrade head
 ```
 
 ### Run
 
-In one terminal, start the backend (in a shell where `apps/server/.env` was sourced):
+In one terminal, start the backend from `apps/server`:
 
 ```bash
 cd apps/server
