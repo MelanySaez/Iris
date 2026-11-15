@@ -43,7 +43,7 @@ export function RgbControls({
 
   return (
     <>
-      <div className="dock-mode-switch" role="group" aria-label="Sky colour mode">
+      <div className="dock-mode-switch" role="group" aria-label="Sky colour mode" data-assistant-target="color-mode">
         <button
           type="button"
           className={`dock-mode-btn ${rgbMode ? '' : 'active'}`}

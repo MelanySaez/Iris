@@ -106,3 +106,30 @@ export function describeAssistantAction(action: AssistantAction): string {
       return action.mode === 'rgb' ? `RGB composite ${action.rgb.join('/')}` : 'Single channel';
   }
 }
+
+/**
+ * Where the visual guide points for an action: a control it changes ("field")
+ * or the map position it moves to ("position", the centre of the map, since
+ * the move centres the map there). ``target`` is a CSS selector.
+ */
+export interface GuideCue {
+  kind: 'field' | 'position';
+  target: string;
+  label: string;
+}
+
+const guideTarget = (name: string) => `[data-assistant-target="${name}"]`;
+
+export function guideCueFor(action: AssistantAction): GuideCue {
+  const label = describeAssistantAction(action);
+  switch (action.type) {
+    case 'navigate':
+      return { kind: 'field', target: guideTarget(`workspace-${action.workspace}`), label };
+    case 'show_region':
+      return { kind: 'position', target: guideTarget('map'), label };
+    case 'set_channel':
+      return { kind: 'field', target: guideTarget('channel'), label };
+    case 'set_color_mode':
+      return { kind: 'field', target: guideTarget('color-mode'), label };
+  }
+}

@@ -91,5 +91,8 @@ describe('Sky workspace sidebar', () => {
     for (const anchor of ['search', 'map', 'channels', 'region-tool']) {
       expect(document.querySelectorAll(`[data-tour="${anchor}"]`)).toHaveLength(1);
     }
+    for (const target of ['map', 'channel', 'color-mode']) {
+      expect(document.querySelectorAll(`[data-assistant-target="${target}"]`)).toHaveLength(1);
+    }
   });
 });
