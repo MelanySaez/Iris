@@ -329,3 +329,16 @@ export interface SelectionListResponse {
   items: SelectionSummary[];
   next_before: string | null;
 }
+
+/** Answer of GET /api/resolve: where a named object or catalogue code is. */
+export interface ResolvedName {
+  query: string;
+  name: string;
+  ra_deg: number;
+  dec_deg: number;
+  object_type: string | null;
+  /** Major axis in arcmin from SIMBAD; null for point sources. */
+  size_arcmin?: number | null;
+  source: 'simbad' | 'ned' | 'designation';
+  cached: boolean;
+}
