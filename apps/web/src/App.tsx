@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, ApiError } from './api';
 import { TopBar } from './components/TopBar';
+import { WorkspaceErrorBoundary } from './components/WorkspaceErrorBoundary';
 import { PlateWorkspace } from './components/plate/PlateWorkspace';
 import { RecordsWorkspace } from './components/records/RecordsWorkspace';
 import {
@@ -244,16 +245,18 @@ export function App() {
           className={`workspace-layer sky-layer ${isSky ? 'layer-active' : 'layer-hidden'}`}
           aria-hidden={!isSky}
         >
-          <SkyWorkspace
-            activeJob={activeJob}
-            onStartJob={handleStartJob}
-            onOpenPlate={handleOpenPlate}
-            onViewSpectrum={handleViewSpectrum}
-            restoreRequest={restoreRequest}
-            assistantCommands={assistantCommands}
-            onStateChange={handleSkyState}
-            onRetryJob={handleRetryJob}
-          />
+          <WorkspaceErrorBoundary workspace="Sky">
+            <SkyWorkspace
+              activeJob={activeJob}
+              onStartJob={handleStartJob}
+              onOpenPlate={handleOpenPlate}
+              onViewSpectrum={handleViewSpectrum}
+              restoreRequest={restoreRequest}
+              assistantCommands={assistantCommands}
+              onStateChange={handleSkyState}
+              onRetryJob={handleRetryJob}
+            />
+          </WorkspaceErrorBoundary>
         </div>
 
         {/* Spectral Lab - kept mounted so the comparison survives navigation */}
@@ -261,18 +264,22 @@ export function App() {
           className={`workspace-layer spectral-layer ${isSpectral ? 'layer-active' : 'layer-hidden'}`}
           aria-hidden={!isSpectral}
         >
-          <SpectralLab request={spectrumRequest} />
+          <WorkspaceErrorBoundary workspace="Spectral Lab">
+            <SpectralLab request={spectrumRequest} />
+          </WorkspaceErrorBoundary>
         </div>
 
         {isRecords && (
           <div className="workspace-layer records-layer layer-active" aria-hidden={false}>
-            <RecordsWorkspace
-              key={consent.recordsVersion}
-              onOpenPlate={handleOpenPlate}
-              onShowInSky={handleShowInSky}
-              recordsEnabled={consent.recordsEnabled}
-              onOpenCookieSettings={consent.openBar}
-            />
+            <WorkspaceErrorBoundary workspace="Records">
+              <RecordsWorkspace
+                key={consent.recordsVersion}
+                onOpenPlate={handleOpenPlate}
+                onShowInSky={handleShowInSky}
+                recordsEnabled={consent.recordsEnabled}
+                onOpenCookieSettings={consent.openBar}
+              />
+            </WorkspaceErrorBoundary>
           </div>
         )}
 
@@ -280,14 +287,16 @@ export function App() {
         {isPlate && (
           <div className="workspace-layer plate-layer layer-active" aria-hidden={false}>
             {activeJob ? (
-              <PlateWorkspace
-                job={activeJob}
-                pollError={pollError}
-                pollRetry={pollRetry}
-                onRetryPoll={retryPoll}
-                onBackToSky={() => navigate('#/sky')}
-                onRequestNewJob={handleStartJob}
-              />
+              <WorkspaceErrorBoundary workspace="Plate">
+                <PlateWorkspace
+                  job={activeJob}
+                  pollError={pollError}
+                  pollRetry={pollRetry}
+                  onRetryPoll={retryPoll}
+                  onBackToSky={() => navigate('#/sky')}
+                  onRequestNewJob={handleStartJob}
+                />
+              </WorkspaceErrorBoundary>
             ) : pollError ? (<div className="plate-loading-page" role="alert"><h2>Could not load the spectral job</h2><p>{pollError}</p><button type="button" onClick={retryPoll}>Try again</button></div>) : (
               <div className="plate-loading-page" role="status">
                 <div className="plate-paper-skeleton">

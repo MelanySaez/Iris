@@ -183,6 +183,25 @@ describe('interpolateMissingFlux', () => {
     expect(values[3]).toBeCloseTo(110 / 3);
     expect(values.slice(4)).toEqual([50, null, null, null, 90]);
   });
+
+  it('does not bridge a gap whose neighbours are on different detectors', () => {
+    // Channels 49 (D3) and 52 (D4) straddle the blank channels 50-51.
+    const raw = [
+      point(48, 2.40, 10), point(49, 2.42, 12),
+      { ...point(50, 2.44, null), available: false }, { ...point(51, 2.46, null), available: false },
+      point(52, 2.48, 40), point(53, 2.50, 42),
+    ];
+    const result = interpolateMissingFlux(raw);
+    expect(result.map((p) => p.value)).toEqual([10, 12, null, null, 40, 42]);
+    expect(result.some((p) => p.interpolated)).toBe(false);
+  });
+
+  it('leaves every gap empty when maxGap is 0', () => {
+    const raw = [point(0, 1, 10), { ...point(1, 2, null), available: true }, point(2, 3, 30)];
+    const result = interpolateMissingFlux(raw, 0);
+    expect(result[1].value).toBeNull();
+    expect(result[1].interpolated).toBe(false);
+  });
 });
 
 describe('nearestChannel', () => {
