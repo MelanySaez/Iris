@@ -1,4 +1,8 @@
+import { useLayoutEffect, useRef } from 'react';
 import type { ConsentLevel } from '../../consent';
+
+/** CSS variable other fixed bottom elements (the chat button) offset themselves by. */
+const HEIGHT_VARIABLE = '--consent-bar-height';
 
 interface ConsentBarProps {
   onChoose: (level: ConsentLevel) => void;
@@ -8,8 +12,26 @@ interface ConsentBarProps {
 
 /** Footer bar asking for cookie consent; Records are saved only after accepting. */
 export function ConsentBar({ onChoose, saving, error }: ConsentBarProps) {
+  const barRef = useRef<HTMLElement>(null);
+
+  // Publish the bar height so the chat button moves above it; clearing it on
+  // close lets the button slide back to its place (see .assistant-launcher).
+  useLayoutEffect(() => {
+    const bar = barRef.current;
+    if (!bar) return undefined;
+    const root = document.documentElement;
+    const publish = () => root.style.setProperty(HEIGHT_VARIABLE, `${bar.offsetHeight}px`);
+    publish();
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(publish);
+    observer?.observe(bar);
+    return () => {
+      observer?.disconnect();
+      root.style.removeProperty(HEIGHT_VARIABLE);
+    };
+  }, []);
+
   return (
-    <section className="consent-bar" role="region" aria-label="Cookie consent">
+    <section ref={barRef} className="consent-bar" role="region" aria-label="Cookie consent">
       <p className="consent-bar-text">
         Iris has no accounts, so it uses a cookie to keep your saved selections in this browser. The
         necessary cookies are enough to save them; without cookies your selections (Records) cannot be
