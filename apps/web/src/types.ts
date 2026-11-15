@@ -318,6 +318,8 @@ export interface SelectionSummary {
   /** View recorded by the backend at the latest submission that sent one. */
   view_mode: 'single' | 'rgb' | null;
   rgb_channels: number[] | null;
+  /** User label shown in Records; null when unnamed. */
+  name: string | null;
   hits: number;
   created_at: string;
   last_seen_at: string;

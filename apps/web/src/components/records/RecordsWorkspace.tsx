@@ -5,6 +5,8 @@ import {
   describeSelectionRegion,
   describeSelectionView,
   failureDetails,
+  MAX_SELECTION_NAME_LENGTH,
+  normalizeSelectionName,
   RECORDS_PAGE_SIZE,
   removeSelection,
 } from '../../records';
@@ -90,6 +92,95 @@ function ViewModeCell({ selection }: { selection: SelectionSummary }) {
   );
 }
 
+interface NameCellProps {
+  selection: SelectionSummary;
+  onRename: (selection: SelectionSummary, name: string | null) => Promise<boolean>;
+}
+
+/** Selection name with inline editing: Enter or Save stores it, Escape or Cancel discards it. */
+function NameCell({ selection, onRename }: NameCellProps) {
+  const [draft, setDraft] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [problem, setProblem] = useState<string | null>(null);
+
+  const cancel = () => {
+    setDraft(null);
+    setProblem(null);
+  };
+
+  const save = async () => {
+    if (draft === null || saving) return;
+    const result = normalizeSelectionName(draft);
+    if ('error' in result) {
+      setProblem(result.error);
+      return;
+    }
+    if (result.name === selection.name) {
+      cancel();
+      return;
+    }
+    setSaving(true);
+    const saved = await onRename(selection, result.name);
+    setSaving(false);
+    if (saved) cancel();
+  };
+
+  if (draft === null) {
+    return (
+      <div className="records-name">
+        {selection.name ? (
+          <span className="records-name-text">{selection.name}</span>
+        ) : (
+          <span className="records-muted">Untitled</span>
+        )}
+        <button
+          type="button"
+          className="records-name-edit"
+          aria-label="Rename selection"
+          title="Rename"
+          onClick={() => setDraft(selection.name ?? '')}
+        >
+          ✎
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="records-name-form">
+      <input
+        type="text"
+        className="records-name-input"
+        aria-label="Selection name"
+        placeholder="Untitled"
+        value={draft}
+        maxLength={MAX_SELECTION_NAME_LENGTH}
+        autoFocus
+        disabled={saving}
+        onChange={(e) => {
+          setDraft(e.target.value);
+          setProblem(null);
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') void save();
+          if (e.key === 'Escape') cancel();
+        }}
+      />
+      <button type="button" className="records-btn" disabled={saving} onClick={() => void save()}>
+        {saving ? 'Saving…' : 'Save'}
+      </button>
+      <button type="button" className="records-btn" disabled={saving} onClick={cancel}>
+        Cancel
+      </button>
+      {problem && (
+        <p className="records-name-error" role="alert">
+          {problem}
+        </p>
+      )}
+    </div>
+  );
+}
+
 export function RecordsWorkspace({ onOpenPlate, onShowInSky }: RecordsWorkspaceProps) {
   const [items, setItems] = useState<SelectionSummary[]>([]);
   const [nextBefore, setNextBefore] = useState<string | null>(null);
@@ -114,6 +205,19 @@ export function RecordsWorkspace({ onOpenPlate, onShowInSky }: RecordsWorkspaceP
   useEffect(() => {
     void loadPage();
   }, [loadPage]);
+
+  /** Returns whether the name was stored, so the editor knows whether to close. */
+  const handleRename = async (selection: SelectionSummary, name: string | null) => {
+    try {
+      const updated = await api.renameSelection(selection.id, name);
+      setItems((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
+      setError(null);
+      return true;
+    } catch (err) {
+      setError(errorText(err));
+      return false;
+    }
+  };
 
   const handleDelete = async (selection: SelectionSummary) => {
     const label = describeSelectionRegion(selection);
@@ -156,6 +260,7 @@ export function RecordsWorkspace({ onOpenPlate, onShowInSky }: RecordsWorkspaceP
         <table className="records-table">
           <thead>
             <tr>
+              <th scope="col">Name</th>
               <th scope="col">Last seen</th>
               <th scope="col">Region</th>
               <th scope="col">Channels</th>
@@ -172,6 +277,9 @@ export function RecordsWorkspace({ onOpenPlate, onShowInSky }: RecordsWorkspaceP
           <tbody>
             {items.map((selection) => (
               <tr key={selection.id}>
+                <td>
+                  <NameCell selection={selection} onRename={handleRename} />
+                </td>
                 <td>{formatTimestamp(selection.last_seen_at)}</td>
                 <td className="records-mono">{describeSelectionRegion(selection)}</td>
                 <td className="records-mono">{selection.channels.join(', ')}</td>

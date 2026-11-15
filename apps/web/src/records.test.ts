@@ -4,6 +4,7 @@ import {
   describeSelectionRegion,
   describeSelectionView,
   failureDetails,
+  normalizeSelectionName,
   removeSelection,
   selectionError,
 } from './records';
@@ -33,6 +34,7 @@ function selection(overrides: Partial<SelectionSummary> = {}): SelectionSummary 
     error_trace: null,
     view_mode: null,
     rgb_channels: null,
+    name: null,
     job_events: null,
     hits: 1,
     created_at: '2026-11-14T10:00:00Z',
@@ -150,5 +152,20 @@ describe('describeSelectionView', () => {
 
   it('reports no view when neither source has one', () => {
     expect(describeSelectionView(selection(), null)).toBeNull();
+  });
+});
+
+describe('normalizeSelectionName', () => {
+  it('trims the name', () => {
+    expect(normalizeSelectionName('  M101 core  ')).toEqual({ name: 'M101 core' });
+  });
+
+  it('turns a blank name into no name', () => {
+    expect(normalizeSelectionName('   ')).toEqual({ name: null });
+  });
+
+  it('accepts 80 characters and rejects more', () => {
+    expect(normalizeSelectionName('x'.repeat(80))).toEqual({ name: 'x'.repeat(80) });
+    expect(normalizeSelectionName('x'.repeat(81))).toEqual({ error: 'Names can be at most 80 characters.' });
   });
 });

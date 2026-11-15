@@ -92,3 +92,15 @@ export function describeSelectionView(
   }
   return null;
 }
+
+/** Same limit the backend enforces on selection names. */
+export const MAX_SELECTION_NAME_LENGTH = 80;
+
+/** Trims a typed name; blank means no name. Rejects names over the backend limit. */
+export function normalizeSelectionName(raw: string): { name: string | null } | { error: string } {
+  const name = raw.trim();
+  if (name.length > MAX_SELECTION_NAME_LENGTH) {
+    return { error: `Names can be at most ${MAX_SELECTION_NAME_LENGTH} characters.` };
+  }
+  return { name: name || null };
+}
