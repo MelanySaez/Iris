@@ -116,6 +116,10 @@ class Selection(Base):
             "OR (view_mode = 'rgb' AND cardinality(rgb_channels) = 3)",
             name="selection_view_valid",
         ),
+        CheckConstraint(
+            "name IS NULL OR char_length(name) BETWEEN 1 AND 80",
+            name="selection_name_length",
+        ),
         CheckConstraint("mode IN ('latest', 'history')", name="selection_mode"),
         CheckConstraint("stretch IN ('asinh', 'linear')", name="selection_stretch"),
         Index("selection_last_seen_at", text("last_seen_at DESC")),
@@ -143,6 +147,8 @@ class Selection(Base):
     # How the Sky map showed the region at the latest submission that sent it.
     view_mode: Mapped[str | None] = mapped_column(Text)
     rgb_channels: Mapped[list[int] | None] = mapped_column(ARRAY(SmallInteger))
+    # User label shown in Records; never set by job submissions.
+    name: Mapped[str | None] = mapped_column(Text)
     hits: Mapped[int] = mapped_column(server_default="1")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()

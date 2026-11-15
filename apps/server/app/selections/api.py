@@ -9,7 +9,7 @@ from typing import Any, Literal
 
 from astropy.time import Time
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 from app.jobs import JobManager
 from app.selections.db import make_session_factory, normalize_database_url
@@ -45,6 +45,7 @@ class SelectionSummary(BaseModel):
     job_events: list[dict[str, Any]] | None
     view_mode: Literal["single", "rgb"] | None
     rgb_channels: list[int] | None
+    name: str | None
     hits: int
     created_at: datetime
     last_seen_at: datetime
@@ -59,6 +60,27 @@ class SelectionProductOut(BaseModel):
     uri: str
     date_mjd: float
     date_iso: str
+
+
+MAX_SELECTION_NAME_LENGTH = 80
+
+
+class SelectionRename(BaseModel):
+    """New name for a selection; blank or null clears it (the key is required)."""
+
+    name: str | None
+
+    @field_validator("name")
+    @classmethod
+    def _normalize(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        value = value.strip()
+        if len(value) > MAX_SELECTION_NAME_LENGTH:
+            raise ValueError(
+                f"name must be at most {MAX_SELECTION_NAME_LENGTH} characters"
+            )
+        return value or None
 
 
 class SelectionDetail(SelectionSummary):
@@ -100,6 +122,7 @@ def _summary_fields(sel: Selection) -> dict[str, Any]:
         "job_events": sel.job_events,
         "view_mode": sel.view_mode,
         "rgb_channels": list(sel.rgb_channels) if sel.rgb_channels is not None else None,
+        "name": sel.name,
         "hits": sel.hits,
         "created_at": sel.created_at,
         "last_seen_at": sel.last_seen_at,
@@ -195,6 +218,19 @@ def get_selection(
         spectral_products=[_product_out(p) for p in sel.region.products],
         manifest=sel.manifest,
     )
+
+
+@router.patch("/{selection_id}", response_model=SelectionSummary)
+def rename_selection(
+    selection_id: uuid.UUID,
+    body: SelectionRename,
+    store: SelectionStore = Depends(get_store),
+) -> SelectionSummary:
+    """Set or clear the name shown for a saved selection."""
+    sel = store.rename(selection_id, body.name)
+    if sel is None:
+        raise HTTPException(status_code=404, detail="Selection not found.")
+    return SelectionSummary(**_summary_fields(sel))
 
 
 @router.delete("/{selection_id}", status_code=204)

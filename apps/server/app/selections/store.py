@@ -220,6 +220,17 @@ class SelectionStore:
         with self._sessions() as session:
             return session.execute(stmt).scalar_one_or_none()
 
+    def rename(self, selection_id: uuid.UUID, name: str | None) -> Selection | None:
+        """Set or clear the selection's name; None when the selection does not exist."""
+        with self._sessions.begin() as session:
+            updated = session.execute(
+                update(Selection)
+                .where(Selection.id == selection_id)
+                .values(name=name)
+                .returning(Selection.id)
+            ).scalar_one_or_none()
+        return None if updated is None else self.get(selection_id)
+
     def delete(self, selection_id: uuid.UUID) -> bool:
         """Hard-delete one selection; its shared region and products remain."""
         with self._sessions.begin() as session:
