@@ -11,6 +11,7 @@ import numpy as np
 from fastapi import FastAPI, HTTPException, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.assistant.api import router as assistant_router
 from app.catalog import get_catalog
 from app.channels import get_channel, get_channel_catalog, get_channel_window
 from app.config import (
@@ -57,6 +58,7 @@ app.add_middleware(
 
 configure_selections(get_database_url(), job_manager)
 app.include_router(selections_router)
+app.include_router(assistant_router)
 
 
 @app.middleware("http")

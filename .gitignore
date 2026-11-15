@@ -17,3 +17,4 @@ apps/server/data/derived/spherex_mosaic/
 # Local environment (template: .env.example)
 .env
 !.env.example
+apps/server/data/logs/
