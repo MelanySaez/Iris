@@ -376,6 +376,30 @@ describe('SpectralLab featured objects panel', () => {
     await act(async () => fireEvent.click(catalogButton('Andromeda Galaxy')));
     expect(getSpectrum).toHaveBeenCalledWith(10.684708, 41.26875);
   });
+
+  it('starts with the featured objects collapsed and expands them on demand', () => {
+    render(<SpectralLab request={null} />);
+    const panel = document.querySelector('details.spectral-featured') as HTMLDetailsElement;
+    expect(panel.open).toBe(false);
+    expect(panel.querySelector('summary')?.textContent).toContain('Featured objects');
+
+    fireEvent.click(panel.querySelector('summary') as HTMLElement);
+    expect(panel.open).toBe(true);
+  });
+
+  it('marks a featured object as added when a spectrum within one SPHEREx pixel is plotted', async () => {
+    getSpectrum.mockResolvedValue(spectrum([1, 2]));
+    render(<SpectralLab request={null} />);
+
+    // 1.3″ from Andromeda Galaxy (NED's position of M31): the same pixel.
+    await act(async () => addByCoordinates('10.6848', '41.2691'));
+    expect(catalogButton('Andromeda Galaxy').hasAttribute('disabled')).toBe(true);
+    expect(catalogButton('Andromeda Galaxy').textContent).toContain('added');
+
+    // ~33″ from the Pleiades position: another pixel, so it stays available.
+    await act(async () => addByCoordinates('56.6108', '24.1139'));
+    expect(catalogButton('Pleiades').hasAttribute('disabled')).toBe(false);
+  });
 });
 
 describe('SpectralLab object search', () => {
@@ -442,19 +466,35 @@ describe('SpectralLab object search', () => {
     expect(screen.getByRole('img', { name: /Spectra of M 31/ })).toBeTruthy();
   });
 
-  it('filters the featured objects by the typed text, like Sky search', () => {
+  it('keeps every featured object listed while searching', () => {
     resolveName.mockRejectedValue(notFound());
     render(<SpectralLab request={null} />);
+    const all = ['Andromeda Galaxy', 'Eagle Nebula', 'Pleiades', 'Crab Nebula', 'Whirlpool Galaxy'];
 
     type('nebula');
-    expect(featuredNames()).toEqual(['Eagle Nebula', 'Crab Nebula']);
-
-    type('M45');
-    expect(featuredNames()).toEqual(['Pleiades']);
-
+    expect(featuredNames()).toEqual(all);
     type('zzz');
-    expect(featuredNames()).toEqual([]);
-    expect(screen.getByText('No featured objects match “zzz”')).toBeTruthy();
+    expect(featuredNames()).toEqual(all);
+    expect(screen.queryByText(/No featured objects match/)).toBeNull();
+  });
+
+  it('marks the featured object as added when the search plots the same object', async () => {
+    resolveName.mockResolvedValue(m31);
+    render(<SpectralLab request={null} />);
+
+    type('M31');
+    await settle();
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: /Messier 031/ })));
+
+    expect(catalogButton('Andromeda Galaxy').hasAttribute('disabled')).toBe(true);
+    expect(catalogButton('Eagle Nebula').hasAttribute('disabled')).toBe(false);
+  });
+
+  it('uses the same search icon as Sky instead of an emoji', () => {
+    render(<SpectralLab request={null} />);
+    const box = searchBox().closest('.search-box') as HTMLElement;
+    expect(box.querySelector('.search-icon svg')).toBeTruthy();
+    expect(box.textContent).not.toContain('🔍');
   });
 
   it('adds the resolved object on Enter without waiting for the suggestion', async () => {
@@ -470,7 +510,7 @@ describe('SpectralLab object search', () => {
     expect(getSpectrum).toHaveBeenCalledWith(10.684708, 41.26875);
   });
 
-  it('falls back to the first featured match on Enter when SIMBAD/NED do not know the name', async () => {
+  it('adds nothing on Enter when SIMBAD/NED do not know the name, and says why', async () => {
     resolveName.mockRejectedValue(notFound());
     render(<SpectralLab request={null} />);
 
@@ -479,8 +519,8 @@ describe('SpectralLab object search', () => {
       fireEvent.keyDown(searchBox(), { key: 'Enter' });
     });
 
-    expect(getSpectrum).toHaveBeenCalledWith(56.6008, 24.1139);
-    expect(screen.getByRole('img', { name: /Spectra of Pleiades/ })).toBeTruthy();
+    expect(getSpectrum).not.toHaveBeenCalled();
+    expect(screen.getByText('Name not found')).toBeTruthy();
   });
 });
 

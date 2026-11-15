@@ -98,11 +98,13 @@ and press **Visualize spectrum** to open the Lab with the spectrum at the centre
 the selection already added. It is named after the searched object while the
 region centre is still on it (within one SPHEREx pixel, 6.2″); otherwise it shows
 the position in degrees (`RA°, Dec°`). Add up to 8 spectra from the
-five featured objects (Andromeda Galaxy, Eagle Nebula, Pleiades, Crab Nebula, Whirlpool Galaxy; SIMBAD positions, each with nearly all channels covered),
+five featured objects (Andromeda Galaxy, Eagle Nebula, Pleiades, Crab Nebula, Whirlpool Galaxy; SIMBAD positions, each with nearly all channels covered;
+collapsed by default, click **Featured objects** to expand them),
 by searching an object by name or catalogue code below them (**Search objects**, the
 same SIMBAD / NED lookup as Sky search: click a suggestion, or press **Enter** to take
-the first one, falling back to the first featured match; the search text also filters
-the featured objects), or by typing RA/Dec in degrees; each is fetched from
+the first one), or by typing RA/Dec in degrees. A featured object shows as *added*
+once any plotted spectrum lies within one SPHEREx pixel (6.2″) of it, however it was
+added. Each spectrum is fetched from
 `GET /api/spectrum` and plotted as wavelength (µm) against surface brightness
 (MJy/sr) on one shared axis. Hover the chart for per-channel values and hit
 counts; switch the brightness axis between **Linear** and **Log** to compare
