@@ -9,9 +9,16 @@ describe('router', () => {
 
   it('keeps sky and plate routes unchanged', () => {
     expect(parseHash('#/sky')).toEqual({ type: 'sky' });
-    expect(parseHash('')).toEqual({ type: 'sky' });
+    expect(parseHash('#/unknown')).toEqual({ type: 'sky' });
     expect(parseHash('#/plate/abc')).toEqual({ type: 'plate', jobId: 'abc' });
     expect(routeToHash({ type: 'plate', jobId: 'a b' })).toBe('#/plate/a%20b');
     expect(routeToHash({ type: 'sky' })).toBe('#/sky');
+  });
+
+  it('opens the landing page on an empty address', () => {
+    expect(parseHash('')).toEqual({ type: 'landing' });
+    expect(parseHash('#')).toEqual({ type: 'landing' });
+    expect(parseHash('#/')).toEqual({ type: 'landing' });
+    expect(routeToHash({ type: 'landing' })).toBe('#/');
   });
 });

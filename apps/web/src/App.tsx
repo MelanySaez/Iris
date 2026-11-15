@@ -10,6 +10,7 @@ import {
   type SkyUiState,
 } from './components/sky/SkyWorkspace';
 import { AssistantWidget, type ActionResult } from './components/assistant/AssistantWidget';
+import { Landing } from './components/landing/Landing';
 import type { AssistantAction, AssistantUiContext } from './assistant';
 import { SpectralLab, type SpectrumRequest } from './components/spectral/SpectralLab';
 import type { SpectrumTarget } from './components/sky/SelectionActions';
@@ -21,6 +22,16 @@ export function App() {
   const { route, navigate } = useRoute();
 
   const [contractError, setContractError] = useState<string | null>(null);
+  // After "Explore the Sky" the landing stays on top while it fades into the viewer.
+  const [landingExit, setLandingExit] = useState(false);
+  const endLandingExit = useCallback(() => setLandingExit(false), []);
+  // The viewer's own arrival (900 ms) outlasts the landing fade, so it has its own timer.
+  const [appArriving, setAppArriving] = useState(false);
+  useEffect(() => {
+    if (!appArriving) return undefined;
+    const timer = setTimeout(() => setAppArriving(false), 1000);
+    return () => clearTimeout(timer);
+  }, [appArriving]);
   useEffect(() => {
     let active = true;
     void api.getHealth().then((health) => {
@@ -113,7 +124,8 @@ export function App() {
   const getAssistantContext = (): AssistantUiContext => {
     const { center, ...sky } = skyStateRef.current;
     return {
-      workspace: route.type,
+      // The assistant is hidden on the landing page; the viewer starts on Sky.
+      workspace: route.type === 'landing' ? 'sky' : route.type,
       ...sky,
       ...(center && center.every(Number.isFinite)
         ? { center: [((center[0] % 360) + 360) % 360, center[1]] as [number, number] }
@@ -152,13 +164,26 @@ export function App() {
     }
   };
 
+  const isLanding = route.type === 'landing';
   const isSky = route.type === 'sky';
   const isPlate = route.type === 'plate';
   const isSpectral = route.type === 'spectral';
   const isRecords = route.type === 'records';
 
   return (
-    <div className="planet-app-shell">
+    <div className={`planet-app-shell${appArriving ? ' app-arriving' : ''}`}>
+      {/* The viewer stays mounted underneath so the sky is ready when the visitor enters. */}
+      {(isLanding || landingExit) && (
+        <Landing
+          leaving={!isLanding}
+          onExplore={() => {
+            setLandingExit(true);
+            setAppArriving(true);
+            navigate('#/sky');
+          }}
+          onExited={endLandingExit}
+        />
+      )}
       <TopBar currentRoute={route} activeJobId={activeJobId} onNavigate={navigate} />
 
       {contractError && <p role="alert">{contractError}</p>}
@@ -232,7 +257,7 @@ export function App() {
         )}
       </div>
 
-      <AssistantWidget getContext={getAssistantContext} onAction={handleAssistantAction} />
+      {!isLanding && <AssistantWidget getContext={getAssistantContext} onAction={handleAssistantAction} />}
     </div>
   );
 }

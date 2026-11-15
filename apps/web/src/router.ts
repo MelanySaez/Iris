@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 
 export type AppRoute =
+  | { type: 'landing' }
   | { type: 'sky' }
   | { type: 'records' }
   | { type: 'plate'; jobId: string }
@@ -8,6 +9,9 @@ export type AppRoute =
 
 export function parseHash(hash: string): AppRoute {
   const clean = hash.replace(/^#\/?/, '');
+  if (clean === '') {
+    return { type: 'landing' };
+  }
   if (clean === 'spectral') {
     return { type: 'spectral' };
   }
@@ -24,6 +28,9 @@ export function parseHash(hash: string): AppRoute {
 }
 
 export function routeToHash(route: AppRoute): string {
+  if (route.type === 'landing') {
+    return '#/';
+  }
   if (route.type === 'plate') {
     return `#/plate/${encodeURIComponent(route.jobId)}`;
   }
@@ -56,11 +63,6 @@ export function useRoute(): {
 
     window.addEventListener('hashchange', handleHashChange);
     window.addEventListener('popstate', handleHashChange);
-
-    // Ensure initial hash is set to #/sky if blank
-    if (!window.location.hash || window.location.hash === '#/' || window.location.hash === '#') {
-      window.location.hash = '#/sky';
-    }
 
     return () => {
       window.removeEventListener('hashchange', handleHashChange);

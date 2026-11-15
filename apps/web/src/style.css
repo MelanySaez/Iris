@@ -3653,3 +3653,175 @@ p.name-suggestion-error {
   .workspace-switch { gap: 14px; }
   .switch-btn { font-size: 13px; }
 }
+
+/* ==========================================================================
+   Landing — one full-screen sky, a short context block, official sources
+   ========================================================================== */
+.landing {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  overflow-y: auto;
+  overflow-x: hidden;
+  background: #000;
+  color: var(--sky-ink);
+  --landing-scroll: 0;
+  scroll-behavior: smooth;
+}
+.landing-stars { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.landing > :not(.landing-stars) { position: relative; }
+
+.landing-nav { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; justify-content: space-between; padding: 20px clamp(16px, 5vw, 64px); background: linear-gradient(#000 40%, transparent); }
+.landing-brand { display: inline-flex; align-items: center; gap: 10px; font-size: 20px; font-weight: 800; letter-spacing: -0.01em; }
+.landing-nav nav { display: flex; gap: 24px; }
+.landing-nav nav button { padding: 6px 0; font-family: var(--mono); font-size: 11px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--sky-muted); }
+.landing-nav nav button:hover { color: var(--sky-ink); }
+
+.landing-hero {
+  min-height: calc(100vh - 72px);
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  padding: clamp(40px, 14vh, 150px) clamp(16px, 8vw, 128px) 32px;
+  opacity: calc(1 - var(--landing-scroll) * 1.4);
+  transform: translateY(calc(var(--landing-scroll) * -60px));
+}
+.landing-eyebrow { margin: 0 0 20px; font-family: var(--mono); font-size: 11.5px; letter-spacing: 0.26em; text-transform: uppercase; color: var(--sky-warm); }
+.landing-hero h1 { margin: 0; max-width: 14ch; font-size: clamp(44px, 8.5vw, 104px); font-weight: 800; line-height: 0.98; letter-spacing: -0.035em; text-wrap: balance; }
+.landing-lede { max-width: 56ch; margin: 28px 0 0; font-size: clamp(16px, 1.6vw, 20px); line-height: 1.55; color: var(--sky-muted); }
+.landing-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 40px; }
+
+.landing-cta, .landing-secondary { display: inline-flex; align-items: center; gap: 10px; height: 48px; padding: 0 22px; border-radius: var(--radius-sm); font-size: 15px; font-weight: 700; }
+.landing-cta { background: var(--signal); color: #18181b; transition: background 0.15s ease; }
+.landing-cta:hover { background: var(--signal-strong); }
+.landing-cta svg, .landing-link svg, .landing-hero-foot svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.8; }
+.landing-secondary { border: 1px solid var(--sky-line-strong); color: var(--sky-muted); cursor: not-allowed; }
+.landing-soon { padding: 2px 6px; border: 1px solid var(--sky-line-strong); border-radius: 2px; font-family: var(--mono); font-size: 10px; font-weight: 500; letter-spacing: 0.14em; text-transform: uppercase; color: var(--sky-faint); }
+.landing-cta:focus-visible, .landing-nav nav button:focus-visible, .landing-hero-foot button:focus-visible, .landing a:focus-visible { outline: 2px solid var(--sky-ink); outline-offset: 4px; }
+
+.landing-hero-foot { display: flex; justify-content: space-between; gap: 16px; margin-top: auto; padding-top: 64px; font-family: var(--mono); font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--sky-faint); }
+.landing-hero-foot button { display: inline-flex; align-items: center; gap: 8px; color: var(--sky-muted); letter-spacing: inherit; text-transform: inherit; font-size: inherit; }
+
+.landing-context { padding: 120px clamp(16px, 8vw, 128px) 96px; background: linear-gradient(transparent, #000 160px); }
+.landing-context h2, .landing-footer h2 { margin: 0 0 40px; font-size: clamp(28px, 3.4vw, 44px); font-weight: 800; letter-spacing: -0.025em; }
+.landing-context-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 64px; }
+.landing-context-grid article { display: grid; grid-template-columns: 56px 1fr; gap: 8px; padding: 28px 0; border-top: 1px solid var(--sky-line-strong); }
+.landing-index { font-family: var(--mono); font-size: 22px; color: var(--sky-faint); }
+.landing-context h3 { margin: 2px 0 10px; font-size: 20px; font-weight: 700; letter-spacing: -0.01em; }
+.landing-context p { margin: 0; max-width: 52ch; line-height: 1.6; color: var(--sky-muted); }
+.landing-link { display: inline-flex; align-items: center; gap: 8px; margin-top: 14px; font-weight: 700; color: var(--sky-ink); text-decoration: none; }
+.landing-link svg { width: 18px; height: 18px; padding: 3px; border-radius: 50%; background: var(--signal); color: #18181b; stroke-width: 2.2; }
+.landing-link:hover { text-decoration: underline; text-underline-offset: 4px; }
+.landing-cta-end { margin-top: 48px; }
+
+.landing-footer { padding: 72px clamp(16px, 8vw, 128px) 48px; background: var(--sky-surface); border-top: 1px solid var(--sky-line); }
+.landing-footer h2 { font-size: 13px; margin-bottom: 24px; font-family: var(--mono); font-weight: 500; letter-spacing: 0.22em; text-transform: uppercase; color: var(--sky-muted); }
+.landing-footer ul { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 24px; margin: 0; padding: 0; list-style: none; }
+.landing-footer li { display: flex; flex-direction: column; gap: 4px; }
+.landing-footer a { font-weight: 700; color: var(--sky-ink); text-decoration: underline; text-decoration-color: var(--sky-line-strong); text-underline-offset: 4px; }
+.landing-footer a:hover { text-decoration-color: var(--signal); }
+.landing-footer li span { font-size: 12.5px; color: var(--sky-faint); }
+.landing-disclaimer { margin: 48px 0 0; padding-top: 24px; border-top: 1px solid var(--sky-line); font-size: 12.5px; color: var(--sky-faint); }
+
+@media (max-width: 760px) {
+  .landing-context-grid { grid-template-columns: 1fr; }
+  .landing-footer ul { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .landing-hero-foot span { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .landing { scroll-behavior: auto; }
+  .landing-hero { opacity: 1; transform: none; }
+}
+
+.brand:focus-visible { outline: 2px solid var(--sky-ink); outline-offset: 4px; border-radius: 2px; }
+
+/* Landing motion — one entrance on load, one jump on "Explore the Sky". */
+@keyframes landing-rise { from { opacity: 0; transform: translateY(14px); filter: blur(6px); } }
+@keyframes landing-unmask { from { clip-path: inset(0 0 100% 0); transform: translateY(24px); } to { clip-path: inset(0 0 -12% 0); } }
+.landing-eyebrow { animation: landing-rise 600ms cubic-bezier(0.16, 1, 0.3, 1) 80ms both; }
+.landing-hero h1 { animation: landing-unmask 800ms cubic-bezier(0.16, 1, 0.3, 1) 160ms both; }
+.landing-lede { animation: landing-rise 600ms cubic-bezier(0.16, 1, 0.3, 1) 380ms both; }
+.landing-actions { animation: landing-rise 600ms cubic-bezier(0.16, 1, 0.3, 1) 500ms both; }
+.landing-hero-foot, .landing-nav { animation: landing-rise 700ms ease-out 650ms both; }
+
+.landing-cta svg { transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1); }
+.landing-cta:hover svg { transform: translate(2px, -2px); }
+
+.landing-nav, .landing-hero, .landing-context, .landing-footer { transition: opacity 450ms ease-in, filter 450ms ease-in, transform 450ms ease-in; }
+.landing-warping .landing-nav,
+.landing-warping .landing-hero,
+.landing-warping .landing-context,
+.landing-warping .landing-footer { opacity: 0; filter: blur(8px); transform: scale(1.04); pointer-events: none; }
+.landing-warping { cursor: progress; }
+
+@media (prefers-reduced-motion: reduce) {
+  .landing-eyebrow, .landing-hero h1, .landing-lede, .landing-actions, .landing-hero-foot, .landing-nav { animation: none; }
+  .landing-nav, .landing-hero, .landing-context, .landing-footer { transition: none; }
+}
+
+/* ==========================================================================
+   Interaction motion (viewer) — fast feedback, never a wait
+   ========================================================================== */
+@keyframes iris-fade { from { opacity: 0; } }
+@keyframes iris-rise { from { opacity: 0; transform: translateY(6px); } }
+@keyframes iris-pop { from { opacity: 0; transform: translateY(-4px) scale(0.98); } }
+
+/* Switching workspace: a quick cross-fade (opacity only, so the map keeps its geometry). */
+.layer-active { animation: iris-fade 180ms ease-out; }
+
+/* Active tab underline grows from the centre. */
+.switch-btn.active::after { animation: iris-underline 220ms cubic-bezier(0.16, 1, 0.3, 1); }
+@keyframes iris-underline { from { transform: scaleX(0); } }
+
+/* Press feedback on every control. */
+.btn, .tool-btn, .switch-btn, .recent-chip, .catalog-row, .dock-step-btn, .zoom-btn,
+.selection-action-btn, .region-confirm-btn, .landing-cta {
+  transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease, transform 120ms ease, box-shadow 150ms ease;
+}
+.btn:active:not(:disabled), .tool-btn:active:not(:disabled), .recent-chip:active, .dock-step-btn:active,
+.zoom-btn:active, .selection-action-btn:active, .region-confirm-btn:active, .landing-cta:active {
+  transform: scale(0.97);
+}
+.catalog-row:active { background: var(--sky-hover); }
+
+/* Things that appear because of an action slide in, so the eye catches the new state. */
+.region-confirm-bar, .sky-selection-actions, .job-create-error-banner, .data-notes-popover {
+  animation: iris-rise 220ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+/* Centred with translateX(-50%): keep it while it slides in. */
+.region-banner-alert { animation: iris-rise-centred 220ms cubic-bezier(0.16, 1, 0.3, 1); }
+@keyframes iris-rise-centred { from { opacity: 0; transform: translate(-50%, 6px); } to { transform: translate(-50%, 0); } }
+.name-suggestion { animation: iris-pop 200ms cubic-bezier(0.16, 1, 0.3, 1); }
+
+/* Map tool: the active tool settles in. */
+.tool-btn.active { animation: iris-tool 200ms cubic-bezier(0.16, 1, 0.3, 1); }
+@keyframes iris-tool { from { transform: scale(0.88); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .layer-active, .switch-btn.active::after, .region-confirm-bar, .sky-selection-actions, .region-banner-alert,
+  .job-create-error-banner, .data-notes-popover, .name-suggestion, .tool-btn.active { animation: none; }
+  .btn:active, .tool-btn:active, .recent-chip:active, .dock-step-btn:active, .zoom-btn:active,
+  .selection-action-btn:active, .region-confirm-btn:active, .landing-cta:active { transform: none; }
+}
+
+/* Sliding tab underline: one shared line that travels to the active tab. */
+.workspace-switch { position: relative; }
+.switch-btn.active::after { display: none; }
+.switch-indicator { position: absolute; left: 0; bottom: 0; height: 2px; border-radius: 2px; background: var(--signal); pointer-events: none; opacity: 0; }
+.switch-indicator[data-visible="true"] { opacity: 1; }
+.switch-indicator.ready { transition: transform 320ms cubic-bezier(0.65, 0, 0.35, 1), width 320ms cubic-bezier(0.65, 0, 0.35, 1), opacity 150ms ease; }
+@media (prefers-reduced-motion: reduce) { .switch-indicator.ready { transition: none; } }
+
+/* Leaving the landing: black fades into the viewer that is already underneath. */
+.landing.landing-leaving { opacity: 0; transition: opacity 650ms cubic-bezier(0.4, 0, 0.2, 1); pointer-events: none; }
+@media (prefers-reduced-motion: reduce) { .landing.landing-leaving { transition: none; } }
+
+/* Arriving from the landing: the viewer comes out of the dark and into focus
+   while the star field fades above it (filters only, so the map geometry is untouched). */
+@keyframes app-arrive-view { from { filter: brightness(0) blur(10px); } 60% { filter: brightness(0.6) blur(3px); } to { filter: none; } }
+@keyframes app-arrive-bar { from { opacity: 0; } }
+.app-arriving .workspace-container { animation: app-arrive-view 900ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+.app-arriving .app-topbar { animation: app-arrive-bar 500ms ease-out 350ms both; }
+@media (prefers-reduced-motion: reduce) {
+  .app-arriving .workspace-container, .app-arriving .app-topbar { animation: none; }
+}

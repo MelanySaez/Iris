@@ -47,7 +47,7 @@ describe('spectral lab routing', () => {
 
   it('keeps the existing sky and plate routes unchanged', () => {
     expect(parseHash('#/sky')).toEqual({ type: 'sky' });
-    expect(parseHash('')).toEqual({ type: 'sky' });
+    expect(parseHash('')).toEqual({ type: 'landing' }); // empty address opens the landing page
     expect(parseHash('#/spectral-x')).toEqual({ type: 'sky' });
     expect(parseHash('#/plate/abc%20123')).toEqual({ type: 'plate', jobId: 'abc 123' });
     expect(routeToHash({ type: 'plate', jobId: 'abc 123' })).toBe('#/plate/abc%20123');
