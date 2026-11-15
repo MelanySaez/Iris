@@ -32,6 +32,17 @@ CUBE_ORDER = 5  # order of the published fits-cube tiles (custom_tile_format_ord
 CUBE_FETCH_TIMEOUT = 30.0
 CUBE_CACHE_DIR = CACHE_DIR / "cube"
 CUBE_SPECTRUM_CACHE_DIR = CUBE_CACHE_DIR / "spectra"
+
+# Object-name resolution (SIMBAD mirror, then NED). The CDS primary SIMBAD has
+# been unavailable; SIMBAD_SCRIPT_URL can point back to it once it recovers.
+SIMBAD_SCRIPT_URL = os.environ.get(
+    "SIMBAD_SCRIPT_URL", "https://simbad.cfa.harvard.edu/simbad/sim-script"
+)
+NED_LOOKUP_URL = os.environ.get("NED_LOOKUP_URL", "https://ned.ipac.caltech.edu/srs/ObjectLookup")
+NAME_RESOLVER_TIMEOUT = 10.0
+NAME_CACHE_DIR = CACHE_DIR / "names"
+NAME_CACHE_TTL_SECONDS = 30 * 86400  # positions of named objects rarely change
+NAME_NOT_FOUND_TTL_SECONDS = 86400  # retry unknown names daily
 CUBE_CACHE_TTL_SECONDS = 7 * 86400  # re-check tiles weekly, like the HiPS properties
 # Cap on any single range response: a server that ignores or coalesces the
 # pixel ranges must never make us stream the ~320 MB tile.
@@ -72,5 +83,6 @@ for directory in (
     JOBS_CACHE_DIR,
     CUBE_CACHE_DIR,
     CUBE_SPECTRUM_CACHE_DIR,
+    NAME_CACHE_DIR,
 ):
     directory.mkdir(parents=True, exist_ok=True)
