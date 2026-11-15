@@ -74,7 +74,7 @@ export interface RegionResolveResponse {
   warning: string | null;
   products: Array<{
     id: string;
-    source: 'remote' | 's3' | 'mixed';
+    source: 'remote' | 's3' | 'mixed' | 'cube';
     detector: number;
     band: string;
     obs_id: string;
@@ -125,7 +125,7 @@ export interface JobCutout {
   epoch: number;
   obs_id: string;
   date_iso: string;
-  source: 'remote' | 's3' | 'mixed';
+  source: 'remote' | 's3' | 'mixed' | 'cube';
   uri?: string;
   version?: string;
   shape: [number, number];
@@ -150,7 +150,7 @@ export interface JobFrame {
   epoch: number;
   obs_id: string;
   date_iso: string;
-  source: 'remote' | 's3' | 'mixed';
+  source: 'remote' | 's3' | 'mixed' | 'cube';
   width: number;
   height: number;
   url: string;
@@ -206,7 +206,8 @@ export interface JobEvent {
   provider?: string;
   attempt?: number;
   max_attempts?: number;
-  outcome?: 'started' | 'succeeded' | 'failed';
+  outcome?: 'started' | 'succeeded' | 'failed' | 'unavailable';
+  temporal_available?: boolean;
   will_retry?: boolean;
   retry_after_seconds?: number | null;
   detail?: string;

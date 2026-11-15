@@ -557,10 +557,9 @@ class JobManager:
         job.events.append(
             {
                 "stage": "Using DR1 All-Sky Cube fallback",
+                # No provider/fallback keys: the discovery event already
+                # carries them, so the provider trace shows the notice once.
                 "event_type": "cube_fallback",
-                "provider": CUBE_PROVIDER,
-                "fallback": True,
-                "coverage_state": CUBE_COVERAGE_STATE,
                 "temporal_available": False,
                 "detail": notice,
                 "at": time.time(),

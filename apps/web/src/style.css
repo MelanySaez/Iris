@@ -2380,6 +2380,27 @@ button:disabled {
   color: #ffb27a;
 }
 
+.plate-fallback-notice {
+  margin: 12px 16px 0;
+  padding: 10px 14px;
+  border: 1px solid var(--plate-rust);
+  border-left-width: 4px;
+  border-radius: var(--radius-md);
+  background: var(--plate-rust-soft);
+  color: var(--plate-ink);
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.plate-fallback-notice p {
+  margin: 4px 0 0;
+}
+
+.plate-fallback-notice strong {
+  color: var(--plate-rust);
+}
+
 .plate-cutout-missing {
   display: flex;
   flex-direction: column;

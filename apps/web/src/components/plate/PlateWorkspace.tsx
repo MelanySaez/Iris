@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, ApiError } from '../../api';
 import { PreparingPlateCard } from '../PreparingPlateCard';
 import { EpochTimeline, ProviderTrace } from './EpochTimeline';
+import { CubeFallbackNotice, isCubeFallback, sourceLabel } from './SourceNotice';
 import {
   BLANK_CHANNELS,
   channelToBand,
@@ -97,6 +98,8 @@ export function PlateWorkspace({
   // detector's cutout, which would mislabel the plate.
   const detectorCutouts = job.cutouts?.filter((c) => c.detector === currentDetectorNum && (c.channel === undefined || c.channel === selectedChannel)) ?? [];
   const hasCutout = detectorCutouts.length > 0;
+  // The DR1 All-Sky Cube fallback: one combined image, no VARIANCE layer.
+  const cubeFallback = isCubeFallback(job);
   const activeCutout =
     detectorCutouts.find((c) => c.epoch === epochA) ?? detectorCutouts[0] ?? null;
 
@@ -466,7 +469,9 @@ export function PlateWorkspace({
             </div>
             <div className="meta-pair">
               <span className="meta-key">Source</span>
-              <span className="meta-val chip-source">{activeCutout?.source ?? '—'}</span>
+              <span className="meta-val chip-source">
+                {activeCutout?.source === 'cube' ? sourceLabel('cube') : activeCutout?.source ?? '—'}
+              </span>
             </div>
             <div className="meta-pair">
               <span className="meta-key">Pixel Scale</span>
@@ -564,6 +569,7 @@ export function PlateWorkspace({
 
         {/* Column 2: Plate Stage (Center) */}
         <main className="plate-stage" aria-label="Plate Viewport">
+          <CubeFallbackNotice job={job} />
           {/* Controls Bar */}
           <div className="stage-controls-bar">
             {/* Left: Product tabs (underlined text tabs) */}
@@ -577,7 +583,16 @@ export function PlateWorkspace({
               >
                 IMAGE
               </button>
-              {job.products.includes('variance') ? (
+              {cubeFallback ? (
+                <button
+                  type="button"
+                  className="product-tab tab-action"
+                  disabled
+                  title="The DR1 All-Sky Cube has no VARIANCE layer."
+                >
+                  VARIANCE · n/a
+                </button>
+              ) : job.products.includes('variance') ? (
                 <button
                   type="button"
                   role="tab"
@@ -998,7 +1013,11 @@ export function PlateWorkspace({
             )}
 
             <div className="readout-footer-note">
-              {activeFrame?.calibrated ? 'Verified CWAVE/CBAND calibration · channel-specific mosaic.' : 'WCS-WAVE is approximate; calibrated CWAVE/CBAND is not loaded.'}
+              {activeFrame?.calibrated
+                ? 'Verified CWAVE/CBAND calibration · channel-specific mosaic.'
+                : cubeFallback
+                  ? 'DR1 All-Sky Cube: nominal channel wavelength, not calibrated · no VARIANCE layer.'
+                  : 'WCS-WAVE is approximate; calibrated CWAVE/CBAND is not loaded.'}
             </div>
           </div>
         </aside>

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { formatDateIso } from '../../format';
 import type { JobEvent, JobFrame } from '../../types';
+import { sourceLabel } from './SourceNotice';
 
 interface EpochTimelineProps {
   jobId: string;
@@ -62,8 +63,10 @@ export function EpochTimeline({ jobId, channel, frames, ready, epoch, onSelect, 
         {epochs.map(frame => <button key={frame.epoch} type="button"
           className={`epoch-chip num ${epoch === frame.epoch ? 'active' : ''}`}
           aria-pressed={epoch === frame.epoch} onClick={() => { setPlaying(false); onSelect(frame.epoch); }}>
-          {formatDateIso(frame.date_iso)} · {frame.source === 'remote' ? 'IRSA' : frame.source.toUpperCase()}
-          {frame.calibrated === true ? ' · calibrated' : ' · approximate'}
+          {frame.source === 'cube'
+            ? `${sourceLabel(frame.source)} · combined, no epochs`
+            : <>{formatDateIso(frame.date_iso)} · {sourceLabel(frame.source)}
+              {frame.calibrated === true ? ' · calibrated' : ' · approximate'}</>}
         </button>)}
       </div>
       <div className="epoch-actions">
@@ -95,7 +98,8 @@ export function ProviderTrace({ events }: { events: JobEvent[] }) {
     <summary>Data source and service status</summary>
     <ul>{trace.map((event, index) => <li key={`${event.at}-${index}`}>
       <strong>{event.provider || 'Discovery'}</strong>: {event.message || event.detail || event.stage}
-      {event.fallback && ' · S3 fallback attempted'}
+      {event.fallback && event.coverage_state !== 'cube_fallback' && ' · S3 fallback attempted'}
+      {event.coverage_state === 'cube_fallback' && ' · No temporal information: the cube combines every DR1 observation into one image.'}
       {event.coverage_state === 'unknown_not_indexed' && ' · Coverage unknown: this region is not indexed.'}
       {event.coverage_state === 'indexed_matches' && ' · Indexed products found; global coverage is not guaranteed.'}
     </li>)}</ul>

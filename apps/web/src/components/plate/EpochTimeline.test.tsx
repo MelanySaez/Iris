@@ -58,6 +58,27 @@ describe('EpochTimeline', () => {
     expect(screen.getByRole('button', { name: 'Next epoch' }).hasAttribute('disabled')).toBe(false);
   });
 
+  it('presents a cube frame as one combined image with no epochs to play', () => {
+    const cube = frames().slice(0, 1).map(f => ({ ...f, epoch: 0, source: 'cube' as const, calibrated: false }));
+    render(<EpochTimeline jobId="j" channel={44} frames={cube} ready epoch={0}
+      onSelect={() => {}} onPlaybackStart={() => {}} reason="The cube has no temporal information." />);
+    const chip = screen.getByRole('button', { pressed: true });
+    expect(chip.textContent).toContain('DR1 All-Sky Cube (S3)');
+    expect(chip.textContent).toContain('combined, no epochs');
+    expect(screen.getByRole('button', { name: 'Play epochs' }).hasAttribute('disabled')).toBe(true);
+    expect(screen.getByRole('button', { name: 'Next epoch' }).hasAttribute('disabled')).toBe(true);
+    expect(screen.getByText('The cube has no temporal information.')).toBeTruthy();
+  });
+
+  it('explains a cube fallback event in the provider trace', () => {
+    render(<ProviderTrace events={[{ stage: 'Using cube', at: 2, provider: 'S3 DR1 All-Sky Cube',
+      event_type: 'cube_fallback', outcome: 'succeeded', fallback: true, coverage_state: 'cube_fallback',
+      temporal_available: false, detail: 'Cube notice' }]} />);
+    expect(screen.getByText(/Cube notice/)).toBeTruthy();
+    expect(screen.getByText(/No temporal information/)).toBeTruthy();
+    expect(screen.queryByText(/S3 fallback attempted/)).toBeNull();
+  });
+
   it('shows provider failure and incomplete index coverage without claiming no observations', () => {
     render(<ProviderTrace events={[{ stage: 'IRSA failed', at: 1, provider: 'IRSA TAP',
       outcome: 'failed', detail: 'HTTP 502', fallback: true, coverage_state: 'unknown_not_indexed' }]} />);
