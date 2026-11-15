@@ -18,6 +18,17 @@ pnpm dev
 
 Open the Vite localhost URL. The frontend needs IRSA network access for the official HiPS and localhost/HTTPS for its service worker. Vite proxies `/api` to the FastAPI server on port 8000.
 
+## Container image
+
+Build the image from the frontend directory:
+
+```bash
+cd apps/web
+docker build -t iris-web .
+```
+
+Compose uses `apps/web` as the build context. The Node 24 build stage creates the Vite bundle; a non-root Distroless Node 24 runtime serves it on port `3000` and proxies `/api/` to `API_URL` (default: `http://server:8000`). Set `API_URL` in the root `.env` for the Docker network, or in `apps/web/.env` for the Vite development proxy (default: `http://127.0.0.1:8000`).
+
 ## Assistant
 
 The round button in the bottom-right corner opens the Planet X assistant (any OpenAI-compatible model, called by the backend; see `apps/server/README.md` → Contextual assistant). Ask about the app or give instructions such as “show M101 in RGB” or “open Records”. Each question carries the current interface state (workspace, channel, colour mode, selected region, map centre and zoom). The reply's actions run in the browser after a second validation (`src/assistant.ts`): opening a workspace, drawing a draft region in Sky (it never starts a job; press **Confirm region**), changing channel or colour mode. Each action shows under the reply, and the browser reports whether it ran. **Activity** lists the logged events of the conversation (model calls with tokens and latency, tools, cache hits, guardrails). Replies answered from the cache show **From cache**. **New** starts a new conversation. Without `ASSISTANT_API_KEY` and `ASSISTANT_MODEL` on the server the panel says the assistant is disabled.
@@ -84,8 +95,10 @@ the blank channels 50/51 are not offered. This is false colour built from the
 
 Open **Spectral Lab** in the top bar (`#/spectral`), or select and confirm a region in Sky
 and press **Visualize spectrum** to open the Lab with the spectrum at the centre of
-the selection already added. Add up to 8 spectra from the
-curated catalog or by typing RA/Dec in degrees; each is fetched from
+the selection already added. It is named after the searched object while the
+region centre is still on it (within one SPHEREx pixel, 6.2″); otherwise it shows
+the position in degrees (`RA°, Dec°`). Add up to 8 spectra from the
+five featured objects (Andromeda Galaxy, Eagle Nebula, Pleiades, Crab Nebula, Whirlpool Galaxy; SIMBAD positions, each with nearly all channels covered) or by typing RA/Dec in degrees; each is fetched from
 `GET /api/spectrum` and plotted as wavelength (µm) against surface brightness
 (MJy/sr) on one shared axis. Hover the chart for per-channel values and hit
 counts; switch the brightness axis between **Linear** and **Log** to compare

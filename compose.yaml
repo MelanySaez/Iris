@@ -1,21 +1,155 @@
 # Local development services. Run with `docker compose` or `podman compose`
 # from the repository root; both read variables from `.env` (see `.env.example`).
+
 services:
   db:
-    image: docker.io/library/postgres:17
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER:-iris}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-iris}
-      POSTGRES_DB: ${POSTGRES_DB:-iris}
-    ports:
-      - "127.0.0.1:${DB_PORT:-5433}:5432"
-    volumes:
-      - iris-pgdata:/var/lib/postgresql/data
+    image: postgres:18
+    restart: always
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
-      interval: 5s
-      timeout: 3s
-      retries: 10
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      retries: 5
+      start_period: 30s
+      timeout: 10s
+    volumes:
+      - postgres_data:/var/lib/postgresql/data/pgdata
+    environment:
+      - PGDATA=/var/lib/postgresql/data/pgdata
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD?Variable not set}
+      - POSTGRES_USER=${POSTGRES_USER?Variable not set}
+      - POSTGRES_DB=${POSTGRES_DB?Variable not set}
+
+  prestart:
+    image: ${DOCKER_IMAGE_BACKEND?Variable not set}
+    build:
+      context: ./apps/server
+      dockerfile: Dockerfile
+    command: bash scripts/prestart.sh
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - default
+      - traefik-public
+    environment:
+      - DATABASE_URL=postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      - CORS_ORIGINS=${CORS_ORIGINS?Variable not set}
+
+  server:
+    image: ${DOCKER_IMAGE_BACKEND?Variable not set}
+    build:
+      context: ./apps/server/
+      dockerfile: Dockerfile
+    depends_on:
+      db:
+        condition: service_healthy
+        restart: true
+      prestart:
+        condition: service_completed_successfully
+    networks:
+      - default
+      - traefik-public
+    environment:
+      - DATABASE_URL=postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      - CORS_ORIGINS=${CORS_ORIGINS?Variable not set}
+      - ASSISTANT_API_KEY=${ASSISTANT_API_KEY}
+      - ASSISTANT_MODEL=${ASSISTANT_MODEL}
+      - ASSISTANT_BASE_URL=${ASSISTANT_BASE_URL}
+      - ASSISTANT_MAX_TOKENS=${ASSISTANT_MAX_TOKENS}
+      - ASSISTANT_MAX_TOOL_ROUNDS=${ASSISTANT_MAX_TOOL_ROUNDS}
+      - ASSISTANT_RATE_LIMIT_PER_MINUTE=${ASSISTANT_RATE_LIMIT_PER_MINUTE}
+      - ASSISTANT_CACHE_TTL_SECONDS=${ASSISTANT_CACHE_TTL_SECONDS}
+      - ASSISTANT_CACHE_MAX_ENTRIES=${ASSISTANT_CACHE_MAX_ENTRIES}
+      - ASSISTANT_LOG_PATH=${ASSISTANT_LOG_PATH}
+
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health').read()"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=traefik-public
+      - traefik.constraint-label=traefik-public
+
+      - traefik.http.services.${STACK_NAME?Variable not set}-backend.loadbalancer.server.port=8000
+      - traefik.http.routers.${STACK_NAME?Variable not set}-backend-https.rule=Host(`api.${DOMAIN?Variable not set}`)
+      - traefik.http.routers.${STACK_NAME?Variable not set}-backend-https.entrypoints=https
+      - traefik.http.routers.${STACK_NAME?Variable not set}-backend-https.tls=true
+
+  web:
+    image: ${DOCKER_IMAGE_FRONTEND?Variable not set}
+    build:
+      context: ./apps/web
+      dockerfile: Dockerfile
+    networks:
+      - default
+      - traefik-public
+    environment:
+      - NODE_ENV=production
+      - API_URL=http://server:8000
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=traefik-public
+      - traefik.constraint-label=traefik-public
+
+      - traefik.http.services.${STACK_NAME?Variable not set}-frontend.loadbalancer.server.port=3000
+      - traefik.http.routers.${STACK_NAME?Variable not set}-frontend-https.rule=Host(`${DOMAIN?Variable not set}`)
+      - traefik.http.routers.${STACK_NAME?Variable not set}-frontend-https.entrypoints=https
+      - traefik.http.routers.${STACK_NAME?Variable not set}-frontend-https.tls=true
+
+  traefik:
+    image: traefik:v3.6
+    restart: always
+    command:
+      # Enable Docker in Traefik and don't expose all service by default
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --providers.file.directory=/etc/traefik/dynamic
+      - --providers.file.watch=true
+
+      # Listen HTTP traffic
+      - --entrypoints.http.address=:80
+      - --entrypoints.http.http.redirections.entrypoint.to=https
+      - --entrypoints.http.http.redirections.entrypoint.scheme=https
+
+      # Listen HTTPS traffic using the mounted certificate.
+      - --entrypoints.https.address=:443
+
+      - --accesslog
+      - --log
+      - --api
+      - --api.dashboard=true
+    ports:
+      - 80:80
+      - 443:443
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./certs:/certs:ro
+      - ./traefik/dynamic:/etc/traefik/dynamic:ro
+    networks:
+      - traefik-public
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=traefik-public
+      - traefik.http.services.traefik-${STACK_NAME?Variable not set}.loadbalancer.server.port=8080
+
+      - traefik.http.routers.traefik-${STACK_NAME?Variable not set}-https.entrypoints=https
+      - traefik.http.routers.traefik-${STACK_NAME?Variable not set}-https.rule=Host(`traefik.${DOMAIN?Variable not set}`)
+      - traefik.http.routers.traefik-${STACK_NAME?Variable not set}-https.service=api@internal
+      - traefik.http.routers.traefik-${STACK_NAME?Variable not set}-https.tls=true
+
+      # Create a middleware to protect the Traefik dashboard with HTTP Basic auth
+      - traefik.http.middlewares.admin-auth.basicauth.users=${TRAEFIK_USERNAME?Variable not set}:${TRAEFIK_HASHED_PASSWORD?Variable not set}
+      # Enable HTTP Basic auth, using the middleware created above
+      - traefik.http.routers.traefik-${STACK_NAME?Variable not set}-https.middlewares=admin-auth
 
 volumes:
-  iris-pgdata:
+  postgres_data:
+
+networks:
+  default:
+    driver: bridge
+  traefik-public:
+    external: true

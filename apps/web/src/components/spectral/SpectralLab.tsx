@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { FormEvent, PointerEvent as ReactPointerEvent, WheelEvent as ReactWheelEvent } from 'react';
-import { api, ApiError, CURATED_CATALOG_FALLBACK } from '../../api';
+import { LAB_FEATURED } from '../../labFeatured';
+import { api, ApiError } from '../../api';
 import {
   MAX_SPECTRA,
   SERIES_COLORS,
@@ -22,7 +23,7 @@ import {
   zoomDomainAt,
 } from '../../spectrum';
 import type { YScaleMode } from '../../spectrum';
-import type { CatalogObject, CubeSpectrumResponse } from '../../types';
+import type { CubeSpectrumResponse } from '../../types';
 import './SpectralLab.css';
 
 interface SpectrumEntry {
@@ -57,7 +58,6 @@ export interface SpectrumRequest {
 }
 
 export function SpectralLab({ request = null }: { request?: SpectrumRequest | null } = {}) {
-  const [catalog, setCatalog] = useState<CatalogObject[]>(CURATED_CATALOG_FALLBACK);
   const [entries, setEntries] = useState<SpectrumEntry[]>([]);
   const [raText, setRaText] = useState('');
   const [decText, setDecText] = useState('');
@@ -73,20 +73,6 @@ export function SpectralLab({ request = null }: { request?: SpectrumRequest | nu
     setEntries(entriesRef.current);
   }, []);
 
-  useEffect(() => {
-    let active = true;
-    void api
-      .getCatalog()
-      .then((res) => {
-        if (active && res.objects.length) setCatalog(res.objects);
-      })
-      .catch(() => {
-        // Keep the curated fallback list.
-      });
-    return () => {
-      active = false;
-    };
-  }, []);
 
   const addSpectrum = useCallback(
     (label: string, ra: number, dec: number) => {
@@ -154,8 +140,10 @@ export function SpectralLab({ request = null }: { request?: SpectrumRequest | nu
         aria-hidden={!sidebarVisible} inert={!sidebarVisible}>
         <section data-tour="lab-add">
           <h2 className="spectral-heading">Add a spectrum</h2>
+          <h3 className="spectral-subheading">Featured objects</h3>
+          <p className="spectral-subheading-note">Well-known targets to get you started</p>
           <ul className="spectral-catalog">
-            {catalog.map((obj) => {
+            {LAB_FEATURED.map((obj) => {
               const taken = entries.some((e) => e.key === spectrumKey(obj.ra_deg, obj.dec_deg));
               return (
                 <li key={obj.id}>
@@ -165,13 +153,17 @@ export function SpectralLab({ request = null }: { request?: SpectrumRequest | nu
                     onClick={() => addSpectrum(obj.name, obj.ra_deg, obj.dec_deg)}
                     title={`RA ${obj.ra_deg.toFixed(3)}°, Dec ${obj.dec_deg.toFixed(3)}°`}
                   >
-                    <span>{obj.name}</span>
+                    <span className="spectral-catalog-names">
+                      <span className="spectral-catalog-title">{obj.name}</span>
+                      <span className="spectral-catalog-subtitle">{obj.catalogue}</span>
+                    </span>
                     <span className="spectral-catalog-type">{taken ? 'added' : obj.type}</span>
                   </button>
                 </li>
               );
             })}
           </ul>
+          <h3 className="spectral-subheading spectral-subheading-coords">Or enter coordinates</h3>
           <form className="spectral-coords" onSubmit={handleSubmit} noValidate>
             <label>
               RA (deg)
@@ -262,7 +254,8 @@ export function SpectralLab({ request = null }: { request?: SpectrumRequest | nu
         onClick={() => setSidebarVisible((visible) => !visible)}
       >
         <svg aria-hidden="true" viewBox="0 0 16 16" focusable="false">
-          <path d={sidebarVisible ? 'M10 3 5 8l5 5' : 'M6 3l5 5-5 5'} />
+          {/* One arrow, rotated by CSS when collapsed, so it turns instead of jumping. */}
+          <path d="M10 3 5 8l5 5" />
         </svg>
         <span>{sidebarVisible ? 'Hide' : 'Show'}</span>
       </button>
@@ -317,11 +310,18 @@ function SpectrumChart({ entries, mode }: { entries: PlottedEntry[]; mode: YScal
   useEffect(() => {
     const el = containerRef.current;
     if (!el || typeof ResizeObserver === 'undefined') return;
+    // While the sidebar animates the width changes every frame: redraw at most once per frame.
+    let frame = 0;
     const observer = new ResizeObserver(([entry]) => {
-      setWidth(Math.max(280, Math.floor(entry.contentRect.width)));
+      const next = Math.max(280, Math.floor(entry.contentRect.width));
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => setWidth(next));
     });
     observer.observe(el);
-    return () => observer.disconnect();
+    return () => {
+      cancelAnimationFrame(frame);
+      observer.disconnect();
+    };
   }, []);
 
   const plottedSeries = useMemo(
