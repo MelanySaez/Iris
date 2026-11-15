@@ -122,15 +122,20 @@ class Selection(Base):
         ),
         CheckConstraint("mode IN ('latest', 'history')", name="selection_mode"),
         CheckConstraint("stretch IN ('asinh', 'linear')", name="selection_stretch"),
+        UniqueConstraint("owner_id", "job_id", name="selection_owner_job"),
         Index("selection_last_seen_at", text("last_seen_at DESC")),
+        Index("selection_owner_last_seen_at", "owner_id", text("last_seen_at DESC")),
+        Index("selection_job_id", "job_id"),
         Index("selection_region_id", "region_id"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid()
     )
+    # The browser that saved the record (its owner cookie); see app.api.routes.consent.
+    owner_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True))
     region_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("sky_region.id"))
-    job_id: Mapped[str] = mapped_column(CHAR(20), unique=True)
+    job_id: Mapped[str] = mapped_column(CHAR(20))
     channels: Mapped[list[int]] = mapped_column(ARRAY(SmallInteger))
     products: Mapped[list[str]] = mapped_column(ARRAY(Text))
     mode: Mapped[str] = mapped_column(Text)

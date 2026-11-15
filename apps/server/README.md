@@ -11,7 +11,7 @@ uv run uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 
 ## Database (selection records)
 
-Every job submission is saved as a selection record in PostgreSQL (SQLAlchemy + Alembic). Storage is optional: when `DATABASE_URL` is unset or invalid, jobs still work and `/api/selections` answers 503. A driverless `postgresql://` URL is accepted and uses psycopg 3. Saving runs inside `POST /api/jobs`, so an unreachable database can delay a submission by up to 3 seconds (connect timeout).
+Job submissions are saved as selection records in PostgreSQL (SQLAlchemy + Alembic), one set of records per browser. There is no login: see **Cookie consent and record owners** below. Storage is optional: when `DATABASE_URL` is unset or invalid, jobs still work and `/api/selections` answers 503. A driverless `postgresql://` URL is accepted and uses psycopg 3. Saving runs inside `POST /api/jobs`, so an unreachable database can delay a submission by up to 3 seconds (connect timeout).
 
 1. Create the two environment files from their templates. The root `.env` configures the container (`DB_PORT`, 5433 by default so it does not clash with a system PostgreSQL, plus `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`). `apps/server/.env` configures the backend (`DATABASE_URL`, `CORS_ORIGINS`, and optional assistant settings); keep its credentials and port in sync with the root file:
 
@@ -48,6 +48,19 @@ uv run pytest -q   # in apps/server
 `POST /api/jobs` accepts an optional `view` describing how the Sky map showed the region: `{"mode": "single"}` or `{"mode": "rgb", "rgb": [r, g, b]}` (channels 0..101; `rgb` is required for `rgb` and rejected for `single`). It is display metadata: it does not change the job id or the channels the job processes. The saved selection stores the latest view it was sent as `view_mode` and `rgb_channels` (migration `0004`); a request without `view` keeps the recorded one, and selections saved before `0004` have both as `null`.
 
 ### Selection names
+
+### Cookie consent and record owners
+
+There is no login, so records belong to a browser. Accepting cookies (`necessary` or `all`; the records cookie counts as necessary) through `POST /api/consent` sets two cookies, both for one year, `SameSite=Lax` and `Path=/`. They are `Secure` when the request arrived over HTTPS; behind a proxy that terminates TLS, run uvicorn with `--forwarded-allow-ips` set to the proxy address so it sees the original scheme, or set `COOKIE_SECURE=true` (or `false`) to force the flag.
+
+- `iris_owner`: a random UUID, `HttpOnly`. Selections are saved under it (`selection.owner_id`, migration `0006`), and every selection endpoint only reads or changes that owner's rows. It only counts while `iris_consent` is `necessary` or `all`. Choosing again keeps the existing owner, so records are never orphaned by a new choice. If the consent cookie accepts cookies but the owner cookie was lost, the next job submission, selection request or assistant chat issues a new owner (the earlier records stay with the lost one).
+- `iris_consent`: the choice (`necessary`, `all` or `none`), readable by the web app so it knows whether to show the cookie bar.
+
+Without accepted consent (`none`, or no choice yet) jobs still run, but `POST /api/jobs` saves nothing and the selection endpoints answer `403` with `Selections are saved only after accepting cookies. Accept the necessary cookies to keep your records.`. Choosing `none` keeps `iris_owner`: the browser's records stay in the database, hidden, and come back if it accepts again. The assistant's `list_saved_selections` tool reads only the asking browser's records.
+
+When a browser accepts later, the web app sends the job ids it submitted before accepting to `POST /api/selections/claim`, which saves the ones the owner does not have yet with their current status and outcome (jobs are read from memory or their on-disk snapshot). Jobs the owner already has are left untouched, so claiming again never counts extra hits.
+
+The same region selected by two browsers is two rows (unique `(owner_id, job_id)`); the job itself is shared, so its outcome reaches both. Migration `0006` deletes every selection saved before owners existed, since none can be attributed to a browser; shared region and product rows are kept, and the downgrade does not restore the deleted rows.
 
 `PATCH /api/selections/{id}` with `{"name": "M101 core"}` sets the name shown in Records and returns the updated selection. The name is trimmed and limited to 80 characters (longer names get `422`); a blank name or `null` clears it, and the `name` key is required. Unknown ids get `404`. Job submissions never change the name, so selecting the same region again keeps it. Stored in `selection.name` (migration `0005`).
 
@@ -109,9 +122,11 @@ All endpoints are mounted under `/api`:
 - `GET /api/jobs/{id}/frames/{channel}/{product}.npy`: Export raw float32/int32 NumPy array (`image`, `variance`, `flags`, `wavelengths`, `bandwidths`).
 - `GET /api/jobs/{id}/pixel?x=&y=&channel=&epoch=`: Per-pixel probe returning calibrated units, raw values, exact LVF wavelength/bandwidth, channel window inclusion, and set `MP_*` flag bit names.
 - `GET /api/jobs/{id}/manifest`: Complete scientific provenance document for the plate inspector.
-- `GET /api/selections?limit=&before=`: Saved selections (one per job request), most recently seen first, with `job_status` and, for failed jobs, `job_error` plus its traceability fields (see below). `next_before` is the cursor for the next page.
+- `POST /api/consent` with `{"level": "necessary" | "all" | "none"}`: Stores the cookie choice and answers `{level, records_enabled}`. See **Cookie consent and record owners**.
+- `POST /api/selections/claim` with `{"job_ids": [...]}` (at most 100): Saves, for a browser that just accepted cookies, the jobs it submitted before accepting. Answers `{claimed}`, the number of selections added; unknown job ids and jobs the browser already has are skipped.
+- `GET /api/selections?limit=&before=`: The browser's saved selections (one per job request), most recently seen first, with `job_status` and, for failed jobs, `job_error` plus its traceability fields (see below). `next_before` is the cursor for the next page.
 - `GET /api/selections/{id}`: One saved selection with its discovered spectral products and, for ready jobs, the provenance manifest.
-- `DELETE /api/selections/{id}`: Delete one saved selection (204). Shared region data is kept. All selection endpoints answer 503 when `DATABASE_URL` is unset.
+- `DELETE /api/selections/{id}`: Delete one saved selection (204). Shared region data is kept. All selection endpoints answer 503 when `DATABASE_URL` is unset and 403 while the browser has not accepted cookies (consent cookie not `necessary` or `all`).
 
 ## Provenance & Scientific Limitations
 

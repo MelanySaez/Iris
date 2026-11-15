@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Query, Response
+import uuid
 
+from fastapi import APIRouter, Depends, Query, Response
+
+from app.api.routes.consent import resolve_owner
 from app.core.config import WAVELENGTH_STATUS
 from app.schemas.jobs import JobRequest, JobSnapshot, ManifestResponse, PixelResponse
 from app.services.job_queries import (
@@ -18,9 +21,14 @@ router = APIRouter(prefix="/api/jobs", tags=["jobs"])
 
 
 @router.post("", status_code=202, response_model=JobSnapshot)
-def create_job(req: JobRequest) -> JobSnapshot:
-    """Submit a spectral plate preparation job or return deduplicated existing job."""
-    job = job_manager.submit(req)
+def create_job(
+    req: JobRequest, owner: uuid.UUID | None = Depends(resolve_owner)
+) -> JobSnapshot:
+    """Submit a spectral plate preparation job or return deduplicated existing job.
+
+    The selection is saved only for a browser that accepted cookies.
+    """
+    job = job_manager.submit(req, owner=owner)
     return JobSnapshot(**job.to_snapshot())
 
 

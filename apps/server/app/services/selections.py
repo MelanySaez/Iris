@@ -37,32 +37,51 @@ class SelectionService:
         return self.repository.engine_url
 
     def list_selections(
-        self, limit: int, before: datetime | None = None
+        self, owner_id: uuid.UUID, limit: int, before: datetime | None = None
     ) -> tuple[list[Selection], datetime | None]:
-        """One page of saved selections plus the cursor for the next page."""
-        rows = self.repository.list(limit=limit, before=before)
+        """One page of the owner's selections plus the cursor for the next page."""
+        rows = self.repository.list(owner_id, limit=limit, before=before)
         next_before = rows[-1].last_seen_at if len(rows) == limit else None
         return rows, next_before
 
-    def list_recent(self, limit: int) -> list[Selection]:
-        """Most recently seen selections, newest first."""
-        return self.repository.list(limit=limit)
+    def list_recent(self, owner_id: uuid.UUID, limit: int) -> list[Selection]:
+        """The owner's most recently seen selections, newest first."""
+        return self.repository.list(owner_id, limit=limit)
 
-    def get(self, selection_id: uuid.UUID) -> Selection:
-        sel = self.repository.get(selection_id)
+    def get(self, owner_id: uuid.UUID, selection_id: uuid.UUID) -> Selection:
+        sel = self.repository.get(owner_id, selection_id)
         if sel is None:
             raise SelectionNotFoundError("Selection not found.")
         return sel
 
-    def rename(self, selection_id: uuid.UUID, name: str | None) -> Selection:
-        sel = self.repository.rename(selection_id, name)
+    def rename(
+        self, owner_id: uuid.UUID, selection_id: uuid.UUID, name: str | None
+    ) -> Selection:
+        sel = self.repository.rename(owner_id, selection_id, name)
         if sel is None:
             raise SelectionNotFoundError("Selection not found.")
         return sel
 
-    def delete(self, selection_id: uuid.UUID) -> None:
-        if not self.repository.delete(selection_id):
+    def delete(self, owner_id: uuid.UUID, selection_id: uuid.UUID) -> None:
+        if not self.repository.delete(owner_id, selection_id):
             raise SelectionNotFoundError("Selection not found.")
+
+    def claim(self, owner_id: uuid.UUID, jobs: list[JobState]) -> int:
+        """Save, for a browser that just accepted cookies, the jobs it submitted
+        before accepting. Each job the browser does not have yet becomes its
+        selection with the current status and, when finished, its outcome; jobs
+        it already has are left as they are. Returns how many were added."""
+        recorder = SelectionRecorder(self.repository)
+        added = 0
+        for job in jobs:
+            if not self.repository.claim_submission(
+                owner_id, job.id, job.request, job.status
+            ):
+                continue
+            added += 1
+            if job.status in TERMINAL_STATUSES:
+                recorder.on_finished(job)
+        return added
 
 
 class SelectionRecorder:
@@ -72,11 +91,18 @@ class SelectionRecorder:
         self.store = store
 
     def on_submitted(
-        self, job: JobState, is_new: bool, request: JobRequest | None = None
+        self,
+        job: JobState,
+        is_new: bool,
+        request: JobRequest | None = None,
+        owner: uuid.UUID | None = None,
     ) -> None:
+        if owner is None:
+            # The browser did not accept cookies: nothing is saved for it.
+            return
         # The submitted request carries the latest view; job.request may be an older one.
         result = self.store.record_submission(
-            job.id, request or job.request, job.status, new_attempt=is_new
+            owner, job.id, request or job.request, job.status, new_attempt=is_new
         )
         if is_new or job.status not in TERMINAL_STATUSES:
             return

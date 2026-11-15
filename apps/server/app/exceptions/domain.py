@@ -131,6 +131,12 @@ class SelectionNotFoundError(NotFoundError):
     """No selection record exists for the requested id."""
 
 
+class SelectionsConsentRequiredError(AppError):
+    """The browser has no owner cookie: cookies were not accepted."""
+
+    status_code = 403
+
+
 class SelectionsDisabledError(ServiceUnavailableError):
     """Selection persistence is disabled because ``DATABASE_URL`` is unset."""
 

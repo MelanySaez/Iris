@@ -3855,3 +3855,66 @@ p.name-suggestion-error {
 .dock-preset-btn.active { background: var(--sky-ink); border-color: var(--sky-ink); color: #18181b; font-weight: 700; }
 .dock-preset-btn.active:hover { background: var(--sky-ink); }
 .dock-preset-btn:focus-visible { outline: 2px solid var(--sky-ink); outline-offset: 2px; }
+
+/* -- Cookie consent bar (Records are saved only after accepting) -------------- */
+
+.consent-bar {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 90; /* above the assistant launcher */
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-top: 1px solid var(--sky-glass-border);
+  background: var(--sky-glass-bg);
+  color: var(--sky-ink);
+  box-shadow: 0 -8px 28px rgba(0, 0, 0, 0.45);
+}
+
+.consent-bar-text {
+  flex: 1 1 420px;
+  margin: 0;
+  color: var(--sky-muted);
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.consent-bar-error {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--sky-danger);
+  font-size: 0.85rem;
+}
+
+.consent-bar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.consent-bar-primary {
+  border-color: var(--sky-accent);
+  background: var(--sky-accent);
+  color: var(--sky-bg);
+}
+
+.records-consent {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  padding: 14px 16px;
+  border: 1px solid var(--sky-line-strong);
+  border-radius: 8px;
+  color: var(--sky-muted);
+}
+
+.records-consent p {
+  flex: 1 1 320px;
+  margin: 0;
+}

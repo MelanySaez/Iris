@@ -12,10 +12,12 @@ import {
 import { AssistantWidget, type ActionResult } from './components/assistant/AssistantWidget';
 import { Landing } from './components/landing/Landing';
 import { GuidedTour } from './components/tour/GuidedTour';
+import { ConsentBar } from './components/consent/ConsentBar';
 import type { AssistantAction, AssistantUiContext } from './assistant';
 import { SpectralLab, type SpectrumRequest } from './components/spectral/SpectralLab';
 import type { SpectrumTarget } from './components/sky/SelectionActions';
 import { useJobPoller } from './hooks/useJobPoller';
+import { useRecordsConsent } from './hooks/useRecordsConsent';
 import { useRoute } from './router';
 import type { JobCreateRequest, RegionRequest } from './types';
 
@@ -71,6 +73,8 @@ export function App() {
   const [jobCreateError, setJobCreateError] = useState<string | null>(null);
 
   const { snapshot: activeJob, updateSnapshot, pollError, pollRetry, retryPoll } = useJobPoller(activeJobId);
+  const consent = useRecordsConsent();
+  const { beginJob } = consent;
 
   // Track the live route so job creation can follow the current workspace
   // without re-creating the callback on every navigation.
@@ -87,8 +91,11 @@ export function App() {
   // Create job from sky or plate
   const handleStartJob = useCallback(
     async (req: JobCreateRequest) => {
+      // Without cookies the backend saves nothing; the job is recovered on acceptance.
+      const finishJob = beginJob();
       try {
         const snap = await api.createJob(req);
+        finishJob(snap.id);
         updateSnapshot(snap);
         setActiveJobId(snap.id);
         setJobCreateError(null);
@@ -106,7 +113,7 @@ export function App() {
         throw err;
       }
     },
-    [updateSnapshot, navigate],
+    [updateSnapshot, navigate, beginJob],
   );
 
   // Sky selection → Spectral Lab: each click is a new request id, consumed once.
@@ -256,7 +263,13 @@ export function App() {
 
         {isRecords && (
           <div className="workspace-layer records-layer layer-active" aria-hidden={false}>
-            <RecordsWorkspace onOpenPlate={handleOpenPlate} onShowInSky={handleShowInSky} />
+            <RecordsWorkspace
+              key={consent.recordsVersion}
+              onOpenPlate={handleOpenPlate}
+              onShowInSky={handleShowInSky}
+              recordsEnabled={consent.recordsEnabled}
+              onOpenCookieSettings={consent.openBar}
+            />
           </div>
         )}
 
@@ -286,6 +299,9 @@ export function App() {
       </div>
 
       {!isLanding && <AssistantWidget getContext={getAssistantContext} onAction={handleAssistantAction} />}
+      {consent.barOpen && (
+        <ConsentBar onChoose={(level) => void consent.choose(level)} saving={consent.saving} error={consent.error} />
+      )}
     </div>
   );
 }

@@ -7,6 +7,7 @@ import logging
 import threading
 import time
 import traceback
+import uuid
 from collections import OrderedDict
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
@@ -143,12 +144,18 @@ class JobObserver(Protocol):
     """
 
     def on_submitted(
-        self, job: JobState, is_new: bool, request: JobRequest | None = None
+        self,
+        job: JobState,
+        is_new: bool,
+        request: JobRequest | None = None,
+        owner: uuid.UUID | None = None,
     ) -> None:
         """``is_new`` is False for cache hits: the job will not run again.
 
         ``request`` is the request just submitted. On a cache hit it can differ
         from ``job.request`` in fields outside the job id, such as ``view``.
+        ``owner`` identifies the browser that submitted it, or is None when
+        that browser did not accept cookies.
         """
 
     def on_discovered(self, job: JobState, discovery: dict[str, Any]) -> None: ...
@@ -236,14 +243,14 @@ class JobManager:
         if "image" not in req.products:
             req.products.append("image")
 
-    def submit(self, req: JobRequest) -> JobState:
+    def submit(self, req: JobRequest, owner: uuid.UUID | None = None) -> JobState:
         """Submit a job or retrieve an active/cached one, notifying observers.
 
         Observers hear about the submission before a new job is scheduled, so
         no lifecycle event can reach them ahead of ``on_submitted``.
         """
         job, is_new = self._submit(req)
-        self._notify("on_submitted", job, is_new, req)
+        self._notify("on_submitted", job, is_new, req, owner)
         if is_new:
             self.pool.submit(self._run_job, job)
         return job
