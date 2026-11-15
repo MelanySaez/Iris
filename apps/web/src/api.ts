@@ -198,7 +198,7 @@ export const api = {
     });
   },
 
-  async assistantStatus(): Promise<{ enabled: boolean; model: string }> {
+  async assistantStatus(): Promise<{ enabled: boolean; model: string | null }> {
     return request('/api/assistant/status');
   },
 

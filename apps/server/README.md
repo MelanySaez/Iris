@@ -81,7 +81,7 @@ SPHEREX_SPECTRAL_FITS=/path/to/level2.fits uv run uvicorn app.main:app --reload
 
 ## Contextual assistant
 
-A chat assistant (bubble in the bottom-right corner of the web app) backed by Claude through the official Anthropic SDK. Set `ANTHROPIC_API_KEY` in `.env` to enable it; without it the assistant endpoints answer `503` and nothing else changes. Model and limits are configurable (`ASSISTANT_*`, see `.env.example`); the default model is `claude-opus-5-5` with server-side refusal fallbacks.
+A chat assistant (bubble in the bottom-right corner of the web app) that works with any model you choose behind an OpenAI-compatible Chat Completions API, through the official OpenAI SDK. Set `ASSISTANT_API_KEY` and `ASSISTANT_MODEL` in `.env`, plus `ASSISTANT_BASE_URL` for providers other than OpenAI (OpenRouter, Groq, Together, Ollama, vLLM, LM Studio…). The model must support tool calling. There is no default model; until both values are set the assistant endpoints answer `503` and nothing else changes. Limits are configurable (`ASSISTANT_*`, see `.env.example`). Restart the server after changing them.
 
 | Endpoint | Purpose |
 |----------|---------|
@@ -92,11 +92,11 @@ A chat assistant (bubble in the bottom-right corner of the web app) backed by Cl
 
 How it works (`app/assistant/`):
 
-- **System prompt** (`prompt.py`): the general instruction for Planet X. It is a frozen string so the tools + system prefix is cached by the API (prompt caching).
+- **System prompt** (`prompt.py`): the general instruction for Planet X. It is a frozen string sent first, so providers with automatic prefix caching (such as OpenAI) can reuse it.
 - **Tools** (`tools.py`): `search_catalog` and `list_saved_selections` run on the server and only read data; `navigate`, `show_region`, `set_channel` and `set_color_mode` are validated and returned as `actions` that the browser runs after the reply. No tool starts jobs, renames or deletes; `show_region` only draws a draft that the person confirms.
 - **Guardrails** (`guardrails.py`, `service.py`): the UI context and tool results reach the model as delimited data (`<ui_context>`, `<tool_data>`); user-written names are sanitized; every tool input is validated against an allowlist and ranges (and again in the browser); suspected injection phrases are flagged in the log; a canary blocks replies that leak the system prompt; requests are limited in length (2000 characters), history (21 messages), tool rounds (6) and rate (20 per minute per client); refusals get a safe reply.
-- **Response cache** (`cache.py`): equal requests (normalized text) and similar ones (≥ 0.85 word overlap with the same numbers) in the same context (workspace, channel, colour mode, selection, earlier turns) are answered from memory, replaying their actions, for up to `ASSISTANT_CACHE_TTL_SECONDS`. Answers that read saved selections, refusals and truncated replies are not cached.
-- **Logs** (`logbook.py`): an append-only JSONL file (`data/logs/assistant.jsonl`, git-ignored) with one line per request, model call (model served, stop reason, input/output and cache tokens, latency), tool call, UI action, cache hit, guardrail event, error and UI outcome. It stores message previews (first 200 characters) but never the API key.
+- **Response cache** (`cache.py`): equal requests (normalized text) and similar ones (≥ 0.85 word overlap with the same numbers) in the same context (workspace, channel, colour mode, selection, earlier turns) are answered from memory without calling the model, replaying their actions, for up to `ASSISTANT_CACHE_TTL_SECONDS`. Answers that read saved selections, refusals and truncated replies are not cached.
+- **Logs** (`logbook.py`): an append-only JSONL file (`data/logs/assistant.jsonl`, git-ignored) with one line per request, model call (model served, finish reason, input/output and cached tokens when the provider reports them, latency), tool call, UI action, cache hit, guardrail event, error and UI outcome. It stores message previews (first 200 characters) but never the API key.
 
 ## Endpoints
 

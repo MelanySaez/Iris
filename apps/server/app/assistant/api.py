@@ -20,7 +20,6 @@ from app.config import (
     ASSISTANT_CACHE_MAX_ENTRIES,
     ASSISTANT_CACHE_TTL_SECONDS,
     ASSISTANT_LOG_PATH,
-    ASSISTANT_MODEL,
     ASSISTANT_RATE_LIMIT_PER_MINUTE,
 )
 
@@ -34,27 +33,37 @@ SIMILARITY_THRESHOLD = 0.85
 router = APIRouter(prefix="/api/assistant", tags=["assistant"])
 
 _assistant: Assistant | None = None
+_assistant_settings: tuple[str, str, str | None] | None = None
 _lock = threading.Lock()
 
+DISABLED_DETAIL = (
+    "The assistant is disabled: set ASSISTANT_API_KEY and ASSISTANT_MODEL on the server "
+    "(and ASSISTANT_BASE_URL for an OpenAI-compatible provider other than OpenAI)."
+)
 
-def _enabled() -> bool:
-    return bool(os.environ.get("ANTHROPIC_API_KEY"))
+
+def _settings() -> tuple[str, str, str | None] | None:
+    """(api key, model, base URL) from the environment, or None until both are set."""
+    key = os.environ.get("ASSISTANT_API_KEY", "").strip()
+    model = os.environ.get("ASSISTANT_MODEL", "").strip()
+    if not key or not model:
+        return None
+    return key, model, os.environ.get("ASSISTANT_BASE_URL", "").strip() or None
 
 
 def get_assistant() -> Assistant:
-    """The shared assistant; 503 while no API key is configured."""
-    global _assistant
-    if not _enabled():
-        raise HTTPException(
-            status_code=503,
-            detail="The assistant is disabled: set ANTHROPIC_API_KEY on the server.",
-        )
+    """The shared assistant; 503 while the key or the model is missing."""
+    global _assistant, _assistant_settings
+    settings = _settings()
+    if settings is None:
+        raise HTTPException(status_code=503, detail=DISABLED_DETAIL)
     with _lock:
-        if _assistant is None:
-            import anthropic
+        if _assistant is None or settings != _assistant_settings:
+            import openai
 
+            key, model, base_url = settings
             _assistant = Assistant(
-                client=anthropic.Anthropic(),
+                client=openai.OpenAI(api_key=key, base_url=base_url),
                 log=AssistantLog(ASSISTANT_LOG_PATH),
                 cache=ResponseCache(
                     max_entries=ASSISTANT_CACHE_MAX_ENTRIES,
@@ -62,7 +71,9 @@ def get_assistant() -> Assistant:
                     similarity=SIMILARITY_THRESHOLD,
                 ),
                 rate_limiter=RateLimiter(ASSISTANT_RATE_LIMIT_PER_MINUTE),
+                model=model,
             )
+            _assistant_settings = settings
         return _assistant
 
 
@@ -169,7 +180,8 @@ class UiOutcome(BaseModel):
 
 @router.get("/status")
 def assistant_status() -> dict[str, Any]:
-    return {"enabled": _enabled(), "model": ASSISTANT_MODEL}
+    settings = _settings()
+    return {"enabled": settings is not None, "model": settings[1] if settings else None}
 
 
 @router.post("/chat", response_model=ChatResponse)

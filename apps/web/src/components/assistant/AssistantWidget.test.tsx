@@ -28,7 +28,7 @@ async function send(text: string) {
 
 describe('AssistantWidget', () => {
   beforeEach(() => {
-    vi.spyOn(api, 'assistantStatus').mockResolvedValue({ enabled: true, model: 'claude-opus-5-5' });
+    vi.spyOn(api, 'assistantStatus').mockResolvedValue({ enabled: true, model: 'test-model' });
     vi.spyOn(api, 'reportAssistantOutcome').mockResolvedValue(undefined);
   });
   afterEach(() => {
@@ -119,10 +119,10 @@ describe('AssistantWidget', () => {
   });
 
   it('explains when the assistant is disabled on the server', async () => {
-    vi.mocked(api.assistantStatus).mockResolvedValue({ enabled: false, model: 'claude-opus-5-5' });
+    vi.mocked(api.assistantStatus).mockResolvedValue({ enabled: false, model: 'test-model' });
     setup();
     await openPanel();
-    expect(await screen.findByText(/set ANTHROPIC_API_KEY/)).toBeTruthy();
+    expect(await screen.findByText(/set ASSISTANT_API_KEY and ASSISTANT_MODEL/)).toBeTruthy();
     expect((screen.getByRole('textbox', { name: 'Message the assistant' }) as HTMLTextAreaElement).disabled).toBe(true);
   });
 
@@ -142,7 +142,7 @@ describe('AssistantWidget', () => {
   it('lists the logged activity of the conversation', async () => {
     const logs = vi.spyOn(api, 'assistantLogs').mockResolvedValue({
       items: [
-        { ts: '2026-11-14T20:00:01Z', event: 'model_call', model: 'claude-opus-5-5', input_tokens: 900, output_tokens: 40, latency_ms: 1200, stop_reason: 'end_turn' },
+        { ts: '2026-11-14T20:00:01Z', event: 'model_call', model: 'test-model', input_tokens: 900, output_tokens: 40, latency_ms: 1200, stop_reason: 'end_turn' },
         { ts: '2026-11-14T20:00:00Z', event: 'cache_hit', kind: 'similar' },
       ],
     });
@@ -152,7 +152,7 @@ describe('AssistantWidget', () => {
 
     await waitFor(() => expect(logs).toHaveBeenCalled());
     expect(logs.mock.calls[0][0]?.conversationId).toMatch(/^[0-9a-f-]{36}$/);
-    expect(await screen.findByText(/claude-opus-5-5 · 900 in \/ 40 out · 1200 ms/)).toBeTruthy();
+    expect(await screen.findByText(/test-model · 900 in \/ 40 out · 1200 ms/)).toBeTruthy();
     expect(screen.getByText(/similar/)).toBeTruthy();
   });
 });

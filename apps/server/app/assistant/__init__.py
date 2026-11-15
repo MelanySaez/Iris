@@ -1,1 +1,1 @@
-"""Contextual assistant: a Claude-backed chat that can read and drive the UI."""
+"""Contextual assistant: an OpenAI-compatible chat that can read and drive the UI."""

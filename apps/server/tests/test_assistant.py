@@ -1,7 +1,7 @@
 """Contextual assistant: tool loop, guardrails, response cache and logs.
 
-The Anthropic client is replaced by a scripted fake, so no test calls the API
-or spends tokens.
+The OpenAI-compatible client is replaced by a scripted fake that mimics the
+Chat Completions response shape, so no test calls a provider or spends tokens.
 """
 
 from __future__ import annotations
@@ -30,33 +30,51 @@ CONVERSATION = "3f1c2a4e-0b7d-4c55-9a6e-1d2f3a4b5c6d"
 CONTEXT = {"workspace": "sky", "channel": 44, "color_mode": "single"}
 
 
-# -- scripted fake of the Anthropic client -----------------------------------
+# -- scripted fake of an OpenAI-compatible client ------------------------------
+
+FINISH = {"end_turn": "stop", "tool_use": "tool_calls", "max_tokens": "length"}
 
 
 def text_block(text: str) -> SimpleNamespace:
-    return SimpleNamespace(type="text", text=text)
+    return SimpleNamespace(kind="text", text=text)
 
 
-def tool_block(name: str, tool_input: dict[str, Any], block_id: str) -> SimpleNamespace:
-    return SimpleNamespace(type="tool_use", name=name, input=tool_input, id=block_id)
-
-
-def reply(*blocks: SimpleNamespace, stop: str = "end_turn") -> SimpleNamespace:
+def tool_block(name: str, tool_input: Any, call_id: str) -> SimpleNamespace:
+    arguments = tool_input if isinstance(tool_input, str) else json.dumps(tool_input)
     return SimpleNamespace(
-        content=list(blocks),
-        stop_reason=stop,
-        stop_details=None,
-        model="claude-opus-5-5",
-        usage=SimpleNamespace(
-            input_tokens=120,
-            output_tokens=30,
-            cache_read_input_tokens=0,
-            cache_creation_input_tokens=0,
+        kind="tool",
+        call=SimpleNamespace(
+            id=call_id,
+            type="function",
+            function=SimpleNamespace(name=name, arguments=arguments),
         ),
     )
 
 
-class FakeMessages:
+def reply(*blocks: SimpleNamespace, stop: str = "end_turn") -> SimpleNamespace:
+    """A chat.completions response; ``stop`` uses readable aliases."""
+    text = "".join(b.text for b in blocks if b.kind == "text")
+    calls = [b.call for b in blocks if b.kind == "tool"]
+    message = SimpleNamespace(
+        role="assistant",
+        content=text or None,
+        refusal="I can't do that." if stop == "refusal" else None,
+        tool_calls=calls or None,
+    )
+    return SimpleNamespace(
+        model="test-model",
+        choices=[
+            SimpleNamespace(message=message, finish_reason=FINISH.get(stop, "stop"))
+        ],
+        usage=SimpleNamespace(
+            prompt_tokens=120,
+            completion_tokens=30,
+            prompt_tokens_details=SimpleNamespace(cached_tokens=0),
+        ),
+    )
+
+
+class FakeCompletions:
     def __init__(self, replies: list[SimpleNamespace]) -> None:
         self.replies = list(replies)
         self.calls: list[dict[str, Any]] = []
@@ -69,11 +87,15 @@ class FakeMessages:
 
 class FakeClient:
     def __init__(self, replies: list[SimpleNamespace]) -> None:
-        self.beta = SimpleNamespace(messages=FakeMessages(replies))
+        self.chat = SimpleNamespace(completions=FakeCompletions(replies))
 
     @property
     def calls(self) -> list[dict[str, Any]]:
-        return self.beta.messages.calls
+        return self.chat.completions.calls
+
+
+def tool_messages(call: dict[str, Any]) -> list[dict[str, Any]]:
+    return [m for m in call["messages"] if m["role"] == "tool"]
 
 
 @pytest.fixture
@@ -87,6 +109,7 @@ def make_assistant(tmp_path):
             log=AssistantLog(tmp_path / "assistant.jsonl"),
             cache=ResponseCache(max_entries=32, ttl_seconds=3600, similarity=0.85),
             rate_limiter=RateLimiter(max_requests=kwargs.pop("max_requests", 100)),
+            model="test-model",
             **kwargs,
         )
         return assistant, client
@@ -137,10 +160,12 @@ def test_plain_answer_uses_the_project_system_prompt(api):
     assert body["cached"] is False
 
     call = fake.calls[0]
-    assert call["system"][0]["text"] == SYSTEM_PROMPT
-    assert call["system"][0]["cache_control"] == {"type": "ephemeral"}
+    assert call["model"] == "test-model"
+    # The frozen system prompt goes first, so providers can cache the prefix.
+    assert call["messages"][0] == {"role": "system", "content": SYSTEM_PROMPT}
     assert "Planet X" in SYSTEM_PROMPT and CANARY in SYSTEM_PROMPT
-    assert {t["name"] for t in call["tools"]} >= {
+    assert all(t["type"] == "function" for t in call["tools"])
+    assert {t["function"]["name"] for t in call["tools"]} >= {
         "search_catalog",
         "list_saved_selections",
         "navigate",
@@ -148,11 +173,13 @@ def test_plain_answer_uses_the_project_system_prompt(api):
         "set_channel",
         "set_color_mode",
     }
-    assert all(t["strict"] is True for t in call["tools"])
-    # UI context travels as delimited, untrusted data next to the user's words.
-    user_blocks = call["messages"][-1]["content"]
-    assert user_blocks[0]["text"].startswith("<ui_context>")
-    assert user_blocks[-1]["text"] == "What does the Sky tab show?"
+    assert all(t["function"]["strict"] is True for t in call["tools"])
+    assert "max_tokens" not in call  # only sent when ASSISTANT_MAX_TOKENS is set
+    # UI context travels as delimited, untrusted data before the user's words.
+    question = call["messages"][-1]
+    assert question["role"] == "user"
+    assert question["content"].startswith("<ui_context>")
+    assert question["content"].endswith("\n\nWhat does the Sky tab show?")
 
 
 def test_ui_tool_calls_become_validated_actions(api):
@@ -176,10 +203,12 @@ def test_ui_tool_calls_become_validated_actions(api):
         {"type": "navigate", "workspace": "sky"},
         {"type": "show_region", "ra_deg": 210.8, "dec_deg": 54.35, "size_arcmin": 12.0},
     ]
-    # Both tool results go back in a single user message.
-    results = fake.calls[1]["messages"][-1]["content"]
-    assert [r["tool_use_id"] for r in results] == ["t1", "t2"]
-    assert all(not r.get("is_error") for r in results)
+    # The assistant turn keeps its tool calls; each result answers one call.
+    assistant_turn = fake.calls[1]["messages"][-3]
+    assert [c["id"] for c in assistant_turn["tool_calls"]] == ["t1", "t2"]
+    results = tool_messages(fake.calls[1])
+    assert [r["tool_call_id"] for r in results] == ["t1", "t2"]
+    assert all(not r["content"].startswith("Error:") for r in results)
     kinds = [e["event"] for e in events(assistant)]
     assert kinds.count("model_call") == 2
     assert kinds.count("tool_call") == 2
@@ -196,8 +225,8 @@ def test_invalid_tool_input_is_rejected_and_not_executed(api):
     body = chat(client, "switch to channel 50").json()
 
     assert body["actions"] == []
-    result = fake.calls[1]["messages"][-1]["content"][0]
-    assert result["is_error"] is True
+    result = tool_messages(fake.calls[1])[0]
+    assert result["content"].startswith("Error:")
     assert "not available" in result["content"]
     tool_events = [e for e in events(assistant) if e["event"] == "tool_call"]
     assert tool_events[0]["ok"] is False
@@ -212,7 +241,19 @@ def test_unknown_tools_are_refused(api):
     )
     body = chat(client, "delete everything").json()
     assert body["actions"] == []
-    assert fake.calls[1]["messages"][-1]["content"][0]["is_error"] is True
+    assert tool_messages(fake.calls[1])[0]["content"].startswith("Error:")
+
+
+def test_malformed_tool_arguments_are_rejected(api):
+    client, _, fake = api(
+        [
+            reply(tool_block("set_channel", '{"channel": 4', "t1"), stop="tool_use"),
+            reply(text_block("Sorry, try again.")),
+        ]
+    )
+    body = chat(client, "channel 4").json()
+    assert body["actions"] == []
+    assert "not valid JSON" in tool_messages(fake.calls[1])[0]["content"]
 
 
 def test_server_tool_results_are_wrapped_as_untrusted_data(api):
@@ -225,7 +266,7 @@ def test_server_tool_results_are_wrapped_as_untrusted_data(api):
         ]
     )
     chat(client, "find the local sample")
-    content = fake.calls[1]["messages"][-1]["content"][0]["content"]
+    content = tool_messages(fake.calls[1])[0]["content"]
     assert content.startswith("<tool_data>") and content.endswith("</tool_data>")
     data = json.loads(content.removeprefix("<tool_data>").removesuffix("</tool_data>"))
     assert data["results"][0]["id"] == "local-dr1-sample"
@@ -347,7 +388,7 @@ def test_long_assistant_replies_can_be_sent_back_as_history(api):
     ]
     resp = chat(client, "", messages=history)
     assert resp.status_code == 200
-    assert fake.calls[0]["messages"][1] == {"role": "assistant", "content": long_reply}
+    assert fake.calls[0]["messages"][2] == {"role": "assistant", "content": long_reply}
 
     too_long = [*history[:1], {"role": "assistant", "content": "x" * 20001}, history[2]]
     assert chat(client, "", messages=too_long).status_code == 422
@@ -492,7 +533,7 @@ def test_every_step_is_logged_and_readable(api):
     assert {"model_call", "tool_call", "ui_action", "response"} <= set(kinds)
     model_calls = [e for e in mine if e["event"] == "model_call"]
     first_round = model_calls[-1]
-    assert first_round["round"] == 1 and first_round["stop_reason"] == "tool_use"
+    assert first_round["round"] == 1 and first_round["stop_reason"] == "tool_calls"
     assert first_round["input_tokens"] == 120
     assert "latency_ms" in first_round
     assert all(e["conversation_id"] == CONVERSATION for e in mine)
@@ -526,11 +567,25 @@ def test_ui_outcomes_reported_by_the_browser_are_logged(api):
     assert bad.status_code == 422
 
 
-def test_assistant_is_disabled_without_an_api_key(monkeypatch):
-    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+@pytest.mark.parametrize("missing", ["ASSISTANT_API_KEY", "ASSISTANT_MODEL"])
+def test_assistant_is_disabled_until_key_and_model_are_set(monkeypatch, missing):
+    monkeypatch.setenv("ASSISTANT_API_KEY", "sk-test")
+    monkeypatch.setenv("ASSISTANT_MODEL", "any-openai-compatible-model")
+    monkeypatch.delenv(missing)
     app.dependency_overrides.pop(get_assistant, None)
     client = TestClient(app)
-    assert client.get("/api/assistant/status").json()["enabled"] is False
+    assert client.get("/api/assistant/status").json() == {"enabled": False, "model": None}
     resp = chat(client, "hello")
     assert resp.status_code == 503
-    assert "ANTHROPIC_API_KEY" in resp.json()["detail"]
+    detail = resp.json()["detail"]
+    assert "ASSISTANT_API_KEY" in detail and "ASSISTANT_MODEL" in detail
+
+
+def test_status_reports_the_configured_model(monkeypatch):
+    monkeypatch.setenv("ASSISTANT_API_KEY", "sk-test")
+    monkeypatch.setenv("ASSISTANT_MODEL", "my-model")
+    client = TestClient(app)
+    assert client.get("/api/assistant/status").json() == {
+        "enabled": True,
+        "model": "my-model",
+    }

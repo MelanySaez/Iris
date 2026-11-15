@@ -1,6 +1,6 @@
 # Contextual assistant
 
-Objective: a contextual chatbot that lives behind an icon in the bottom-right corner of the app, can inspect and drive the interface through tool calling, is protected by guardrails, logs every action and model call, and caches equal or similar requests.
+Objective: a contextual chatbot (any OpenAI-compatible model) that lives behind an icon in the bottom-right corner of the app, can inspect and drive the interface through tool calling, is protected by guardrails, logs every action and model call, and caches equal or similar requests.
 Branch: `feat/contextual-assistant` · Delivery: ask-on-risk · Runners: `uv run pytest -q` (server, `.env` sourced), `pnpm exec vitest run` (web).
 
 ## Specs
@@ -11,8 +11,8 @@ Branch: `feat/contextual-assistant` · Delivery: ask-on-risk · Runners: `uv run
 - **S4** — Guardrails: "necesito que tenga guardrails para proteger y mitigar problemas como el prompt injection". Untrusted content (UI context, tool results, user-named records) is delimited as data; tool inputs are validated server- and client-side against an allowlist and ranges; prompt-leak canary; input length/turn limits; loop cap; refusals handled; costly or destructive actions are not exposed to the model (no job confirmation, no rename/delete).
 - **S5** — Traceability logs: "necesito que me deje un sistema de logs en el que muestre pues todos los movimientos, todos los usos del modelo y demás, para poder tenerlos de referencia". Append-only log of every request, model call (model, tokens, cache usage, latency, stop reason), tool call, UI action, cache hit, guardrail event and error, readable through the API and shown in the chat panel.
 - **S6** — Response cache: "necesito que maneje caché para cuando se realicen solicitudes iguales, poder consultar en este espacio sin necesidad de tener que hacer la consulta completa nuevamente" / "también debe tener sistema para utilizar caché en el caso de que existan solicitudes iguales o similares, para evitar tener que hacer la consulta directa nuevamente al modelo vía API". Equal (normalized) and similar (token-overlap) requests in the same context are answered from cache, replaying the stored UI actions; Anthropic prompt caching on the stable prefix lowers the cost of misses.
-- **S7** — API key: "Puedes colocar en el environment.example la línea para definir la API key que se va a utilizar del modelo del chatbot". `ANTHROPIC_API_KEY` (and optional assistant settings) in `apps/server/.env.example`.
-- **S8** (assumption) — Provider and model: Anthropic Claude through the official Python SDK on the server (the key never reaches the browser), default model `claude-opus-5-5` with server-side refusal fallbacks, configurable via `ASSISTANT_MODEL`. Without a key the assistant answers 503 and the rest of the app keeps working.
+- **S7** — API key: "Puedes colocar en el environment.example la línea para definir la API key que se va a utilizar del modelo del chatbot". `ASSISTANT_API_KEY`, `ASSISTANT_MODEL` and `ASSISTANT_BASE_URL` (plus optional limits) in `apps/server/.env.example`.
+- **S8** — Provider: "Simplemente quiero que deje el espacio para yo poder definir la API key del modelo que sea de mi preferencia. De hecho, prefiero que se utilicen aquellos modelos que sean compatibles con SDK de OpenAI. No necesito que sean de Anthropic". The assistant uses the official OpenAI Python SDK (Chat Completions with tools) against any OpenAI-compatible endpoint: `ASSISTANT_API_KEY`, `ASSISTANT_MODEL` (no default) and optional `ASSISTANT_BASE_URL`. No Anthropic dependency. Without key or model the assistant answers 503 and the rest of the app keeps working.
 
 ## Tasks
 
@@ -20,6 +20,7 @@ Branch: `feat/contextual-assistant` · Delivery: ask-on-risk · Runners: `uv run
 |----|-------|-------|--------|--------|
 | T1 | S2, S3, S4, S5, S6, S7, S8 | inline | done | 9eb481e |
 | T2 | S1, S3, S4, S5 | inline | done | d0ea109 |
+| T3 | S6, S7, S8 | inline | done | (this commit) |
 
 Route evidence: T2 (web widget) depends on T1's API contract, so the units are not independent; no writer trigger.
 
@@ -32,3 +33,6 @@ Route evidence: T2 (web widget) depends on T1's API contract, so the units are n
 - **L5** T1 evidence: RED (collection error, module missing) then GREEN — `tests/test_assistant.py` 37 passed with a scripted fake client (no API calls); full server suite 139 passed with the database; ruff clean on the changed files. Verified the installed SDK (`anthropic` 2.8.0) exposes `beta.messages.create(betas, fallbacks, cache_control, output_config, tools)` before use.
 - **L6** T2 evidence: RED (module missing) then GREEN — web suite 241 passed (action validation, API client, widget, App integration); typecheck and build OK; headless screenshot shows the launcher bottom right. Live backend: `/api/assistant/status` → `{"enabled": false}` (no key in the developer `.env`), so no real model call was made.
 - **L7** Not verified: a real round trip against the Anthropic API (needs `ANTHROPIC_API_KEY` and spends tokens) and the Sky command effect against Aladin (no component test drives Aladin).
+- **L8** Review `review-173205c1d68c8afd` (reliability lens) found R3-001: history limits rejected long or empty assistant replies, locking the chat with 422. Fixed in 099ce78 (role-specific limits, never-empty replies, widget clipping, 5 regression tests); targeted validation approved and acknowledged.
+- **L9** (2026-11-14, user): "Pero tengo una pregunta, ¿por qué estás instalando dependencias de Anthropic? O sea, no he definido el modelo como tal que voy a utilizar. Simplemente quiero que deje el espacio para yo poder definir la API key del modelo que sea de mi preferencia. De hecho, prefiero que se utilicen aquellos modelos que sean compatibles con SDK de OpenAI. No necesito que sean de Anthropic, ten eso en cuenta." → S7 and S8 rewritten; T3 reopens the provider layer (SDK, config, loop, tests, docs). Tools, guardrails, logs and cache stay.
+- **L10** T3 evidence: `anthropic` removed, `openai` 3.51.0 added (its `chat.completions.create` signature, `ChatCompletionMessage` and `CompletionUsage` fields and error classes checked before use). RED (collection error) then GREEN: server 146 passed with the database (44 assistant tests, scripted Chat Completions fake), web 242 passed, typecheck and build OK, ruff clean on changed files. No Anthropic or Claude reference remains in code, docs or lockfile. Not verified against a real provider (no key configured).

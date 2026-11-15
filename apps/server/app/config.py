@@ -76,7 +76,9 @@ for directory in (
     directory.mkdir(parents=True, exist_ok=True)
 
 
-# Contextual assistant (Claude via the Anthropic SDK). ANTHROPIC_API_KEY enables it.
+# Contextual assistant: any OpenAI-compatible chat model, through the OpenAI SDK.
+# ASSISTANT_API_KEY and ASSISTANT_MODEL enable it (read at request time in
+# app/assistant/api.py); ASSISTANT_BASE_URL points to a compatible provider.
 def _env_int(name: str, default: int) -> int:
     try:
         return int(os.environ.get(name, default))
@@ -84,9 +86,8 @@ def _env_int(name: str, default: int) -> int:
         return default
 
 
-ASSISTANT_MODEL = os.environ.get("ASSISTANT_MODEL", "claude-opus-5-5")
-ASSISTANT_EFFORT = os.environ.get("ASSISTANT_EFFORT", "low")
-ASSISTANT_MAX_TOKENS = _env_int("ASSISTANT_MAX_TOKENS", 8000)
+# Sent as `max_tokens` only when set; leave unset to use the provider default.
+ASSISTANT_MAX_TOKENS = _env_int("ASSISTANT_MAX_TOKENS", 0) or None
 ASSISTANT_MAX_TOOL_ROUNDS = _env_int("ASSISTANT_MAX_TOOL_ROUNDS", 6)
 ASSISTANT_RATE_LIMIT_PER_MINUTE = _env_int("ASSISTANT_RATE_LIMIT_PER_MINUTE", 20)
 ASSISTANT_CACHE_TTL_SECONDS = _env_int("ASSISTANT_CACHE_TTL_SECONDS", 3600)

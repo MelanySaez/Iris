@@ -220,7 +220,7 @@ export function AssistantWidget({ getContext, onAction }: AssistantWidgetProps) 
               <div className="assistant-messages" ref={listRef}>
                 {enabled === false && (
                   <p className="assistant-notice">
-                    The assistant is disabled: set ANTHROPIC_API_KEY on the server to turn it on.
+                    The assistant is disabled: set ASSISTANT_API_KEY and ASSISTANT_MODEL on the server to turn it on.
                   </p>
                 )}
                 {entries.length === 0 && enabled !== false && (

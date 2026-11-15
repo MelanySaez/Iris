@@ -144,7 +144,7 @@ describe('App workspace switch', () => {
   });
 
   it('lets the assistant drive the interface through validated actions', async () => {
-    vi.spyOn(api, 'assistantStatus').mockResolvedValue({ enabled: true, model: 'claude-opus-5-5' });
+    vi.spyOn(api, 'assistantStatus').mockResolvedValue({ enabled: true, model: 'test-model' });
     const outcome = vi.spyOn(api, 'reportAssistantOutcome').mockResolvedValue(undefined);
     vi.spyOn(api, 'assistantChat').mockResolvedValue({
       conversation_id: 'c',
