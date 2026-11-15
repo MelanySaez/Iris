@@ -94,7 +94,9 @@ export function interpolateMissingFlux(
     if (
       count > limit || !left || !right || left.value === null || right.value === null || !Number.isFinite(left.value) ||
       !Number.isFinite(right.value) || !Number.isFinite(left.wavelength_um) ||
-      !Number.isFinite(right.wavelength_um) || right.wavelength_um <= left.wavelength_um
+      !Number.isFinite(right.wavelength_um) || right.wavelength_um <= left.wavelength_um ||
+      // Each detector has its own calibration; a line across the seam would be invented.
+      left.detector !== right.detector
     ) continue;
 
     for (let j = start; j < i; j += 1) {
