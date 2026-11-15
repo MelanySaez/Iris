@@ -27,7 +27,7 @@ describe('SelectionActions', () => {
     expect(onViewSpectrum).toHaveBeenCalledWith({
       ra_deg: 270.69303,
       dec_deg: 61.87652,
-      label: 'Selection centre (270.693°, 61.877°)',
+      label: '270.693°, 61.877°',
     });
   });
 
@@ -59,5 +59,20 @@ describe('SelectionActions', () => {
       <SelectionActions selection={null} confirmed activeJobId="job-7" onOpenPlate={vi.fn()} onViewSpectrum={vi.fn()} />,
     );
     expect(screen.queryAllByRole('button')).toHaveLength(0);
+  });
+  it('names the spectrum after the object the region came from', () => {
+    const onViewSpectrum = vi.fn();
+    render(
+      <SelectionActions
+        selection={selection}
+        origin={{ name: 'NGC 6543', ra_deg: 270.69303, dec_deg: 61.87652 }}
+        confirmed
+        activeJobId={null}
+        onOpenPlate={vi.fn()}
+        onViewSpectrum={onViewSpectrum}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Visualize spectrum' }));
+    expect(onViewSpectrum).toHaveBeenCalledWith({ ra_deg: 270.69303, dec_deg: 61.87652, label: 'NGC 6543' });
   });
 });

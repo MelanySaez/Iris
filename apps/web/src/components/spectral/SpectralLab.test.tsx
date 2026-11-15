@@ -10,7 +10,6 @@ vi.mock('../../api', async (importOriginal) => {
   return {
     ...actual,
     api: {
-      getCatalog: vi.fn(() => Promise.reject(new Error('offline'))), // keep the fallback list
       getSpectrum: (...args: unknown[]) => getSpectrum(...args),
     },
   };
@@ -83,21 +82,21 @@ describe('SpectralLab', () => {
     getSpectrum.mockReturnValueOnce(pending.promise);
     render(<SpectralLab />);
 
-    fireEvent.click(catalogButton('M101 field'));
+    fireEvent.click(catalogButton('Andromeda Galaxy'));
     expect(screen.getByText('Loading cube spectrum…')).toBeTruthy();
-    expect(catalogButton('M101 field').hasAttribute('disabled')).toBe(true);
+    expect(catalogButton('Andromeda Galaxy').hasAttribute('disabled')).toBe(true);
 
     await act(async () => pending.resolve(spectrum([10, null, 30], 2858)));
 
     expect(screen.getByText('2/3 channels · tile 2858')).toBeTruthy();
-    expect(screen.getByRole('img', { name: /Spectra of M101 field/ })).toBeTruthy();
-    expect(getSpectrum).toHaveBeenCalledWith(210.80227, 54.34895);
+    expect(screen.getByRole('img', { name: /Spectra of Andromeda Galaxy/ })).toBeTruthy();
+    expect(getSpectrum).toHaveBeenCalledWith(10.684708, 41.26875);
   });
 
   it('keeps an explicit loading status while a spectrum request is pending', () => {
     getSpectrum.mockReturnValue(new Promise(() => {}));
     render(<SpectralLab />);
-    fireEvent.click(catalogButton('M101 field'));
+    fireEvent.click(catalogButton('Andromeda Galaxy'));
 
     expect(screen.getByRole('status').textContent).toMatch(/Loading cube spectrum/);
     expect(screen.queryByRole('alert')).toBeNull();
@@ -106,7 +105,7 @@ describe('SpectralLab', () => {
   it('renders positive estimates on the log axis', async () => {
     getSpectrum.mockResolvedValue(spectrum([10, null, 100]));
     render(<SpectralLab />);
-    await act(async () => fireEvent.click(catalogButton('M101 field')));
+    await act(async () => fireEvent.click(catalogButton('Andromeda Galaxy')));
     fireEvent.click(screen.getByRole('button', { name: 'Log' }));
 
     expect(document.querySelector('.spectral-estimated-marker')).toBeTruthy();
@@ -116,7 +115,7 @@ describe('SpectralLab', () => {
   it('explains that nonpositive interpolated flux cannot be drawn on a log axis', async () => {
     getSpectrum.mockResolvedValue(spectrum([-5, null, -1]));
     render(<SpectralLab />);
-    await act(async () => fireEvent.click(catalogButton('M101 field')));
+    await act(async () => fireEvent.click(catalogButton('Andromeda Galaxy')));
     fireEvent.click(screen.getByRole('button', { name: 'Log' }));
 
     expect(screen.getByText(/Interpolated estimate.*cannot be shown on a log axis/i)).toBeTruthy();
@@ -127,7 +126,7 @@ describe('SpectralLab', () => {
   it('supports reversible sidebar and chart zoom controls', async () => {
     getSpectrum.mockResolvedValue(spectrum([10, 20, 30]));
     render(<SpectralLab />);
-    await act(async () => fireEvent.click(catalogButton('M101 field')));
+    await act(async () => fireEvent.click(catalogButton('Andromeda Galaxy')));
 
     fireEvent.click(screen.getByRole('button', { name: 'Hide sidebar' }));
     expect(screen.queryByRole('complementary')).toBeNull();
@@ -145,8 +144,8 @@ describe('SpectralLab', () => {
   it('does not expose NHITS in the primary hover flux readout', async () => {
     getSpectrum.mockResolvedValue(spectrum([10, 20, 30]));
     render(<SpectralLab />);
-    await act(async () => fireEvent.click(catalogButton('M101 field')));
-    const chart = screen.getByRole('img', { name: /Spectra of M101 field/ });
+    await act(async () => fireEvent.click(catalogButton('Andromeda Galaxy')));
+    const chart = screen.getByRole('img', { name: /Spectra of Andromeda Galaxy/ });
     vi.spyOn(chart, 'getBoundingClientRect').mockReturnValue({
       width: 720, height: 380, left: 0, top: 0, right: 720, bottom: 380, x: 0, y: 0,
       toJSON: () => ({}),
@@ -162,7 +161,7 @@ describe('SpectralLab', () => {
     expect(response.points[1].available).toBe(false);
     getSpectrum.mockResolvedValue(response);
     render(<SpectralLab />);
-    await act(async () => fireEvent.click(catalogButton('M101 field')));
+    await act(async () => fireEvent.click(catalogButton('Andromeda Galaxy')));
 
     expect(screen.getByText('Observed')).toBeTruthy();
     expect(screen.getByText('Interpolated (estimated)')).toBeTruthy();
@@ -201,7 +200,7 @@ describe('SpectralLab', () => {
       new ApiError('HTTP 404', 404, 'No All-Sky Cube tile covers this position.'),
     );
     render(<SpectralLab />);
-    await act(async () => fireEvent.click(catalogButton('WISE 0855')));
+    await act(async () => fireEvent.click(catalogButton('Eagle Nebula')));
 
     expect(screen.getByText('Failed: No All-Sky Cube tile covers this position.')).toBeTruthy();
   });
@@ -212,9 +211,9 @@ describe('SpectralLab', () => {
     getSpectrum.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
     render(<SpectralLab />);
 
-    fireEvent.click(catalogButton('M101 field'));
-    fireEvent.click(screen.getByRole('button', { name: 'Remove M101 field' }));
-    fireEvent.click(catalogButton('M101 field'));
+    fireEvent.click(catalogButton('Andromeda Galaxy'));
+    fireEvent.click(screen.getByRole('button', { name: 'Remove Andromeda Galaxy' }));
+    fireEvent.click(catalogButton('Andromeda Galaxy'));
 
     await act(async () => second.resolve(spectrum([4, 5], 2858)));
     await act(async () => first.reject(new Error('late failure from the first request')));
@@ -227,22 +226,22 @@ describe('SpectralLab', () => {
   it('hides and shows a spectrum, then removes it', async () => {
     getSpectrum.mockResolvedValue(spectrum([1, 2]));
     render(<SpectralLab />);
-    await act(async () => fireEvent.click(catalogButton('M101 field')));
+    await act(async () => fireEvent.click(catalogButton('Andromeda Galaxy')));
 
-    fireEvent.click(screen.getByRole('button', { name: 'Hide M101 field' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Hide Andromeda Galaxy' }));
     expect(screen.getByText('No spectrum plotted yet.')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Show M101 field' }));
-    expect(screen.getByRole('img', { name: /Spectra of M101 field/ })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Show Andromeda Galaxy' }));
+    expect(screen.getByRole('img', { name: /Spectra of Andromeda Galaxy/ })).toBeTruthy();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Remove M101 field' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Remove Andromeda Galaxy' }));
     expect(legendItems()).toHaveLength(0);
-    expect(catalogButton('M101 field').hasAttribute('disabled')).toBe(false);
+    expect(catalogButton('Andromeda Galaxy').hasAttribute('disabled')).toBe(false);
   });
 
   it('notes how many values the log axis cannot draw', async () => {
     getSpectrum.mockResolvedValue(spectrum([-2, 0, 5, 50]));
     render(<SpectralLab />);
-    await act(async () => fireEvent.click(catalogButton('M101 field')));
+    await act(async () => fireEvent.click(catalogButton('Andromeda Galaxy')));
 
     // Linear axis: only the quick-look disclaimer, no hidden-value note.
     const linearNotes = screen.getAllByRole('note').map((n) => n.textContent ?? '');
@@ -258,13 +257,13 @@ describe('SpectralLab', () => {
 
   it('adds a spectrum requested from the Sky selection exactly once per request', async () => {
     getSpectrum.mockResolvedValue(spectrum([1, 2], 3016));
-    const request = { id: 1, ra: 270.69303, dec: 61.87652, label: 'Selection centre (270.693°, 61.877°)' };
+    const request = { id: 1, ra: 270.69303, dec: 61.87652, label: '270.693°, 61.877°' };
     const { rerender } = render(<SpectralLab request={request} />);
     await act(async () => {});
 
     expect(getSpectrum).toHaveBeenCalledTimes(1);
     expect(getSpectrum).toHaveBeenCalledWith(270.69303, 61.87652);
-    expect(screen.getByText('Selection centre (270.693°, 61.877°)')).toBeTruthy();
+    expect(screen.getByText('270.693°, 61.877°')).toBeTruthy();
 
     rerender(<SpectralLab request={request} />); // same request re-rendered: no second add
     await act(async () => {});
@@ -274,6 +273,39 @@ describe('SpectralLab', () => {
     rerender(<SpectralLab request={{ ...request, id: 2 }} />); // same place requested again
     await act(async () => {});
     expect(getSpectrum).toHaveBeenCalledTimes(1);
-    expect(screen.getByText('Selection centre (270.693°, 61.877°) is already in the comparison.')).toBeTruthy();
+    expect(screen.getByText('270.693°, 61.877° is already in the comparison.')).toBeTruthy();
+  });
+});
+
+describe('SpectralLab featured objects panel', () => {
+  afterEach(() => cleanup());
+
+  it('presents the examples as featured objects, apart from the coordinates form', () => {
+    render(<SpectralLab request={null} />);
+    expect(screen.getByRole('heading', { name: 'Featured objects' })).toBeTruthy();
+    expect(screen.getByText('Well-known targets to get you started')).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Or enter coordinates' })).toBeTruthy();
+  });
+
+  it('offers only the five best-known objects, popular name first and catalogue name below', () => {
+    render(<SpectralLab request={null} />);
+    const rows = Array.from(document.querySelectorAll('.spectral-catalog button'));
+    expect(rows.map((row) => [
+      row.querySelector('.spectral-catalog-title')?.textContent,
+      row.querySelector('.spectral-catalog-subtitle')?.textContent,
+      row.querySelector('.spectral-catalog-type')?.textContent,
+    ])).toEqual([
+      ['Andromeda Galaxy', 'M31', 'Galaxy'],
+      ['Eagle Nebula', 'M16', 'Nebula'],
+      ['Pleiades', 'M45', 'Star cluster'],
+      ['Crab Nebula', 'M1', 'Supernova remnant'],
+      ['Whirlpool Galaxy', 'M51', 'Galaxy'],
+    ]);
+  });
+
+  it('plots a featured object at its SIMBAD position under its popular name', async () => {
+    render(<SpectralLab request={null} />);
+    await act(async () => fireEvent.click(catalogButton('Andromeda Galaxy')));
+    expect(getSpectrum).toHaveBeenCalledWith(10.684708, 41.26875);
   });
 });
