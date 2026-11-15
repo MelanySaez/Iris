@@ -1,3 +1,5 @@
+import Markdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, ApiError, type AssistantLogEntry } from '../../api';
 import {
@@ -230,7 +232,15 @@ export function AssistantWidget({ getContext, onAction }: AssistantWidgetProps) 
                 )}
                 {entries.map((entry, index) => (
                   <div key={index} className={`assistant-msg ${entry.role}`}>
-                    <p>{entry.content}</p>
+                    {entry.role === 'assistant' ? (
+                      <div className="assistant-markdown">
+                        <Markdown remarkPlugins={[remarkGfm]} skipHtml>
+                          {entry.content}
+                        </Markdown>
+                      </div>
+                    ) : (
+                      <p>{entry.content}</p>
+                    )}
                     {entry.actions && entry.actions.length > 0 && (
                       <ul className="assistant-actions">
                         {entry.actions.map((action, i) => (

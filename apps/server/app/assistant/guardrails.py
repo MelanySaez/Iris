@@ -24,11 +24,18 @@ _INJECTION_PATTERNS = [
         r"\b(instruc\w*|rules|reglas|prompt)",
         r"\b(system|developer|sistema)\s*(prompt|message|mensaje|instruc\w*)",
         r"\bprompt\s+del\s+sistema\b",
-        r"\b(you are now|ahora eres|act as|actúa como|developer mode"
+        r"\b(you are now|ahora eres|act as|actua como|developer mode"
         r"|modo desarrollador|jailbreak)\b",
         r"<\s*/?\s*(system|ui_context|tool_data|instructions?|security)\s*>",
+        r"\b(toca|tocar|toques|modifica|modificar|modifiques|altera|alterar|alteres|"
+        r"borra|borrar|borres|elimina|eliminar|elimines|edita|editar|edites|"
+        r"reescribe|reescribir|cambia|cambiar|cambies|modify|modifies|change|"
+        r"alter|delete|remove|edit|rewrite|touch)\b.{0,100}"
+        r"\b(codigo|code|source|archivos?|files?|scripts?|"
+        r"[\w./-]+\.(?:py|tsx?|jsx?|css|html|json|toml|ya?ml))\b",
         r"\b(reveal|print|repeat|show|muestra|revela|imprime|repite)\b.{0,40}"
-        r"\b(your|tus|tu)?\s*(prompt|instruc\w*)",
+        r"\b(prompt|(?:your|tus|tu|internal|internas|system|sistema)\s+"
+        r"instruc\w*|instruc\w*.{0,20}\b(?:internal|internas|system|sistema))\b",
     )
 ]
 
@@ -43,7 +50,14 @@ _LEAK_FRAGMENTS = (
 
 def detect_injection(text: str) -> list[str]:
     """Patterns matched in ``text`` (empty when it looks like an ordinary request)."""
-    return [p.pattern[:40] for p in _INJECTION_PATTERNS if p.search(text)]
+    # Normalize accents, compatibility forms and invisible format controls.
+    normalized = unicodedata.normalize("NFKD", text.casefold())
+    normalized = "".join(
+        ch
+        for ch in normalized
+        if not unicodedata.combining(ch) and unicodedata.category(ch) != "Cf"
+    )
+    return [p.pattern[:40] for p in _INJECTION_PATTERNS if p.search(normalized)]
 
 
 def sanitize_untrusted(text: str, max_chars: int) -> str:

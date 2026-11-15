@@ -106,3 +106,5 @@ differ. Projection choices are orthographic, Aitoff, Mollweide and tangent.
 The data card distinguishes center from live cursor ICRS coordinates. Sky region
 selection still starts backend preparation, but its detailed progress is shown
 in the Plate workspace only; Sky offers an explicit **Open spectral plate** action.
+
+Assistant replies render Markdown, including headings, lists, links, code blocks and tables. Wide tables and code blocks scroll within the reply. User messages remain plain text. Raw HTML from replies is ignored.

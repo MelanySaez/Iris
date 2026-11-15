@@ -83,6 +83,44 @@ describe('AssistantWidget', () => {
     ]);
   });
 
+  it('renders assistant Markdown while keeping user messages as plain text', async () => {
+    vi.spyOn(api, 'assistantChat').mockResolvedValue({
+      conversation_id: 'c', request_id: 'md', actions: [], cached: false, cache_kind: null,
+      reply: '## Results\n\nA **bright** object with *detail* and `channel`.\n\n- First\n- Second\n\n1. Open Sky\n2. Select a region\n\n> Quick look\n\n```python\nprint(42)\n```\n\n| Band | Value |\n| --- | --- |\n| R | 20 |\n\n[Reference](https://example.com)',
+    });
+    setup();
+    await openPanel();
+    await send('**plain question**');
+
+    expect(await screen.findByRole('heading', { name: 'Results' })).toBeTruthy();
+    const reply = document.querySelector('.assistant-markdown')!;
+    expect(reply.querySelector('strong')?.textContent).toBe('bright');
+    expect(reply.querySelector('em')?.textContent).toBe('detail');
+    expect(reply.querySelector('ul li')?.textContent).toBe('First');
+    expect(reply.querySelector('ol li')?.textContent).toBe('Open Sky');
+    expect(reply.querySelector('blockquote')?.textContent).toContain('Quick look');
+    expect(reply.querySelector('pre code')?.textContent).toBe('print(42)\n');
+    expect(screen.getByRole('table')).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Reference' }).getAttribute('href')).toBe('https://example.com');
+    const user = document.querySelector('.assistant-msg.user')!;
+    expect(user.textContent).toBe('**plain question**');
+    expect(user.querySelector('strong')).toBeNull();
+  });
+
+  it('does not render raw HTML or executable Markdown links', async () => {
+    vi.spyOn(api, 'assistantChat').mockResolvedValue({
+      conversation_id: 'c', request_id: 'unsafe', actions: [], cached: false, cache_kind: null,
+      reply: 'Safe **text**\n\n<script>alert(1)</script>\n\n<img src="x" onerror="alert(1)">\n\n[Bad](javascript:alert%281%29)',
+    });
+    setup();
+    await openPanel();
+    await send('show text');
+    await screen.findByText('text');
+    const reply = document.querySelector('.assistant-markdown')!;
+    expect(reply.querySelector('script, img, [onerror]')).toBeNull();
+    expect(reply.querySelector('a')?.getAttribute('href') ?? '').not.toMatch(/^javascript:/i);
+  });
+
   it('clips very long replies before sending them back as history', async () => {
     const chat = vi.spyOn(api, 'assistantChat').mockResolvedValueOnce({
       conversation_id: 'c', request_id: 'r1', reply: 'y'.repeat(25000), actions: [], cached: false, cache_kind: null,

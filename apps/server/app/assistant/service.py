@@ -29,6 +29,11 @@ from app.assistant.tools import (
 from app.config import ASSISTANT_MAX_TOKENS, ASSISTANT_MAX_TOOL_ROUNDS
 
 REFUSAL_REPLY = "I can't help with that request."
+BLOCKED_REQUEST_REPLY = (
+    "I can't follow requests to override instructions or modify application code. "
+    "I can help you understand and navigate the app. "
+    "Start a new conversation if an earlier message triggered this block."
+)
 LEAK_REPLY = "I can't share my internal instructions."
 EMPTY_REPLY = "I don't have an answer for that."
 ACTIONS_ONLY_REPLY = "Done."
@@ -120,17 +125,22 @@ class Assistant:
             self.log.write("guardrail", **ids, kind="rate_limited")
             raise RateLimited
 
-        patterns = detect_injection(question)
-        if patterns:
-            # Flag, don't block: the prompt and tool validation contain the risk,
-            # and a false positive must not lock people out.
-            self.log.write(
-                "guardrail",
-                **ids,
-                kind="suspected_prompt_injection",
-                source="user_message",
-                patterns=patterns,
-            )
+        # Inspect every user turn before cache lookup or any provider/tool call.
+        # Client-supplied history must not bypass checks on the newest message.
+        for turn_index, turn in enumerate(messages):
+            if turn["role"] != "user":
+                continue
+            patterns = detect_injection(turn["content"])
+            if patterns:
+                self.log.write(
+                    "guardrail",
+                    **ids,
+                    kind="prompt_injection_blocked",
+                    source="user_message",
+                    turn_index=turn_index,
+                    patterns=patterns,
+                )
+                return self._respond(ids, BLOCKED_REQUEST_REPLY, [], None)
 
         context_key = self._context_key(context, messages[:-1])
         hit = self.cache.get(context_key, question)
