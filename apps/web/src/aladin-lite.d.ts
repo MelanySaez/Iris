@@ -29,6 +29,12 @@ declare module 'aladin-lite' {
     setOverlayImageLayer?: (layer: unknown, name: string) => unknown;
     removeImageLayer?: (name: string) => void;
     setProjection?: (projection: string) => void;
+    hidePopup?: () => void;
+    showPopup?: (ra: number, dec: number, title: string, description: string) => void;
+    on?: (
+      event: 'positionChanged' | 'resizeChanged' | 'rotationChanged' | 'projectionChanged' | 'zoomChanged',
+      callback?: () => void,
+    ) => void;
     addOverlay?: (overlay: unknown) => void;
     addCatalog: (catalog: AladinLayer) => void;
   };

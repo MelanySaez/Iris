@@ -4,6 +4,9 @@ import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('aladin-lite', () => ({ default: {} }));
 import { SkyWorkspace } from './SkyWorkspace';
+import { TopBar } from '../TopBar';
+import { HIPS_CATALOG_PROVIDERS, LOCAL_CATALOG_STYLE } from '../../catalogs';
+import { TOCATS_CATALOGS } from '../../tocats';
 
 describe('Sky workspace sidebar', () => {
   it('presents position, object discovery, then map layers', () => {
@@ -39,5 +42,40 @@ describe('Sky workspace sidebar', () => {
     ]);
     expect(sections[2].querySelector('.catalog-layer-entry')?.textContent).toContain('Featured objects');
     sessionStorage.clear();
+  });
+
+  it('uses icons and places zoom out before zoom in', () => {
+    document.body.innerHTML = renderToStaticMarkup(
+      <SkyWorkspace
+        activeJob={null}
+        onStartJob={async () => {}}
+        onOpenPlate={() => {}}
+        onViewSpectrum={() => {}}
+        onRetryJob={() => {}}
+      />,
+    );
+
+    const controls = document.querySelector('[aria-label="Map controls"]');
+    expect(controls?.querySelector('[title="Pan map"] svg')).not.toBeNull();
+    expect(controls?.querySelector('[title="Show all sky"] svg')).not.toBeNull();
+    expect(Array.from(controls?.querySelectorAll('[aria-label="Zoom controls"] button') ?? [],
+      (button) => [button.getAttribute('title'), button.getAttribute('aria-label')])).toEqual([
+      ['Zoom out', 'Zoom out'], ['Zoom in', 'Zoom in'], ['Show all sky', 'Show all sky'],
+    ]);
+  });
+
+  it('shows a vector planet rather than an emoji in the brand', () => {
+    document.body.innerHTML = renderToStaticMarkup(
+      <TopBar currentRoute={{ type: 'sky' }} activeJobId={null} onNavigate={() => {}} />,
+    );
+    expect(document.querySelector('.brand-logo svg')).not.toBeNull();
+  });
+
+  it('uses readable marker sizes for the sky catalogs', () => {
+    expect(LOCAL_CATALOG_STYLE.sourceSize).toBeGreaterThanOrEqual(16);
+    expect(HIPS_CATALOG_PROVIDERS.simbad.sourceSize).toBeGreaterThanOrEqual(8);
+    expect(TOCATS_CATALOGS.gaia.sourceSize).toBeGreaterThanOrEqual(12);
+    expect(TOCATS_CATALOGS.catwise.sourceSize).toBeGreaterThanOrEqual(12);
+    expect(TOCATS_CATALOGS.catwise.shape).toBe('rhomb');
   });
 });

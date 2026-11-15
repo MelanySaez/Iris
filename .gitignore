@@ -13,6 +13,8 @@ apps/server/data/derived/spherex_mosaic/
 .impeccable/
 .aws/
 .agents/
+skills/
+AGENTS.md
 
 # Local environment (template: .env.example)
 .env

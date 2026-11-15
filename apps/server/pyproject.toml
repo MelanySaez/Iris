@@ -23,6 +23,7 @@ dependencies = [
     "sqlalchemy>=2.1.8",
     "psycopg[binary]>=3.2",
     "openai>=3.51.0",
+    "tenacity>=9.2.1",
 ]
 
 [dependency-groups]

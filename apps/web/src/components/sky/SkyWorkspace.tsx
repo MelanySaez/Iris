@@ -32,9 +32,15 @@ import {
   type SpectralChannel,
 } from '../../hips';
 import { setChannelImageLayer } from '../../aladinView';
+import { createCatalogMarker } from '../../catalogMarker';
+import { installCatalogPopupControls } from '../../catalogPopup';
 import { useRgbComposite } from '../../hooks/useRgbComposite';
 import { RgbControls } from './RgbControls';
 import { SelectionActions, type SpectrumTarget } from './SelectionActions';
+import { NameSuggestion, type ResolvedTarget, type SubmitLookup } from './NameSuggestion';
+import { runEnterLookup } from '../../searchEnter';
+import { lookupView } from '../../lookupView';
+import { AllSkyIcon, PanIcon, RegionIcon, ZoomInIcon, ZoomOutIcon } from '../SkyIcons';
 import { contextFovDeg, resolveSelectionView, saveSelectionView } from '../../selectionView';
 import type { AssistantAction, AssistantUiContext } from '../../assistant';
 import { ensureServiceWorkerControl } from '../../serviceWorkerControl';
@@ -186,6 +192,11 @@ export function SkyWorkspace({
   // Catalog & Search
   const [catalog, setCatalog] = useState<CatalogObject[]>(CURATED_CATALOG_FALLBACK);
   const [searchQuery, setSearchQuery] = useState('');
+  const nameSubmitRef = useRef<SubmitLookup | null>(null);
+  // Bumped on every navigation, so a late name lookup cannot pull the map back.
+  const navigationSeqRef = useRef(0);
+  const searchQueryRef = useRef('');
+  searchQueryRef.current = searchQuery;
   const [recentSelections, setRecentSelections] = useState<RecentSelection[]>(getRecentSelections());
   const simbadRequestRef = useRef<AbortController | null>(null);
 
@@ -240,6 +251,7 @@ export function SkyWorkspace({
         name: provider.name,
         color: provider.color,
         sourceSize: provider.sourceSize,
+        shape: createCatalogMarker(provider.color, provider.sourceSize, 'circle'),
         onClick: 'showTable',
         filter: (source: AladinSource) => !isDuplicateRemoteSource(source),
       });
@@ -318,7 +330,7 @@ export function SkyWorkspace({
           name: provider.label,
           color: provider.color,
           sourceSize: provider.sourceSize,
-          shape: catalogId === 'gaia' ? 'circle' : 'diamond',
+          shape: createCatalogMarker(provider.color, provider.sourceSize, provider.shape),
           onClick: 'showPopup',
         });
         viewer.addCatalog(catalogLayer);
@@ -328,9 +340,9 @@ export function SkyWorkspace({
       if (!densityLayer) {
         densityLayer = Aladin.catalog({
           name: `${provider.label} density tiles`,
-          color: catalogId === 'gaia' ? '#78995c' : '#af789d',
-          sourceSize: 10,
-          shape: 'circle',
+          color: provider.color,
+          sourceSize: 12,
+          shape: createCatalogMarker(provider.color, 12, provider.shape),
           onClick: 'showPopup',
         });
         viewer.addCatalog(densityLayer);
@@ -446,6 +458,7 @@ export function SkyWorkspace({
   useEffect(() => {
     let active = true;
     let timer: number | undefined;
+    let disposePopupControls: (() => void) | undefined;
 
     async function initAladin() {
       try {
@@ -501,6 +514,31 @@ export function SkyWorkspace({
         });
 
         viewerRef.current = viewer;
+        const aladinRoot = mapRef.current.querySelector<HTMLElement>('#aladin-view');
+        if (aladinRoot) {
+          disposePopupControls = installCatalogPopupControls(aladinRoot, () => viewer.hidePopup?.(), {
+            projectSource: (ra, dec) => {
+              const point = viewer.world2pix?.(ra, dec);
+              if (!point || !Number.isFinite(point[0]) || !Number.isFinite(point[1])) return null;
+              return { x: point[0], y: point[1] };
+            },
+            reopenPopup: (ra, dec, title, description) => viewer.showPopup?.(ra, dec, title, description),
+            subscribeToViewportChanges: (callback) => {
+              viewer.on?.('positionChanged', callback);
+              viewer.on?.('resizeChanged', callback);
+              viewer.on?.('rotationChanged', callback);
+              viewer.on?.('projectionChanged', callback);
+              viewer.on?.('zoomChanged', callback);
+              return () => {
+                viewer.on?.('positionChanged', undefined);
+                viewer.on?.('resizeChanged', undefined);
+                viewer.on?.('rotationChanged', undefined);
+                viewer.on?.('projectionChanged', undefined);
+                viewer.on?.('zoomChanged', undefined);
+              };
+            },
+          });
+        }
 
         // Start at fov 180 centered on RA 0/Dec 0 (all sky), then set default channel 44
         setChannelImageLayer(viewer, channelVirtualHipsUrl(DEFAULT_CHANNEL_INDEX, location.origin));
@@ -509,6 +547,7 @@ export function SkyWorkspace({
         try {
           const localCatalog = Aladin.catalog({
             ...LOCAL_CATALOG_STYLE,
+            shape: createCatalogMarker(LOCAL_CATALOG_STYLE.color, LOCAL_CATALOG_STYLE.sourceSize, 'rhomb'),
             onClick: 'showPopup',
           });
           localCatalog.addSources(FEATURED_OBJECTS.map((object) => Aladin.marker(
@@ -517,6 +556,7 @@ export function SkyWorkspace({
             {
               popupTitle: object.name,
               popupDesc: featuredObjectPopup(object),
+              useMarkerDefaultIcon: false,
             },
           )));
           viewer.addCatalog(localCatalog);
@@ -555,6 +595,7 @@ export function SkyWorkspace({
     return () => {
       active = false;
       simbadRequestRef.current?.abort();
+      disposePopupControls?.();
       if (timer) window.clearInterval(timer);
     };
   }, []);
@@ -611,7 +652,8 @@ export function SkyWorkspace({
 
   // Go to coordinates
   const handleGoto = useCallback(
-    (target: RegionRequest, name?: string) => {
+    (target: RegionRequest, name?: string, options?: { fovDeg?: number }) => {
+      navigationSeqRef.current += 1;
       const val = validateCoordinates(target.ra_deg, target.dec_deg, target.size_arcmin);
       if (!val.valid) {
         setCoordError(val.error);
@@ -625,7 +667,7 @@ export function SkyWorkspace({
       if (viewerRef.current) {
         viewerRef.current.gotoRaDec?.(target.ra_deg, target.dec_deg);
         // Set FOV slightly larger than region to provide context
-        const fovDeg = contextFovDeg(target.size_arcmin);
+        const fovDeg = options?.fovDeg ?? contextFovDeg(target.size_arcmin);
         viewerRef.current.setFoV?.(fovDeg);
         setCurrentFov(fovDeg);
         setCenterCoords([target.ra_deg, target.dec_deg]);
@@ -914,6 +956,20 @@ export function SkyWorkspace({
   const channelBand = channelToBand(currentChannel);
   const channelDetector = channelToDetector(currentChannel);
 
+  // Expert lookup: a resolved name moves the map like a curated object does.
+  const handleResolvedName = useCallback(
+    (target: ResolvedTarget) => {
+      // Frame the whole object: view and region follow its size in SIMBAD.
+      const view = lookupView(target.size_arcmin);
+      handleGoto(
+        { ra_deg: target.ra_deg, dec_deg: target.dec_deg, size_arcmin: view.regionArcmin },
+        target.name,
+        { fovDeg: view.fovDeg },
+      );
+    },
+    [handleGoto],
+  );
+
   const filteredCatalog = catalog.filter((obj) => {
     if (!searchQuery.trim()) return true;
     const q = searchQuery.toLowerCase();
@@ -1052,7 +1108,10 @@ export function SkyWorkspace({
           <label className="rail-label" htmlFor="catalog-search">
             Find objects
           </label>
-          <p className="rail-help">Browse the featured objects available offline.</p>
+          <p className="rail-help">
+            Browse the featured objects available offline, or type a name or catalogue code
+            (M31, NGC 224, HD 48915) to look it up in SIMBAD / NED.
+          </p>
           <div className="search-box">
             <span className="search-icon" aria-hidden="true">
               🔍
@@ -1061,13 +1120,38 @@ export function SkyWorkspace({
               id="catalog-search"
               type="search"
               className="rail-input search-input"
-              placeholder="Search featured objects..."
+              placeholder="Name or code, e.g. M31…"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key !== 'Enter') return;
+                const local = filteredCatalog[0] ?? null;
+                void runEnterLookup({
+                  typed: searchQuery,
+                  submit: () => nameSubmitRef.current?.() ?? Promise.resolve({ kind: 'missed' as const }),
+                  currentQuery: () => searchQueryRef.current,
+                  navigationSeq: () => navigationSeqRef.current,
+                  firstFeatured: local && {
+                    ra_deg: local.ra_deg,
+                    dec_deg: local.dec_deg,
+                    size_arcmin: local.default_size_arcmin,
+                    name: local.name,
+                  },
+                  goToResolved: handleResolvedName,
+                  goToFeatured: (f) =>
+                    handleGoto({ ra_deg: f.ra_deg, dec_deg: f.dec_deg, size_arcmin: f.size_arcmin }, f.name),
+                });
+              }}
             />
           </div>
 
           <div className="catalog-list" role="list" aria-label="Curated objects">
+            <NameSuggestion
+              query={searchQuery}
+              resolve={api.resolveName}
+              onSelect={handleResolvedName}
+              submitRef={nameSubmitRef}
+            />
             {filteredCatalog.map((item) => (
               <button
                 key={item.id}
@@ -1102,7 +1186,7 @@ export function SkyWorkspace({
               </button>
             ))}
             {filteredCatalog.length === 0 && (
-              <p className="rail-empty">No objects match &ldquo;{searchQuery}&rdquo;</p>
+              <p className="rail-empty">No featured objects match &ldquo;{searchQuery}&rdquo;</p>
             )}
           </div>
         </section>
@@ -1260,7 +1344,7 @@ export function SkyWorkspace({
                 title="Pan map"
                 onClick={() => setMode('pan')}
               >
-                <span aria-hidden="true">✋</span>
+                <PanIcon />
                 <span className="sr-only">Pan</span>
               </button>
               <button
@@ -1271,7 +1355,7 @@ export function SkyWorkspace({
                 title="Drag rectangle to select region (1..60 arcmin)"
                 onClick={() => setMode('region')}
               >
-                <span aria-hidden="true">⬚</span>
+                <RegionIcon />
                 <span className="sr-only">Select Region</span>
               </button>
             </div>
@@ -1280,26 +1364,29 @@ export function SkyWorkspace({
               <button
                 type="button"
                 className="tool-btn"
-                title="Zoom in"
-                onClick={() => handleZoom(0.6)}
-              >
-                +
-              </button>
-              <button
-                type="button"
-                className="tool-btn"
+                aria-label="Zoom out"
                 title="Zoom out"
                 onClick={() => handleZoom(1.5)}
               >
-                −
+                <ZoomOutIcon />
               </button>
               <button
                 type="button"
                 className="tool-btn"
+                aria-label="Zoom in"
+                title="Zoom in"
+                onClick={() => handleZoom(0.6)}
+              >
+                <ZoomInIcon />
+              </button>
+              <button
+                type="button"
+                className="tool-btn"
+                aria-label="Show all sky"
                 title="Show all sky"
                 onClick={handleAllSky}
               >
-                🌐
+                <AllSkyIcon />
               </button>
             </div>
           </div>
