@@ -3165,3 +3165,27 @@ tr:hover .records-name-edit,
 .selection-action-btn:hover {
   background: var(--sky-hover);
 }
+
+/* Name suggestion under Search objects (SIMBAD mirror / NED through the backend) */
+.name-suggestion-source {
+  padding: 1px 6px;
+  border: 1px solid var(--sky-line-strong);
+  border-radius: 999px;
+  color: var(--sky-accent-strong);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+p.name-suggestion {
+  margin: 0;
+  padding: 7px 10px;
+  font-size: 12px;
+  color: var(--sky-muted);
+  overflow-wrap: anywhere;
+}
+
+p.name-suggestion-error {
+  color: var(--sky-danger);
+}
