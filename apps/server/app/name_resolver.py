@@ -124,7 +124,7 @@ def _query_simbad(client: httpx.Client, name: str) -> dict[str, Any] | None:
     """SIMBAD answer for ``name``: a hit, or None when SIMBAD says it is unknown."""
     script = (
         "output console=off script=off\n"
-        'format object "%MAIN_ID|%COO(d;A D;ICRS)|%OTYPE(S)"\n'
+        'format object "%MAIN_ID|%COO(d;A D;ICRS)|%OTYPE(S)|%DIM(X;Y;A)"\n'
         f"query id {name}"
     )
     try:
@@ -144,9 +144,10 @@ def _query_simbad(client: httpx.Client, name: str) -> dict[str, Any] | None:
             f"SIMBAD reported an error: {' '.join(lines[1:])[:200]}"
         )
     fields = lines[0].split("|")
-    if len(fields) != 3:
+    if len(fields) not in (3, 4):
         raise ResolverUnavailable(f"SIMBAD answered an unexpected line: {lines[0]!r}")
-    main_id, coords, otype = fields
+    main_id, coords, otype = fields[:3]
+    dims = fields[3] if len(fields) == 4 else ""
     if not coords.strip():
         raise NoCoordinates(" ".join(main_id.split()))
     try:
@@ -161,6 +162,7 @@ def _query_simbad(client: httpx.Client, name: str) -> dict[str, Any] | None:
         "ra_deg": ra,
         "dec_deg": dec,
         "object_type": otype.strip() or None,
+        "size_arcmin": _major_axis(dims),
     }
 
 
@@ -185,9 +187,20 @@ def _query_ned(client: httpx.Client, name: str) -> dict[str, Any] | None:
             "ra_deg": float(position["RA"]),
             "dec_deg": float(position["Dec"]),
             "object_type": (preferred.get("ObjType") or {}).get("Value") or None,
+            "size_arcmin": None,
         }
     except (AttributeError, TypeError, ValueError):
         raise ResolverUnavailable("NED answered an unexpected payload") from None
+
+
+def _major_axis(dims: str) -> float | None:
+    """Major axis in arcmin from SIMBAD %DIM ("199.53;70.79;35"); None for points."""
+    major = dims.split(";")[0].strip() if dims else ""
+    try:
+        value = float(major)
+    except ValueError:
+        return None  # "~" means SIMBAD has no size (point source)
+    return value if value > 0 else None
 
 
 def _make_client() -> httpx.Client:
@@ -207,11 +220,20 @@ def resolve_name(raw: str) -> dict[str, Any]:
             "ra_deg": ra,
             "dec_deg": dec,
             "object_type": None,
+            "size_arcmin": None,
             "source": "designation",
             "cached": False,
         }
 
     cached = _read_cache(name)
+    # Hits cached before sizes were recorded lack size_arcmin: ask again so the
+    # map can frame the object instead of reusing a size-less answer for 30 days.
+    if (
+        cached is not None
+        and cached.get("found")
+        and "size_arcmin" not in cached["result"]
+    ):
+        cached = None
     if cached is not None:
         if not cached.get("found"):
             raise HTTPException(status_code=404, detail=_not_found(name))

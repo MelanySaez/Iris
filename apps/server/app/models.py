@@ -305,5 +305,6 @@ class ResolveNameResponse(BaseModel):
     ra_deg: float
     dec_deg: float
     object_type: str | None = None
+    size_arcmin: float | None = None  # major axis; None for point sources
     source: Literal["simbad", "ned", "designation"]
     cached: bool = False

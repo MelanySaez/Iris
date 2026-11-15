@@ -93,6 +93,7 @@ def test_resolves_a_catalogue_code_through_the_simbad_mirror(fake):
         "ra_deg": pytest.approx(10.684708),
         "dec_deg": pytest.approx(41.26875),
         "object_type": "AGN",
+        "size_arcmin": None,
         "source": "simbad",
         "cached": False,
     }
@@ -277,3 +278,49 @@ def test_resolver_waits_are_bounded():
     with resolver._make_client() as client:
         assert client.timeout.read <= 5
         assert client.timeout.connect <= 5
+
+
+# --- Angular size: lets the map frame the whole object ---
+
+
+def test_extended_object_reports_its_major_axis(fake):
+    fake.simbad = {"M31": "M  31|010.684708 +41.268750|AGN|199.53;70.79;  35"}
+    body = get("M31").json()
+    assert body["size_arcmin"] == pytest.approx(199.53)
+
+
+def test_point_source_has_no_size(fake):
+    fake.simbad = {
+        "Betelgeuse": "* alf Ori|088.79293899 +07.40706400|RedSG|    ~;    ~;   ~"
+    }
+    assert get("Betelgeuse").json()["size_arcmin"] is None
+
+
+def test_ned_and_designation_answers_have_no_size(fake):
+    fake.simbad = "down"
+    fake.ned = {
+        "M31": {"name": "MESSIER 031", "ra": 10.6848, "dec": 41.2691, "type": "G"}
+    }
+    assert get("M31").json()["size_arcmin"] is None
+    assert get("J004244.3+411608").json()["size_arcmin"] is None
+
+
+def test_cached_answers_from_before_sizes_are_refreshed(fake):
+    fake.simbad = {"M31": "M  31|010.684708 +41.268750|AGN|199.53;70.79;  35"}
+    resolver._write_cache(
+        "M31",
+        {
+            "found": True,
+            "result": {
+                "name": "M 31",
+                "ra_deg": 10.684708,
+                "dec_deg": 41.26875,
+                "object_type": "AGN",
+                "source": "simbad",
+            },
+        },
+    )
+    body = get("M31").json()
+    assert body["size_arcmin"] == pytest.approx(199.53)
+    assert body["cached"] is False  # the size-less entry was refreshed
+    assert get("M31").json()["cached"] is True  # and the new one is reused
