@@ -52,3 +52,16 @@ describe('TopBar tour button', () => {
     expect(container.querySelector('nav[data-tour="workspaces"]')).not.toBeNull();
   });
 });
+
+describe('TopBar assistant targets', () => {
+  afterEach(() => cleanup());
+
+  it('marks every workspace button so the assistant guide can point at it', () => {
+    render(<TopBar currentRoute={{ type: 'sky' }} activeJobId={null} onNavigate={vi.fn()} />);
+    for (const workspace of ['sky', 'plate', 'spectral', 'records']) {
+      const target = document.querySelectorAll(`[data-assistant-target="workspace-${workspace}"]`);
+      expect(target).toHaveLength(1);
+      expect(target[0].tagName).toBe('BUTTON');
+    }
+  });
+});

@@ -1332,7 +1332,12 @@ export function SkyWorkspace({
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
         >
-          <div id="aladin-view" aria-label="Aladin Lite All-Sky DR1 HiPS view" data-tour="map" />
+          <div
+            id="aladin-view"
+            aria-label="Aladin Lite All-Sky DR1 HiPS view"
+            data-tour="map"
+            data-assistant-target="map"
+          />
 
           {contextTarget && contextPosition && (
             <div className="sky-search-origin" role="img" aria-label="Search origin: original pinned sky position"
@@ -1567,7 +1572,7 @@ export function SkyWorkspace({
               onModeChange={setRgbMode}
               onApply={applyRgb}
             >
-            <div className="dock-header">
+            <div className="dock-header" data-assistant-target="channel">
               <div className="dock-channel-info">
                 <span className="dock-badge num">channel {currentChannel}</span>
                 <span className="dock-dot">·</span>

@@ -11,11 +11,12 @@ import {
   type SkyUiState,
 } from './components/sky/SkyWorkspace';
 import { AssistantWidget, type ActionResult } from './components/assistant/AssistantWidget';
+import { AssistantGuide, type GuideCueItem } from './components/assistant/AssistantGuide';
 import { Landing } from './components/landing/Landing';
 import { GuidedTour } from './components/tour/GuidedTour';
 import { tourForRoute, type TourId } from './components/tour/tourSteps';
 import { ConsentBar } from './components/consent/ConsentBar';
-import type { AssistantAction, AssistantUiContext } from './assistant';
+import { guideCueFor, type AssistantAction, type AssistantUiContext } from './assistant';
 import { SpectralLab, type SpectrumRequest } from './components/spectral/SpectralLab';
 import type { SpectrumTarget } from './components/sky/SelectionActions';
 import { useJobPoller } from './hooks/useJobPoller';
@@ -167,7 +168,21 @@ export function App() {
     };
   };
 
+  // Visual guide: each action the assistant runs points at what it changed.
+  const [guideCues, setGuideCues] = useState<GuideCueItem[]>([]);
+  const guideCueId = useRef(0);
+
   const handleAssistantAction = (action: AssistantAction): ActionResult => {
+    const result = runAssistantAction(action);
+    if (result.ok) {
+      guideCueId.current += 1;
+      const cue = { id: guideCueId.current, ...guideCueFor(action) };
+      setGuideCues((prev) => [...prev, cue]);
+    }
+    return result;
+  };
+
+  const runAssistantAction = (action: AssistantAction): ActionResult => {
     if (action.type === 'navigate') {
       if (action.workspace === 'plate') {
         if (!activeJobId) return { ok: false, detail: 'No active job to open in Plate' };
@@ -311,6 +326,7 @@ export function App() {
       </div>
 
       {!isLanding && <AssistantWidget getContext={getAssistantContext} onAction={handleAssistantAction} />}
+      {!isLanding && <AssistantGuide cues={guideCues} />}
       {consent.barOpen && (
         <ConsentBar onChoose={(level) => void consent.choose(level)} saving={consent.saving} error={consent.error} />
       )}

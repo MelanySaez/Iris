@@ -57,6 +57,7 @@ export function TopBar({ currentRoute, activeJobId, onNavigate, onStartTour }: T
           type="button"
           className={`switch-btn ${isSky ? 'active' : ''}`}
           aria-pressed={isSky}
+          data-assistant-target="workspace-sky"
           onClick={() => onNavigate('#/sky')}
         >
           Sky
@@ -65,6 +66,7 @@ export function TopBar({ currentRoute, activeJobId, onNavigate, onStartTour }: T
           type="button"
           className={`switch-btn ${isPlate ? 'active' : ''}`}
           aria-pressed={isPlate}
+          data-assistant-target="workspace-plate"
           disabled={!activeJobId}
           title={activeJobId ? `Switch to Spectral Plate ${activeJobId}` : 'Select a region in Sky to open Plate'}
           onClick={() => {
@@ -79,6 +81,7 @@ export function TopBar({ currentRoute, activeJobId, onNavigate, onStartTour }: T
           type="button"
           className={`switch-btn ${isSpectral ? 'active' : ''}`}
           aria-pressed={isSpectral}
+          data-assistant-target="workspace-spectral"
           title="Compare quick-look spectra from the All-Sky Cube"
           onClick={() => onNavigate('#/spectral')}
         >
@@ -88,6 +91,7 @@ export function TopBar({ currentRoute, activeJobId, onNavigate, onStartTour }: T
           type="button"
           className={`switch-btn ${isRecords ? 'active' : ''}`}
           aria-pressed={isRecords}
+          data-assistant-target="workspace-records"
           onClick={() => onNavigate('#/records')}
         >
           Records

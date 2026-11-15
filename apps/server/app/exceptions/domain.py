@@ -156,5 +156,9 @@ class AssistantRateLimitedError(TooManyRequestsError):
     """The client exceeded the per-minute assistant rate limit."""
 
 
+class AssistantProviderRateLimitedError(ServiceUnavailableError):
+    """The model provider is rate-limiting this server's requests."""
+
+
 class AssistantModelUnavailableError(UpstreamServiceError):
     """The model provider could not answer the request."""
