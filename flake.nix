@@ -28,13 +28,24 @@
           libffi
           bzip2
           xz
-          sqlite
         ];
 
-        libraryPath = pkgs.lib.makeLibraryPath runtimeLibraries;
+        # Applied when patching the uv venv RPATH, but never exported on
+        # LD_LIBRARY_PATH. NSS resolves libsqlite3.so through its own RPATH,
+        # and a dev shell copy shadows it, aborting every Electron and
+        # Chromium app at startup (FATAL:crypto/nss_util, nss_error=-5925).
+        rpathOnlyLibraries = with pkgs; [ sqlite ];
+
+        libraryPath = pkgs.lib.makeLibraryPath (runtimeLibraries ++ rpathOnlyLibraries);
         nixLdLibraryPath = pkgs.lib.makeLibraryPath (
-          runtimeLibraries ++ pkgs.lib.optional pkgs.stdenv.hostPlatform.isLinux pkgs.glibc
+          runtimeLibraries
+          ++ rpathOnlyLibraries
+          ++ pkgs.lib.optional pkgs.stdenv.hostPlatform.isLinux pkgs.glibc
         );
+
+        # Subset exported as LD_LIBRARY_PATH by the dev shell, kept free of
+        # libraries that other programs must resolve through their own RPATH.
+        shellLibraryPath = pkgs.lib.makeLibraryPath runtimeLibraries;
         pkgConfigPath = pkgs.lib.makeSearchPath "lib/pkgconfig" (
           with pkgs;
           [
@@ -146,7 +157,7 @@
 
           shellHook = ''
             ${pkgs.lib.optionalString pkgs.stdenv.hostPlatform.isLinux ''
-              export LD_LIBRARY_PATH="${libraryPath}''${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+              export LD_LIBRARY_PATH="${shellLibraryPath}''${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
             ''}
 
             ${patchUvVenv}
