@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CubeSpectrumResponse } from '../../types';
 
 const getSpectrum = vi.fn();
+const resolveName = vi.fn();
 
 vi.mock('../../api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../api')>();
@@ -11,6 +12,7 @@ vi.mock('../../api', async (importOriginal) => {
     ...actual,
     api: {
       getSpectrum: (...args: unknown[]) => getSpectrum(...args),
+      resolveName: (...args: unknown[]) => resolveName(...args),
     },
   };
 });
@@ -373,6 +375,109 @@ describe('SpectralLab featured objects panel', () => {
     render(<SpectralLab request={null} />);
     await act(async () => fireEvent.click(catalogButton('Andromeda Galaxy')));
     expect(getSpectrum).toHaveBeenCalledWith(10.684708, 41.26875);
+  });
+});
+
+describe('SpectralLab object search', () => {
+  const m31 = {
+    query: 'M31',
+    name: 'M 31',
+    ra_deg: 10.684708,
+    dec_deg: 41.26875,
+    object_type: 'AGN',
+    source: 'simbad' as const,
+    cached: false,
+    size_arcmin: 199.53,
+    alternatives: [
+      { name: 'Messier 031', ra_deg: 10.6848, dec_deg: 41.2691, object_type: 'G', source: 'ned' as const },
+    ],
+  };
+  const notFound = () => new ApiError('Name not found', 404, 'Name not found');
+  const searchBox = () => screen.getByRole('searchbox', { name: 'Search objects' });
+  const type = (text: string) => fireEvent.change(searchBox(), { target: { value: text } });
+  const settle = async (ms = 400) => {
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(ms);
+    });
+  };
+  const featuredNames = () =>
+    Array.from(document.querySelectorAll('.spectral-catalog .spectral-catalog-title')).map(
+      (el) => el.textContent,
+    );
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    getSpectrum.mockReset();
+    getSpectrum.mockResolvedValue(spectrum([10, 20, 30]));
+    resolveName.mockReset();
+  });
+  afterEach(() => {
+    cleanup();
+    vi.useRealTimers();
+  });
+
+  it('places a Search objects box above the featured objects', () => {
+    render(<SpectralLab request={null} />);
+    const search = screen.getByRole('heading', { name: 'Search objects' });
+    const featured = screen.getByRole('heading', { name: 'Featured objects' });
+    expect(search.compareDocumentPosition(featured) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(searchBox().compareDocumentPosition(featured) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('lists SIMBAD and NED answers and plots the chosen one under its name', async () => {
+    resolveName.mockResolvedValue(m31);
+    render(<SpectralLab request={null} />);
+
+    type('M31');
+    await settle();
+
+    expect(resolveName).toHaveBeenCalledWith('M31', expect.anything());
+    expect(screen.getByRole('button', { name: /Messier 031/ })).toBeTruthy();
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: /^M 31/ })));
+
+    expect(getSpectrum).toHaveBeenCalledWith(10.684708, 41.26875);
+    expect(screen.getByRole('img', { name: /Spectra of M 31/ })).toBeTruthy();
+  });
+
+  it('filters the featured objects by the typed text, like Sky search', () => {
+    resolveName.mockRejectedValue(notFound());
+    render(<SpectralLab request={null} />);
+
+    type('nebula');
+    expect(featuredNames()).toEqual(['Eagle Nebula', 'Crab Nebula']);
+
+    type('M45');
+    expect(featuredNames()).toEqual(['Pleiades']);
+
+    type('zzz');
+    expect(featuredNames()).toEqual([]);
+    expect(screen.getByText('No featured objects match “zzz”')).toBeTruthy();
+  });
+
+  it('adds the resolved object on Enter without waiting for the suggestion', async () => {
+    resolveName.mockResolvedValue(m31);
+    render(<SpectralLab request={null} />);
+
+    type('M31');
+    await act(async () => {
+      fireEvent.keyDown(searchBox(), { key: 'Enter' });
+    });
+
+    expect(resolveName).toHaveBeenCalledTimes(1);
+    expect(getSpectrum).toHaveBeenCalledWith(10.684708, 41.26875);
+  });
+
+  it('falls back to the first featured match on Enter when SIMBAD/NED do not know the name', async () => {
+    resolveName.mockRejectedValue(notFound());
+    render(<SpectralLab request={null} />);
+
+    type('Pleiades');
+    await act(async () => {
+      fireEvent.keyDown(searchBox(), { key: 'Enter' });
+    });
+
+    expect(getSpectrum).toHaveBeenCalledWith(56.6008, 24.1139);
+    expect(screen.getByRole('img', { name: /Spectra of Pleiades/ })).toBeTruthy();
   });
 });
 

@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
-import type { FormEvent, PointerEvent as ReactPointerEvent } from 'react';
+import type { FormEvent, KeyboardEvent, PointerEvent as ReactPointerEvent } from 'react';
 import { LAB_FEATURED } from '../../labFeatured';
 import { api, ApiError } from '../../api';
+import { runEnterLookup } from '../../searchEnter';
+import { NameSuggestion, type ResolvedTarget, type SubmitLookup } from '../sky/NameSuggestion';
 import {
   MAX_SPECTRA,
   SERIES_COLORS,
@@ -67,6 +69,11 @@ export function SpectralLab({ request = null }: { request?: SpectrumRequest | nu
   const [yMode, setYMode] = useState<YScaleMode>('linear');
   const [showEstimates, setShowEstimates] = useState(true);
   const [sidebarVisible, setSidebarVisible] = useState(true);
+  // Object search, shared with Sky: SIMBAD/NED suggestions plus featured matches.
+  const [searchQuery, setSearchQuery] = useState('');
+  const searchQueryRef = useRef('');
+  searchQueryRef.current = searchQuery;
+  const nameSubmitRef = useRef<SubmitLookup | null>(null);
   const requestCounter = useRef(0);
   // Source of truth for entries between renders: two clicks before React
   // re-renders must both see the first add (no duplicate key or colour slot).
@@ -110,6 +117,11 @@ export function SpectralLab({ request = null }: { request?: SpectrumRequest | nu
     [updateEntries],
   );
 
+  const handleResolvedName = useCallback(
+    (target: ResolvedTarget) => addSpectrum(target.name, target.ra_deg, target.dec_deg),
+    [addSpectrum],
+  );
+
   // Add a requested spectrum once per request id (effects may re-run).
   const handledRequest = useRef<number | null>(null);
   useEffect(() => {
@@ -132,6 +144,29 @@ export function SpectralLab({ request = null }: { request?: SpectrumRequest | nu
     updateEntries((prev) => prev.map((e) => (e.key === key ? { ...e, visible: !e.visible } : e)));
   const remove = (key: string) => updateEntries((prev) => prev.filter((e) => e.key !== key));
 
+  const query = searchQuery.trim().toLowerCase();
+  const featured = query
+    ? LAB_FEATURED.filter((obj) =>
+        [obj.name, obj.catalogue, obj.type].some((text) => text.toLowerCase().includes(query)),
+      )
+    : LAB_FEATURED;
+
+  const handleSearchKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key !== 'Enter') return;
+    const local = featured[0] ?? null;
+    void runEnterLookup({
+      typed: searchQuery,
+      submit: () => nameSubmitRef.current?.() ?? Promise.resolve({ kind: 'missed' as const }),
+      currentQuery: () => searchQueryRef.current,
+      // Any spectrum added meanwhile makes this Enter stale.
+      navigationSeq: () => requestCounter.current,
+      // Spectra sample one point, so the featured object's size is irrelevant here.
+      firstFeatured: local && { ra_deg: local.ra_deg, dec_deg: local.dec_deg, size_arcmin: 0, name: local.name },
+      goToResolved: handleResolvedName,
+      goToFeatured: (f) => addSpectrum(f.name, f.ra_deg, f.dec_deg),
+    });
+  };
+
   const plotted = entries.filter(
     (e): e is SpectrumEntry & { data: CubeSpectrumResponse } =>
       e.visible && e.status === 'ready' && !!e.data,
@@ -143,10 +178,39 @@ export function SpectralLab({ request = null }: { request?: SpectrumRequest | nu
         aria-hidden={!sidebarVisible} inert={!sidebarVisible}>
         <section data-tour="lab-add">
           <h2 className="spectral-heading">Add a spectrum</h2>
+          <h3 className="spectral-subheading">Search objects</h3>
+          <p className="spectral-subheading-note">
+            Type a name or catalogue code (M31, NGC 224, HD 48915) to look it up in SIMBAD / NED.
+          </p>
+          <div className="search-box spectral-search">
+            <span className="search-icon" aria-hidden="true">
+              🔍
+            </span>
+            <input
+              type="search"
+              aria-label="Search objects"
+              className="rail-input search-input"
+              placeholder="Name or code, e.g. M31…"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyDown={handleSearchKeyDown}
+            />
+          </div>
+          <div className="spectral-search-results">
+            <NameSuggestion
+              query={searchQuery}
+              resolve={api.resolveName}
+              onSelect={handleResolvedName}
+              submitRef={nameSubmitRef}
+            />
+          </div>
           <h3 className="spectral-subheading">Featured objects</h3>
           <p className="spectral-subheading-note">Well-known targets to get you started</p>
+          {featured.length === 0 && (
+            <p className="spectral-subheading-note">No featured objects match &ldquo;{searchQuery}&rdquo;</p>
+          )}
           <ul className="spectral-catalog">
-            {LAB_FEATURED.map((obj) => {
+            {featured.map((obj) => {
               const taken = entries.some((e) => e.key === spectrumKey(obj.ra_deg, obj.dec_deg));
               return (
                 <li key={obj.id}>
