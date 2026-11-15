@@ -126,7 +126,7 @@ All endpoints are mounted under `/api`:
 - `POST /api/selections/claim` with `{"job_ids": [...]}` (at most 100): Saves, for a browser that just accepted cookies, the jobs it submitted before accepting. Answers `{claimed}`, the number of selections added; unknown job ids and jobs the browser already has are skipped.
 - `GET /api/selections?limit=&before=`: The browser's saved selections (one per job request), most recently seen first, with `job_status` and, for failed jobs, `job_error` plus its traceability fields (see below). `next_before` is the cursor for the next page.
 - `GET /api/selections/{id}`: One saved selection with its discovered spectral products and, for ready jobs, the provenance manifest.
-- `DELETE /api/selections/{id}`: Delete one saved selection (204). Shared region data is kept. All selection endpoints answer 503 when `DATABASE_URL` is unset and 403 when the browser has no owner cookie (cookies not accepted).
+- `DELETE /api/selections/{id}`: Delete one saved selection (204). Shared region data is kept. All selection endpoints answer 503 when `DATABASE_URL` is unset and 403 while the browser has not accepted cookies (consent cookie not `necessary` or `all`).
 
 ## Provenance & Scientific Limitations
 

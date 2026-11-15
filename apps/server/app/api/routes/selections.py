@@ -1,8 +1,8 @@
 """HTTP endpoints for saved selection records.
 
 Every endpoint is scoped to the browser's owner cookie (see ``consent``): a
-browser only sees and changes its own selections, and without the cookie the
-endpoints answer 403.
+browser only sees and changes its own selections, and while it has not
+accepted cookies the endpoints answer 403.
 """
 
 from __future__ import annotations
