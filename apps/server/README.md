@@ -28,7 +28,6 @@ Every job submission is saved as a selection record in PostgreSQL (SQLAlchemy + 
    ```
 
    Using a native PostgreSQL instead: `createuser -P iris && createdb -O iris iris`, then point `DATABASE_URL` at its port.
-
 3. Export the backend variables and apply the migrations. The server does not load `.env` by itself, so source it in every shell that runs it:
 
    ```bash
@@ -53,13 +52,13 @@ uv run pytest -q   # in apps/server, with .env sourced
 
 Every failed job records where, why and how it stopped. The job snapshot (`GET /api/jobs/{id}`) and the saved selection carry:
 
-| Field | Meaning |
-|-------|---------|
-| `failed_stage` | Pipeline stage that was running: `discovering`, `downloading`, `extracting` or `rendering`. |
-| `error_kind` | Stable category: `no_coverage`, `discovery_unavailable`, `no_detector_coverage`, `download_failed`, `extraction_failed`, `render_failed` or `unexpected`. |
-| `job_error` | Human-readable message. |
-| `error_trace` | Traceback (file and line) for unexpected errors, trimmed to the innermost frames; empty for expected failures. It exposes server file paths, so treat it as development-only data. |
-| `job_events` | Timeline of stages with epoch timestamps (selection only; the snapshot calls it `events`). |
+| Field            | Meaning                                                                                                                                                                                                                                       |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `failed_stage`   | Pipeline stage that was running: `discovering`, `downloading`, `extracting` or `rendering`.                                                                                                                                                   |
+| `error_kind`     | Stable category: `no_coverage`, `discovery_unavailable`, `no_detector_coverage`, `download_failed`, `extraction_failed`, `render_failed` or `unexpected`.                                                                                     |
+| `job_error`      | Human-readable message.                                                                                                                                                                                                                       |
+| `error_trace`    | Traceback (file and line) for unexpected errors, trimmed to the innermost frames; empty for expected failures. It exposes server file paths, so treat it as development-only data.                                                            |
+| `job_events`     | Timeline with epoch timestamps (selection only; the snapshot calls it `events`). Discovery retries add structured `discovery_attempt` events with provider, attempt number, outcome, error detail, and whether another retry will follow.     |
 
 Every HTTP response has an `X-Request-ID` header. The request that created a job is stored as `request_id` in its snapshot and printed in the job's log lines (`job=<id> request=<request_id> ...`), so `grep <job_id>` on the server log returns the whole story. To query failures in the database:
 
@@ -71,6 +70,7 @@ docker compose exec db psql -U iris -P pager=off -c \
 After changing the models in `app/selections/orm.py`, create a migration with `uv run alembic revision --autogenerate -m "<message>"` and review it before committing.
 
 To run with a custom local spectral asset:
+
 ```bash
 SPHEREX_SPECTRAL_FITS=/path/to/level2.fits uv run uvicorn app.main:app --reload
 ```
@@ -85,7 +85,7 @@ All endpoints are mounted under `/api`:
 - `GET /api/spectrum?ra=&dec=`: Quick-look 102-channel spectrum (MJy/sr) at one ICRS position, sampled from the DR1 All-Sky Cube `fits-cube` HiPS tile (order 5) that contains it. The ~320 MB tile is never downloaded: the backend walks its FITS headers and reads the pixel's `IMAGE`, `NHITS` and `FLAGS` values with HTTP multipart byte-range requests. Channels without coverage return `value: null`, `available: false`. The payload is labelled `quick_look: true`, `calibrated: false`: it is a mosaic pixel profile, not forced photometry of a source. Tile layouts and spectra are cached under `data/cache/cube/` for 7 days; each pixel read also checks the tile size against the cached layout and rebuilds it if IRSA republished the tile. Returns 404 when no tile covers the position and 502 when IRSA fails, ignores range requests, answers with more than 1 MiB for a range read, or serves a tile that cannot be parsed.
 - `POST /api/regions/resolve`: Coordinate-based discovery of available detector products via IRSA TAP and local footprint matching. Capped at 30 arcmin. Returns 200 even on remote discovery warning; only definitive outcomes are cached for 6 hours.
 - `POST /api/jobs`: Queue or deduplicate a spectral plate preparation job (`latest` or `history` mode, up to 8 channels, `image`, `variance`, `flags`). Blank channels and out-of-range indices are rejected with 422 before a job exists; resubmitting after a failure starts a fresh attempt.
-- `GET /api/jobs/{id}`: Poll job status, progress, stage, and ready frame descriptors.
+- `GET /api/jobs/{id}`: Poll job status, progress, stage, discovery-attempt trace, and ready frame descriptors. Each upstream attempt is reported as it starts and finishes; failures state explicitly whether the job will retry.
 - `GET /api/jobs/{id}/frames/{channel}/{product}.png`: Render 8-bit grayscale cutout (`mode=full`) or RGBA channel slice (`mode=slice`, opaque alpha 235 inside the LVF window, dim alpha 45 context). The window is `lambda_channel +/- bandwidth_um / 2`, where `bandwidth_um` is the local channel spacing. Supports `variance` and `flags` (with optional `bit` mask query).
 - `GET /api/jobs/{id}/frames/{channel}/{product}.npy`: Export raw float32/int32 NumPy array (`image`, `variance`, `flags`, `wavelengths`, `bandwidths`).
 - `GET /api/jobs/{id}/pixel?x=&y=&channel=&epoch=`: Per-pixel probe returning calibrated units, raw values, exact LVF wavelength/bandwidth, channel window inclusion, and set `MP_*` flag bit names.
@@ -107,7 +107,7 @@ All endpoints are mounted under `/api`:
 
 All caching is stored under `apps/server/data/`:
 
-```
+```console
 data/
 ├── level2_*.fits                       # Read-only local FITS asset
 └── cache/
@@ -129,6 +129,7 @@ uv run python scripts/warm_catalog.py --objects local-dr1-sample,m81-field --cha
 ```
 
 Options:
+
 - `--objects`: Comma-separated list of catalog object IDs (default: all).
 - `--channels`: Comma-separated channel indices (default: `20`).
 - `--products`: Comma-separated products (default: `image`).

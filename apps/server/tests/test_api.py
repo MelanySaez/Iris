@@ -195,6 +195,51 @@ def test_discovery_outage_is_classified_as_unavailable():
     assert "ReadTimeout: timed out" in snap["error"]
 
 
+def test_discovery_attempt_trace_is_returned_in_job_snapshot():
+    attempt_events = [
+        {
+            "event_type": "discovery_attempt",
+            "provider": "IRSA TAP",
+            "attempt": 1,
+            "max_attempts": 2,
+            "outcome": "failed",
+            "will_retry": True,
+            "detail": "ReadTimeout: The read operation timed out",
+        },
+        {
+            "event_type": "discovery_attempt",
+            "provider": "IRSA TAP",
+            "attempt": 2,
+            "max_attempts": 2,
+            "outcome": "failed",
+            "will_retry": False,
+            "detail": "ReadTimeout: The read operation timed out",
+        },
+    ]
+
+    def unavailable_with_attempts(ra, dec, size, on_attempt=None):
+        for event in attempt_events:
+            on_attempt(event)
+        return {
+            "coverage": "unknown",
+            "warning": "ReadTimeout: The read operation timed out",
+            "products": [],
+        }
+
+    client = TestClient(app)
+    with patch("app.jobs.resolve_region", side_effect=unavailable_with_attempts):
+        _, snap = _submit_and_wait(
+            client, {**NO_COVERAGE, "ra_deg": 12.75, "channels": [44]}
+        )
+
+    attempts = [e for e in snap["events"] if e.get("event_type") == "discovery_attempt"]
+    assert [(e["attempt"], e["outcome"], e["will_retry"]) for e in attempts] == [
+        (1, "failed", True),
+        (2, "failed", False),
+    ]
+    assert attempts[1]["detail"] == "ReadTimeout: The read operation timed out"
+
+
 def test_unexpected_error_keeps_stage_kind_and_traceback():
     discovery = {
         "coverage": "available",

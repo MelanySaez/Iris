@@ -424,6 +424,39 @@ class JobManager:
         )
         self._save_snapshot_to_disk(job)
 
+    def _record_discovery_attempt(self, job: JobState, attempt: dict[str, Any]) -> None:
+        """Append upstream retry details to the polled job trace."""
+        provider = str(attempt.get("provider") or "Discovery provider")
+        number = attempt.get("attempt", "?")
+        maximum = attempt.get("max_attempts", "?")
+        outcome = attempt.get("outcome", "unknown")
+        will_retry = bool(attempt.get("will_retry", False))
+
+        if outcome == "started":
+            stage = f"{provider} · Attempt {number} of {maximum} in progress"
+        elif outcome == "failed" and will_retry:
+            stage = f"{provider} · Attempt {number} of {maximum} failed; retrying"
+        elif outcome == "failed":
+            stage = f"{provider} · Attempt {number} of {maximum} failed"
+        else:
+            stage = f"{provider} · Attempt {number} of {maximum} succeeded"
+
+        event = {**attempt, "stage": stage, "at": time.time()}
+        job.stage = stage
+        job.events.append(event)
+        logger.info(
+            "job=%s request=%s provider=%s attempt=%s/%s outcome=%s will_retry=%s detail=%s",
+            job.id,
+            job.request_id,
+            provider,
+            number,
+            maximum,
+            outcome,
+            will_retry,
+            attempt.get("detail", ""),
+        )
+        self._save_snapshot_to_disk(job)
+
     def _run_job(self, job: JobState) -> None:
         """Complete workflow for a queued job: discover, download, extract, render."""
         try:
@@ -437,7 +470,12 @@ class JobManager:
             job.events.append({"stage": job.stage, "at": time.time()})
             logger.info("job=%s stage=%s progress=%s", job.id, job.stage, job.progress)
 
-            discovery = resolve_region(ra, dec, size)
+            discovery = resolve_region(
+                ra,
+                dec,
+                size,
+                on_attempt=lambda attempt: self._record_discovery_attempt(job, attempt),
+            )
             self._notify("on_discovered", job, discovery)
             if discovery["coverage"] == "none":
                 self._fail(

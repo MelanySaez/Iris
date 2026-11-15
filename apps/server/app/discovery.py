@@ -5,10 +5,11 @@ from __future__ import annotations
 import hashlib
 import io
 import json
+import logging
 import math
 import re
 import time
-from typing import Any
+from typing import Any, Callable
 
 import httpx
 import numpy as np
@@ -25,6 +26,21 @@ from app.config import (
     TAP_QUERY_TIMEOUT,
     TAP_SYNC_URL,
 )
+
+logger = logging.getLogger(__name__)
+DiscoveryAttemptObserver = Callable[[dict[str, Any]], None]
+
+
+def _notify_discovery_attempt(
+    observer: DiscoveryAttemptObserver | None, event: dict[str, Any]
+) -> None:
+    """Report attempt progress without allowing observers to affect discovery."""
+    if observer is None:
+        return
+    try:
+        observer(event)
+    except Exception:
+        logger.exception("Discovery attempt observer failed")
 
 
 def get_local_asset_metadata() -> dict[str, Any] | None:
@@ -151,8 +167,9 @@ def query_irsa_tap(
     ra_deg: float,
     dec_deg: float,
     size_arcmin: float,
+    on_attempt: DiscoveryAttemptObserver | None = None,
 ) -> tuple[list[dict[str, Any]], str | None]:
-    """Execute TAP sync ADQL query with one retry. Never raises 500."""
+    """Execute TAP sync ADQL query, reporting each attempt. Never raises 500."""
     size_deg = size_arcmin / 60.0
     uri_template = (
         "'https://irsa.ipac.caltech.edu/' || a.uri || "
@@ -177,7 +194,16 @@ ORDER BY p.time_bounds_lower
     }
 
     last_err: str | None = None
-    for attempt in range(TAP_QUERY_RETRIES + 1):
+    max_attempts = TAP_QUERY_RETRIES + 1
+    for attempt in range(1, max_attempts + 1):
+        attempt_info = {
+            "event_type": "discovery_attempt",
+            "provider": "IRSA TAP",
+            "attempt": attempt,
+            "max_attempts": max_attempts,
+        }
+        _notify_discovery_attempt(on_attempt, {**attempt_info, "outcome": "started"})
+        detail: str | None = None
         try:
             with httpx.Client(timeout=TAP_QUERY_TIMEOUT) as client:
                 resp = client.post(TAP_SYNC_URL, data=data)
@@ -185,12 +211,35 @@ ORDER BY p.time_bounds_lower
                     products = parse_tap_votable(
                         resp.content, ra_deg, dec_deg, size_arcmin
                     )
+                    _notify_discovery_attempt(
+                        on_attempt,
+                        {
+                            **attempt_info,
+                            "outcome": "succeeded",
+                            "will_retry": False,
+                            "result_count": len(products),
+                        },
+                    )
                     return products, None
                 last_err = f"IRSA TAP returned HTTP {resp.status_code}: {resp.text[:200]}"
+                detail = f"HTTP {resp.status_code}"
         except Exception as exc:
             last_err = f"{type(exc).__name__}: {exc}"
-            if attempt < TAP_QUERY_RETRIES:
-                time.sleep(0.5)
+            detail = f"{type(exc).__name__}: {exc or 'Request failed'}"
+        will_retry = attempt < max_attempts
+        retry_after_seconds = min(8.0, 0.5 * 2 ** (attempt - 1)) if will_retry else None
+        _notify_discovery_attempt(
+            on_attempt,
+            {
+                **attempt_info,
+                "outcome": "failed",
+                "will_retry": will_retry,
+                "retry_after_seconds": retry_after_seconds,
+                "detail": (detail or last_err or "Unknown discovery error")[:240],
+            },
+        )
+        if retry_after_seconds is not None:
+            time.sleep(retry_after_seconds)
 
     return [], last_err
 
@@ -200,6 +249,7 @@ def resolve_region(
     dec_deg: float,
     size_arcmin: float = 6.0,
     force_refresh: bool = False,
+    on_attempt: DiscoveryAttemptObserver | None = None,
 ) -> dict[str, Any]:
     """Discover available spectral image products from local asset and remote TAP."""
     start_time = time.time()
@@ -226,7 +276,12 @@ def resolve_region(
     local_meta = get_local_asset_metadata() if local_covered else None
 
     # Query remote TAP
-    remote_products, warning = query_irsa_tap(ra_deg, dec_deg, size_arcmin)
+    if on_attempt is None:
+        remote_products, warning = query_irsa_tap(ra_deg, dec_deg, size_arcmin)
+    else:
+        remote_products, warning = query_irsa_tap(
+            ra_deg, dec_deg, size_arcmin, on_attempt=on_attempt
+        )
 
     products: list[dict[str, Any]] = []
     if local_covered and local_meta:
