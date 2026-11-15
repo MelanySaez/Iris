@@ -578,6 +578,87 @@ def test_numbers_must_match_for_a_similar_hit(api):
     assert len(fake.calls) == 2
 
 
+def test_swapped_coordinates_do_not_replay_cached_actions(api):
+    client, _, fake = api(
+        [
+            reply(
+                tool_block(
+                    "show_region",
+                    {
+                        "ra_deg": 10,
+                        "dec_deg": 20,
+                        "size_arcmin": 5,
+                    },
+                    "t1",
+                ),
+                stop="tool_use",
+            ),
+            reply(text_block("First region.")),
+            reply(
+                tool_block(
+                    "show_region",
+                    {
+                        "ra_deg": 20,
+                        "dec_deg": 10,
+                        "size_arcmin": 5,
+                    },
+                    "t2",
+                ),
+                stop="tool_use",
+            ),
+            reply(text_block("Second region.")),
+        ]
+    )
+    first = chat(client, "show region at ra 10 dec 20 size 5").json()
+    second = chat(client, "show region at ra 20 dec 10 size 5").json()
+    assert first["actions"][0]["ra_deg"] == 10
+    assert second["cached"] is False
+    assert second["actions"] == [
+        {
+            "type": "show_region",
+            "ra_deg": 20,
+            "dec_deg": 10,
+            "size_arcmin": 5,
+        }
+    ]
+    assert len(fake.calls) == 4
+
+
+@pytest.mark.parametrize(
+    ("field", "first_value", "second_value"),
+    [
+        ("center", [10, 20], [20, 10]),
+        ("fov_deg", 1, 2),
+        ("region_confirmed", False, True),
+        ("active_job_id", "job-a", "job-b"),
+    ],
+)
+def test_cache_tracks_all_model_visible_ui_state(api, field, first_value, second_value):
+    client, _, fake = api(
+        [reply(text_block("First state.")), reply(text_block("New state."))]
+    )
+    first = chat(
+        client,
+        "Describe the current view",
+        context={
+            **CONTEXT,
+            field: first_value,
+        },
+    )
+    second = chat(
+        client,
+        "Describe the current view",
+        context={
+            **CONTEXT,
+            field: second_value,
+        },
+    )
+    assert first.status_code == second.status_code == 200
+    assert second.json()["cached"] is False
+    assert second.json()["reply"] == "New state."
+    assert len(fake.calls) == 2
+
+
 def test_cache_is_scoped_to_the_ui_context(api):
     client, _, fake = api([reply(text_block("a")), reply(text_block("b"))])
     chat(client, "what channel am I on")

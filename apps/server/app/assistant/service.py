@@ -14,7 +14,7 @@ from typing import Any
 
 import openai
 
-from app.assistant.cache import ResponseCache, normalize_query
+from app.assistant.cache import ResponseCache
 from app.assistant.guardrails import RateLimiter, detect_injection, leaks_system_prompt
 from app.assistant.logbook import AssistantLog
 from app.assistant.prompt import SYSTEM_PROMPT
@@ -190,15 +190,10 @@ class Assistant:
 
     @staticmethod
     def _context_key(context: dict[str, Any], history: list[dict[str, str]]) -> str:
-        """Identity of the situation a question is asked in (not the map position)."""
+        """Include every model-visible state field and the original history."""
         scope = {
-            "workspace": context.get("workspace"),
-            "channel": context.get("channel"),
-            "color_mode": context.get("color_mode"),
-            "rgb": context.get("rgb"),
-            "selected_region": context.get("selected_region"),
-            "has_active_job": bool(context.get("active_job_id")),
-            "history": [[t["role"], normalize_query(t["content"])] for t in history],
+            "context": context,
+            "history": [[t["role"], t["content"]] for t in history],
         }
         raw = json.dumps(scope, sort_keys=True, ensure_ascii=False)
         return hashlib.sha256(raw.encode("utf-8")).hexdigest()

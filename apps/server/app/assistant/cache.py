@@ -35,7 +35,7 @@ def _tokens(normalized: str) -> set[str]:
 
 
 def _numbers(normalized: str) -> list[str]:
-    return sorted(_NUMBER_RE.findall(normalized))
+    return _NUMBER_RE.findall(normalized)
 
 
 @dataclass
@@ -82,7 +82,10 @@ class ResponseCache:
             if len(tokens) < 3:
                 return None
             best: tuple[float, tuple[str, str]] | None = None
-            for (ctx, text), _ in self._entries.items():
+            for (ctx, text), (_, value) in self._entries.items():
+                # Only exact requests may replay interface actions.
+                if value.get("actions"):
+                    continue
                 if ctx != context_key or _numbers(text) != numbers:
                     continue
                 other = _tokens(text)
