@@ -8,7 +8,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, Query, Request, Response
 
 from app.api.deps import assistant_settings, get_assistant
-from app.api.routes.consent import read_owner
+from app.api.routes.consent import resolve_owner
 from app.schemas.assistant import ChatRequest, ChatResponse, UiOutcome
 from app.services.assistant.service import Assistant
 from app.services.assistant.tools import selection_owner
@@ -25,10 +25,13 @@ def assistant_status() -> dict[str, Any]:
 
 @router.post("/chat", response_model=ChatResponse)
 def assistant_chat(
-    body: ChatRequest, request: Request, assistant: Assistant = Depends(get_assistant)
+    body: ChatRequest,
+    request: Request,
+    assistant: Assistant = Depends(get_assistant),
+    owner: uuid.UUID | None = Depends(resolve_owner),
 ) -> dict[str, Any]:
     """Answer one question, executing read-only tools the model asks for."""
-    token = selection_owner.set(read_owner(request))
+    token = selection_owner.set(owner)
     try:
         return assistant.chat(
             conversation_id=str(body.conversation_id),

@@ -68,12 +68,20 @@ class SelectionService:
 
     def claim(self, owner_id: uuid.UUID, jobs: list[JobState]) -> int:
         """Save, for a browser that just accepted cookies, the jobs it submitted
-        before accepting. Each job is recorded as that browser's selection with
-        its current status and, when finished, its outcome. Returns how many."""
+        before accepting. Each job the browser does not have yet becomes its
+        selection with the current status and, when finished, its outcome; jobs
+        it already has are left as they are. Returns how many were added."""
         recorder = SelectionRecorder(self.repository)
+        added = 0
         for job in jobs:
-            recorder.on_submitted(job, False, job.request, owner_id)
-        return len(jobs)
+            if not self.repository.claim_submission(
+                owner_id, job.id, job.request, job.status
+            ):
+                continue
+            added += 1
+            if job.status in TERMINAL_STATUSES:
+                recorder.on_finished(job)
+        return added
 
 
 class SelectionRecorder:

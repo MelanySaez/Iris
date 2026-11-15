@@ -49,6 +49,10 @@ class Settings(BaseSettings):
     )
 
     DATABASE_URL: str | None = None
+    # Secure flag of the consent cookies: unset follows the request scheme
+    # (behind a TLS proxy, run uvicorn with --forwarded-allow-ips so the scheme
+    # is the original https); true/false force it.
+    COOKIE_SECURE: bool | None = None
     CORS_ORIGINS: CommaSeparated = Field(
         default_factory=lambda: ["http://localhost:5173", "http://127.0.0.1:5173"]
     )

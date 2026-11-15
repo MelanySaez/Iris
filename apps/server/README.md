@@ -51,14 +51,14 @@ uv run pytest -q   # in apps/server
 
 ### Cookie consent and record owners
 
-There is no login, so records belong to a browser. Accepting cookies (`necessary` or `all`; the records cookie counts as necessary) through `POST /api/consent` sets two cookies, both for one year, `SameSite=Lax`, `Path=/` and `Secure` over HTTPS:
+There is no login, so records belong to a browser. Accepting cookies (`necessary` or `all`; the records cookie counts as necessary) through `POST /api/consent` sets two cookies, both for one year, `SameSite=Lax` and `Path=/`. They are `Secure` when the request arrived over HTTPS; behind a proxy that terminates TLS, run uvicorn with `--forwarded-allow-ips` set to the proxy address so it sees the original scheme, or set `COOKIE_SECURE=true` (or `false`) to force the flag.
 
-- `iris_owner`: a random UUID, `HttpOnly`. Selections are saved under it (`selection.owner_id`, migration `0006`), and every selection endpoint only reads or changes that owner's rows. Choosing again keeps the existing owner, so records are never orphaned by a new choice.
+- `iris_owner`: a random UUID, `HttpOnly`. Selections are saved under it (`selection.owner_id`, migration `0006`), and every selection endpoint only reads or changes that owner's rows. It only counts while `iris_consent` is `necessary` or `all`. Choosing again keeps the existing owner, so records are never orphaned by a new choice. If the consent cookie accepts cookies but the owner cookie was lost, the next job submission, selection request or assistant chat issues a new owner (the earlier records stay with the lost one).
 - `iris_consent`: the choice (`necessary`, `all` or `none`), readable by the web app so it knows whether to show the cookie bar.
 
-Without an owner cookie (`none`, or no choice yet) jobs still run, but `POST /api/jobs` saves nothing and the selection endpoints answer `403` with `Selections are saved only after accepting cookies. Accept the necessary cookies to keep your records.`. Choosing `none` deletes `iris_owner`. The assistant's `list_saved_selections` tool reads only the asking browser's records.
+Without accepted consent (`none`, or no choice yet) jobs still run, but `POST /api/jobs` saves nothing and the selection endpoints answer `403` with `Selections are saved only after accepting cookies. Accept the necessary cookies to keep your records.`. Choosing `none` keeps `iris_owner`: the browser's records stay in the database, hidden, and come back if it accepts again. The assistant's `list_saved_selections` tool reads only the asking browser's records.
 
-When a browser accepts later, the web app sends the job ids it submitted before accepting to `POST /api/selections/claim`, which saves them for the new owner with their current status and outcome (jobs are read from memory or their on-disk snapshot).
+When a browser accepts later, the web app sends the job ids it submitted before accepting to `POST /api/selections/claim`, which saves the ones the owner does not have yet with their current status and outcome (jobs are read from memory or their on-disk snapshot). Jobs the owner already has are left untouched, so claiming again never counts extra hits.
 
 The same region selected by two browsers is two rows (unique `(owner_id, job_id)`); the job itself is shared, so its outcome reaches both. Migration `0006` deletes every selection saved before owners existed, since none can be attributed to a browser; shared region and product rows are kept, and the downgrade does not restore the deleted rows.
 
@@ -123,7 +123,7 @@ All endpoints are mounted under `/api`:
 - `GET /api/jobs/{id}/pixel?x=&y=&channel=&epoch=`: Per-pixel probe returning calibrated units, raw values, exact LVF wavelength/bandwidth, channel window inclusion, and set `MP_*` flag bit names.
 - `GET /api/jobs/{id}/manifest`: Complete scientific provenance document for the plate inspector.
 - `POST /api/consent` with `{"level": "necessary" | "all" | "none"}`: Stores the cookie choice and answers `{level, records_enabled}`. See **Cookie consent and record owners**.
-- `POST /api/selections/claim` with `{"job_ids": [...]}` (at most 100): Saves, for a browser that just accepted cookies, the jobs it submitted before accepting. Answers `{claimed}`; unknown job ids are skipped.
+- `POST /api/selections/claim` with `{"job_ids": [...]}` (at most 100): Saves, for a browser that just accepted cookies, the jobs it submitted before accepting. Answers `{claimed}`, the number of selections added; unknown job ids and jobs the browser already has are skipped.
 - `GET /api/selections?limit=&before=`: The browser's saved selections (one per job request), most recently seen first, with `job_status` and, for failed jobs, `job_error` plus its traceability fields (see below). `next_before` is the cursor for the next page.
 - `GET /api/selections/{id}`: One saved selection with its discovered spectral products and, for ready jobs, the provenance manifest.
 - `DELETE /api/selections/{id}`: Delete one saved selection (204). Shared region data is kept. All selection endpoints answer 503 when `DATABASE_URL` is unset and 403 when the browser has no owner cookie (cookies not accepted).

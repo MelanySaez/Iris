@@ -25,7 +25,7 @@ from app.main import app
 from app.services.selections import configure_selections
 from app.core.database import get_database_url, get_engine
 from app.repositories.selection import normalize_region
-from app.api.routes.consent import OWNER_COOKIE
+from app.api.routes.consent import CONSENT_COOKIE, OWNER_COOKIE
 
 DATABASE_URL = get_database_url()
 SERVER_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -91,11 +91,16 @@ def client(migrated_db):
         configure_selections(None, job_manager)
 
 
-def browser(owner: uuid.UUID | None) -> TestClient:
-    """A client for one browser; ``owner`` None means cookies were not accepted."""
-    test_client = TestClient(app)
+def browser(
+    owner: uuid.UUID | None, consent: str | None = "necessary", **kwargs
+) -> TestClient:
+    """A client for one browser. ``owner`` None means it holds no owner cookie;
+    ``consent`` is its cookie choice (None: it has not chosen)."""
+    test_client = TestClient(app, **kwargs)
     if owner is not None:
         test_client.cookies.set(OWNER_COOKIE, str(owner))
+    if consent is not None:
+        test_client.cookies.set(CONSENT_COOKIE, consent)
     return test_client
 
 
@@ -850,7 +855,7 @@ def test_owner_migration_deletes_ownerless_selections_and_keeps_regions():
 
 @requires_db
 def test_without_cookies_jobs_run_but_nothing_is_saved(client, migrated_db):
-    anonymous = browser(None)
+    anonymous = browser(None, consent=None)
     resp = anonymous.post("/api/jobs", json={**region(42.5), "channels": [44]})
     assert resp.status_code == 202
 
@@ -916,13 +921,12 @@ def test_changing_the_choice_keeps_the_existing_owner():
     assert owner.startswith(f"iris_owner={OWNER_A};")
 
 
-def test_refusing_cookies_removes_the_owner_cookie():
+def test_refusing_cookies_keeps_the_owner_cookie_untouched():
     resp = browser(OWNER_A).post("/api/consent", json={"level": "none"})
     assert resp.json() == {"level": "none", "records_enabled": False}
     cookies = resp.headers.get_list("set-cookie")
     assert any(c.startswith("iris_consent=none;") for c in cookies)
-    removed = next(c for c in cookies if c.startswith("iris_owner="))
-    assert "Max-Age=0" in removed
+    assert not any(c.startswith("iris_owner=") for c in cookies)
 
 
 def test_unknown_consent_levels_are_rejected():
@@ -931,7 +935,7 @@ def test_unknown_consent_levels_are_rejected():
 
 @requires_db
 def test_accepting_later_recovers_the_selections_made_before(client):
-    anonymous = browser(None)
+    anonymous = browser(None, consent=None)
     early = anonymous.post("/api/jobs", json={**region(44.5), "channels": [44]}).json()
     wait_start = time.time()
     while anonymous.get(f"/api/jobs/{early['id']}").json()["status"] not in (
@@ -964,3 +968,103 @@ def test_accepting_later_recovers_the_selections_made_before(client):
 def test_claims_are_limited_to_100_jobs(client):
     resp = client.post("/api/selections/claim", json={"job_ids": ["x"] * 101})
     assert resp.status_code == 422
+
+
+
+# -- verifier advisories (L9, L10) ---------------------------------------------
+
+
+@requires_db
+def test_rejecting_after_accepting_hides_records_until_accepting_again(client):
+    # Every cookie comes from the server, as in a real browser.
+    visitor = browser(None, consent=None)
+    visitor.post("/api/consent", json={"level": "necessary"})
+    owner = visitor.cookies.get(OWNER_COOKIE)
+    job = visitor.post("/api/jobs", json={**region(45.5), "channels": [44]}).json()
+    find_by_job(visitor, job["id"])
+
+    assert visitor.post("/api/consent", json={"level": "none"}).status_code == 200
+    assert visitor.cookies.get(OWNER_COOKIE) == owner
+    assert visitor.get("/api/selections").status_code == 403
+    visitor.post("/api/jobs", json={**region(46.5), "channels": [44]})
+
+    visitor.post("/api/consent", json={"level": "all"})
+    assert visitor.cookies.get(OWNER_COOKIE) == owner
+    items = visitor.get("/api/selections").json()["items"]
+    # The record saved before rejecting is back; the job sent while rejected
+    # was not saved.
+    assert [item["job_id"] for item in items] == [job["id"]]
+
+
+@requires_db
+def test_owner_cookie_without_consent_never_reads_records(client):
+    client.post("/api/jobs", json={**region(47.5), "channels": [44]})
+    for consent in (None, "none", "bogus"):
+        resp = browser(OWNER_A, consent=consent).get("/api/selections")
+        assert resp.status_code == 403
+
+
+@requires_db
+def test_claiming_again_or_claiming_a_saved_job_adds_nothing(client):
+    anonymous = browser(None, consent=None)
+    early = anonymous.post("/api/jobs", json={**region(48.5), "channels": [44]}).json()
+    anonymous.post("/api/consent", json={"level": "necessary"})
+
+    first = anonymous.post("/api/selections/claim", json={"job_ids": [early["id"]]})
+    again = anonymous.post("/api/selections/claim", json={"job_ids": [early["id"]]})
+    assert (first.json(), again.json()) == ({"claimed": 1}, {"claimed": 0})
+    assert find_by_job(anonymous, early["id"])["hits"] == 1
+
+    saved = client.post("/api/jobs", json={**region(49.5), "channels": [44]}).json()
+    claimed = client.post("/api/selections/claim", json={"job_ids": [saved["id"]]})
+    assert claimed.json() == {"claimed": 0}
+    assert find_by_job(client, saved["id"])["hits"] == 1
+
+
+@requires_db
+def test_a_lost_owner_cookie_is_reissued_while_consent_is_accepted(client):
+    lost = browser(None, consent="necessary")
+    listed = lost.get("/api/selections")
+    assert listed.status_code == 200
+    assert listed.json()["items"] == []
+    owner = lost.cookies.get(OWNER_COOKIE)
+    assert owner is not None
+    uuid.UUID(owner)
+
+    job = lost.post("/api/jobs", json={**region(50.5), "channels": [44]}).json()
+    assert lost.cookies.get(OWNER_COOKIE) == owner
+    assert find_by_job(lost, job["id"])["job_id"] == job["id"]
+
+
+@requires_db
+def test_a_job_sent_with_a_lost_owner_cookie_is_saved_under_a_new_one(client):
+    lost = browser(None, consent="all")
+    job = lost.post("/api/jobs", json={**region(51.5), "channels": [44]}).json()
+    owner = lost.cookies.get(OWNER_COOKIE)
+    assert owner is not None
+    assert find_by_job(lost, job["id"])["hits"] == 1
+
+
+@pytest.mark.parametrize(
+    ("setting", "base_url", "secure"),
+    [
+        (None, "http://testserver", False),
+        (None, "https://testserver", True),
+        ("true", "http://testserver", True),
+        ("false", "https://testserver", False),
+    ],
+)
+def test_cookie_secure_follows_the_scheme_unless_configured(
+    monkeypatch, setting, base_url, secure
+):
+    if setting is None:
+        monkeypatch.delenv("COOKIE_SECURE", raising=False)
+    else:
+        monkeypatch.setenv("COOKIE_SECURE", setting)
+    resp = TestClient(app, base_url=base_url).post(
+        "/api/consent", json={"level": "necessary"}
+    )
+    cookies = resp.headers.get_list("set-cookie")
+    assert len(cookies) == 2
+    for cookie in cookies:
+        assert ("; Secure" in cookie) is secure

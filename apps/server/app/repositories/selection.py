@@ -137,6 +137,38 @@ class SelectionRepository:
             inserted, stored_status = session.execute(stmt).one()
             return SubmissionResult(inserted=bool(inserted), stored_status=stored_status)
 
+    def claim_submission(
+        self, owner_id: uuid.UUID, job_id: str, req: JobRequest, status: str
+    ) -> bool:
+        """Save a job as the owner's selection unless the owner already has it.
+
+        Unlike ``record_submission`` an existing row is left untouched (no hit is
+        counted). Returns whether a row was created.
+        """
+        with self._sessions.begin() as session:
+            region_id = self._region_id(
+                session, normalize_region(req.ra_deg, req.dec_deg, req.size_arcmin)
+            )
+            stmt = (
+                insert(Selection)
+                .values(
+                    owner_id=owner_id,
+                    region_id=region_id,
+                    job_id=job_id,
+                    channels=sorted(set(req.channels)),
+                    products=sorted(set(req.products)),
+                    mode=req.mode,
+                    stretch=req.stretch,
+                    job_status=status,
+                    **_view_columns(req),
+                )
+                .on_conflict_do_nothing(
+                    index_elements=[Selection.owner_id, Selection.job_id]
+                )
+                .returning(Selection.id)
+            )
+            return session.execute(stmt).scalar_one_or_none() is not None
+
     def record_discovery(self, req: JobRequest, discovery: dict[str, Any]) -> None:
         """Store the region coverage and its discovered products."""
         with self._sessions.begin() as session:

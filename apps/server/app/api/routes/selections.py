@@ -50,7 +50,8 @@ def claim_selections(
 ) -> ClaimResponse:
     """Save the jobs this browser submitted before it accepted cookies.
 
-    Unknown job ids are skipped, so the count can be lower than the request.
+    ``claimed`` counts the selections added: unknown job ids and jobs the
+    browser already has are skipped.
     """
     jobs = []
     for job_id in dict.fromkeys(body.job_ids):
