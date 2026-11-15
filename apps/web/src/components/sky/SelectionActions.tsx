@@ -8,6 +8,8 @@ export interface SpectrumTarget {
 
 interface SelectionActionsProps {
   selection: RegionRequest | null;
+  /** The region has been confirmed (its spectral job is being prepared). */
+  confirmed: boolean;
   activeJobId: string | null;
   onOpenPlate: (jobId: string) => void;
   onViewSpectrum: (target: SpectrumTarget) => void;
@@ -20,32 +22,44 @@ interface SelectionActionsProps {
  */
 export function SelectionActions({
   selection,
+  confirmed,
   activeJobId,
   onOpenPlate,
   onViewSpectrum,
 }: SelectionActionsProps) {
-  if (!selection && !activeJobId) return null;
+  // Both actions belong to a confirmed region: nothing while it is a draft or absent.
+  if (!selection || !confirmed) return null;
   return (
-    <div className="sky-selection-actions float">
-      {selection && (
-        <button
-          type="button"
-          className="selection-action-btn"
-          title={`Plot the spectrum at the centre of the selection (RA ${selection.ra_deg}°, Dec ${selection.dec_deg}°)`}
-          onClick={() =>
-            onViewSpectrum({
-              ra_deg: selection.ra_deg,
-              dec_deg: selection.dec_deg,
-              label: `Selection centre (${selection.ra_deg.toFixed(3)}°, ${selection.dec_deg.toFixed(3)}°)`,
-            })
-          }
-        >
-          View spectrum →
-        </button>
-      )}
+    <div className="sky-selection-actions">
+      <button
+        type="button"
+        className="selection-action-btn"
+        title={`Plot the spectrum at the centre of the selection (RA ${selection.ra_deg}°, Dec ${selection.dec_deg}°)`}
+        onClick={() =>
+          onViewSpectrum({
+            ra_deg: selection.ra_deg,
+            dec_deg: selection.dec_deg,
+            label: `Selection centre (${selection.ra_deg.toFixed(3)}°, ${selection.dec_deg.toFixed(3)}°)`,
+          })
+        }
+      >
+        <svg className="selection-action-icon" viewBox="0 0 20 20" aria-hidden="true">
+          <path d="M2 15 6 9l3 3 4-7 5 8" />
+        </svg>
+        <span className="selection-action-label">Visualize spectrum</span>
+        <svg className="selection-action-arrow" viewBox="0 0 16 16" aria-hidden="true">
+          <path d="M3 8h10M9 4l4 4-4 4" />
+        </svg>
+      </button>
       {activeJobId && (
         <button type="button" className="selection-action-btn" onClick={() => onOpenPlate(activeJobId)}>
-          Open spectral plate →
+          <svg className="selection-action-icon" viewBox="0 0 20 20" aria-hidden="true">
+            <path d="M3 3h14v14H3zM3 8h14M3 13h14M8 3v14M13 3v14" />
+          </svg>
+          <span className="selection-action-label">Open spectral plate</span>
+          <svg className="selection-action-arrow" viewBox="0 0 16 16" aria-hidden="true">
+            <path d="M3 8h10M9 4l4 4-4 4" />
+          </svg>
         </button>
       )}
     </div>

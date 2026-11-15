@@ -69,4 +69,17 @@ describe('RgbControls', () => {
     renderControls({ ready: false });
     expect(screen.getByRole('button', { name: 'RGB composite' }).hasAttribute('disabled')).toBe(true);
   });
+  it('marks the preset whose channels are on the map', () => {
+    renderControls({ rgbMode: true, rgb: { r: 46, g: 32, b: 16 } });
+    expect(screen.getByRole('button', { name: 'Stars' }).getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByRole('button', { name: 'Organic dust' }).getAttribute('aria-pressed')).toBe('false');
+    expect(screen.getByRole('button', { name: 'Full range' }).getAttribute('aria-pressed')).toBe('false');
+  });
+
+  it('marks no preset once a channel is changed by hand', () => {
+    renderControls({ rgbMode: true, rgb: { r: 62, g: 32, b: 16 } });
+    for (const name of ['Stars', 'Organic dust', 'Full range']) {
+      expect(screen.getByRole('button', { name }).getAttribute('aria-pressed')).toBe('false');
+    }
+  });
 });

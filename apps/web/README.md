@@ -47,7 +47,11 @@ The mockup supplies layout direction only. Its generated stars, epochs, historic
 
 ## Landing page
 
-The app opens on a landing page (`#/`): a full-screen star field, **Explore the Sky** (opens the viewer at `#/sky`), a short "A little context before you explore" block and links to the official SPHEREx and IRSA sources. **Guided Tour** is shown as coming soon. Deep links such as `#/sky` or `#/plate/<id>` open the viewer directly. The star field stays still when the system asks for reduced motion.
+The app opens on a landing page (`#/`): a full-screen star field, **Explore the Sky** (opens the viewer at `#/sky`), a short "A little context before you explore" block and links to the official SPHEREx and IRSA sources. **Guided Tour** opens the viewer and starts the tour. Deep links such as `#/sky` or `#/plate/<id>` open the viewer directly. The star field stays still when the system asks for reduced motion.
+
+## Guided tour
+
+A seven-step tour (React Joyride) walks through the viewer: welcome, **Find objects**, the map, the channel dock, the region tool, the workspace tabs and how to replay it. Start it from **Guided Tour** on the landing page or the **?** button in the top bar. It can be skipped at any step; finishing or skipping is remembered in `localStorage` (`iris_tour_seen`). Steps point at `data-tour` attributes, and a step whose anchor is not on screen (for example the rail on a phone) is left out.
 
 ## Search by name or catalogue code
 
@@ -72,8 +76,8 @@ the blank channels 50/51 are not offered. This is false colour built from the
 
 ## Spectral Lab
 
-Open **Spectral Lab** in the top bar (`#/spectral`), or select a region in Sky
-and press **View spectrum →** to open the Lab with the spectrum at the centre of
+Open **Spectral Lab** in the top bar (`#/spectral`), or select and confirm a region in Sky
+and press **Visualize spectrum** to open the Lab with the spectrum at the centre of
 the selection already added. Add up to 8 spectra from the
 curated catalog or by typing RA/Dec in degrees; each is fetched from
 `GET /api/spectrum` and plotted as wavelength (µm) against surface brightness

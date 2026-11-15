@@ -78,4 +78,18 @@ describe('Sky workspace sidebar', () => {
     expect(TOCATS_CATALOGS.catwise.sourceSize).toBeGreaterThanOrEqual(12);
     expect(TOCATS_CATALOGS.catwise.shape).toBe('rhomb');
   });
+  it('carries the anchors the guided tour points at', () => {
+    document.body.innerHTML = renderToStaticMarkup(
+      <SkyWorkspace
+        activeJob={null}
+        onStartJob={async () => {}}
+        onOpenPlate={() => {}}
+        onViewSpectrum={() => {}}
+        onRetryJob={() => {}}
+      />,
+    );
+    for (const anchor of ['search', 'map', 'channels', 'region-tool']) {
+      expect(document.querySelectorAll(`[data-tour="${anchor}"]`)).toHaveLength(1);
+    }
+  });
 });

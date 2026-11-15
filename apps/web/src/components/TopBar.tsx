@@ -7,9 +7,11 @@ interface TopBarProps {
   currentRoute: AppRoute;
   activeJobId: string | null;
   onNavigate: (route: AppRoute | string) => void;
+  /** Replays the guided tour. */
+  onStartTour?: () => void;
 }
 
-export function TopBar({ currentRoute, activeJobId, onNavigate }: TopBarProps) {
+export function TopBar({ currentRoute, activeJobId, onNavigate, onStartTour }: TopBarProps) {
   const isSky = currentRoute.type === 'sky';
   const isPlate = currentRoute.type === 'plate';
   const isSpectral = currentRoute.type === 'spectral';
@@ -50,7 +52,7 @@ export function TopBar({ currentRoute, activeJobId, onNavigate }: TopBarProps) {
         </span>
       </div>
 
-      <nav className="workspace-switch" aria-label="Workspace switch" ref={navRef}>
+      <nav className="workspace-switch" aria-label="Workspace switch" ref={navRef} data-tour="workspaces">
         <button
           type="button"
           className={`switch-btn ${isSky ? 'active' : ''}`}
@@ -99,6 +101,18 @@ export function TopBar({ currentRoute, activeJobId, onNavigate }: TopBarProps) {
       </nav>
 
       <div className="topbar-right">
+        {onStartTour && (
+          <button
+            type="button"
+            className="tour-help-btn"
+            aria-label="Take the guided tour"
+            title="Take the guided tour"
+            data-tour="tour-help"
+            onClick={onStartTour}
+          >
+            ?
+          </button>
+        )}
         <DataNotesPopover />
       </div>
     </header>
