@@ -28,6 +28,7 @@ from app.core.config import (
 )
 from app.exceptions.domain import (
     ChannelOutOfRangeError,
+    JobNotFoundError,
     RegionRequestError,
 )
 from app.repositories.job_snapshots import JobSnapshotRepository
