@@ -8,8 +8,10 @@ from typing import Any
 from fastapi import APIRouter, Depends, Query, Request, Response
 
 from app.api.deps import assistant_settings, get_assistant
+from app.api.routes.consent import read_owner
 from app.schemas.assistant import ChatRequest, ChatResponse, UiOutcome
 from app.services.assistant.service import Assistant
+from app.services.assistant.tools import selection_owner
 
 router = APIRouter(prefix="/api/assistant", tags=["assistant"])
 
@@ -26,12 +28,16 @@ def assistant_chat(
     body: ChatRequest, request: Request, assistant: Assistant = Depends(get_assistant)
 ) -> dict[str, Any]:
     """Answer one question, executing read-only tools the model asks for."""
-    return assistant.chat(
-        conversation_id=str(body.conversation_id),
-        messages=[m.model_dump() for m in body.messages],
-        context=body.context.model_dump(exclude_none=True),
-        client_key=request.client.host if request.client else "unknown",
-    )
+    token = selection_owner.set(read_owner(request))
+    try:
+        return assistant.chat(
+            conversation_id=str(body.conversation_id),
+            messages=[m.model_dump() for m in body.messages],
+            context=body.context.model_dump(exclude_none=True),
+            client_key=request.client.host if request.client else "unknown",
+        )
+    finally:
+        selection_owner.reset(token)
 
 
 @router.get("/logs")

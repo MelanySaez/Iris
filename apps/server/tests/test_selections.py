@@ -25,11 +25,16 @@ from app.main import app
 from app.services.selections import configure_selections
 from app.core.database import get_database_url, get_engine
 from app.repositories.selection import normalize_region
+from app.api.routes.consent import OWNER_COOKIE
 
 DATABASE_URL = get_database_url()
 SERVER_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 requires_db = pytest.mark.skipif(not DATABASE_URL, reason="DATABASE_URL is not set")
+
+# Browsers that accepted cookies; the default client acts as OWNER_A.
+OWNER_A = uuid.UUID("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")
+OWNER_B = uuid.UUID("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb")
 
 
 def schema_url(url: str, schema: str) -> str:
@@ -81,9 +86,17 @@ def client(migrated_db):
         conn.execute(text("TRUNCATE selection, spectral_product, sky_region CASCADE"))
     configure_selections(migrated_db, job_manager)
     try:
-        yield TestClient(app)
+        yield browser(OWNER_A)
     finally:
         configure_selections(None, job_manager)
+
+
+def browser(owner: uuid.UUID | None) -> TestClient:
+    """A client for one browser; ``owner`` None means cookies were not accepted."""
+    test_client = TestClient(app)
+    if owner is not None:
+        test_client.cookies.set(OWNER_COOKIE, str(owner))
+    return test_client
 
 
 def region(ra: float, dec: float = -20.0, size: float = 4.0) -> dict:
@@ -421,7 +434,7 @@ class _OrderObserver:
     def __init__(self) -> None:
         self.events: list[str] = []
 
-    def on_submitted(self, job, is_new, request=None) -> None:
+    def on_submitted(self, job, is_new, request=None, owner=None) -> None:
         self.events.append("submitted" if is_new else "submitted-cached")
 
     def on_discovered(self, job, discovery) -> None:
@@ -455,7 +468,7 @@ class _FakeStore:
         self.stored_status = stored_status
         self.calls: list[tuple] = []
 
-    def record_submission(self, job_id, req, status, *, new_attempt):
+    def record_submission(self, owner, job_id, req, status, *, new_attempt):
         from app.repositories.selection import SubmissionResult
 
         self.calls.append(("submission", job_id, status, new_attempt))
@@ -490,7 +503,7 @@ def test_cached_terminal_job_records_its_outcome_when_its_row_is_new():
     manifest = {"job_id": "cached-job", "region": {}}
     p1, p2 = _fake_manifest(manifest)
     with p1, p2:
-        SelectionRecorder(store).on_submitted(job, False)
+        SelectionRecorder(store).on_submitted(job, False, owner=OWNER_A)
 
     assert store.calls == [
         ("submission", "cached-job", "ready", False),
@@ -508,7 +521,7 @@ def test_repeated_cache_hit_does_not_rebuild_the_outcome():
     job = JobState(id="cached-job", request=JobRequest(**region(20.5)), status="ready")
     p1, p2 = _fake_manifest({"job_id": "cached-job"})
     with p1 as manifest_mock, p2:
-        SelectionRecorder(store).on_submitted(job, False)
+        SelectionRecorder(store).on_submitted(job, False, owner=OWNER_A)
 
     assert store.calls == [("submission", "cached-job", "ready", False)]
     manifest_mock.assert_not_called()
@@ -521,7 +534,7 @@ def test_new_attempt_is_submitted_as_a_reset():
 
     store = _FakeStore(inserted=False)
     job = JobState(id="new-job", request=JobRequest(**region(20.5)))
-    SelectionRecorder(store).on_submitted(job, True)
+    SelectionRecorder(store).on_submitted(job, True, owner=OWNER_A)
     assert store.calls == [("submission", "new-job", "queued", True)]
 
 
@@ -599,7 +612,7 @@ def test_resubmission_clears_the_previous_error(client):
     assert wait_for_outcome(client, saved["id"])["job_error"] is not None
 
     result = get_selection_repository().record_submission(
-        job["id"], JobRequest(**payload), "queued", new_attempt=True
+        OWNER_A, job["id"], JobRequest(**payload), "queued", new_attempt=True
     )
     assert result.inserted is False
     assert result.stored_status == "queued"
@@ -624,7 +637,7 @@ def test_cache_hit_never_overwrites_a_recorded_outcome(client):
     final = wait_for_outcome(client, saved["id"])
 
     get_selection_repository().record_submission(
-        job["id"], JobRequest(**payload), "discovering", new_attempt=False
+        OWNER_A, job["id"], JobRequest(**payload), "discovering", new_attempt=False
     )
     detail = client.get(f"/api/selections/{saved['id']}").json()
     assert detail["job_status"] == final["job_status"] == "failed"
@@ -640,10 +653,10 @@ def test_record_submission_reports_whether_the_row_was_created(client):
     req = JobRequest(**region(24.5), channels=[44])
     store = get_selection_repository()
     first = store.record_submission(
-        "fresh-row-000000001", req, "ready", new_attempt=False
+        OWNER_A, "fresh-row-000000001", req, "ready", new_attempt=False
     )
     second = store.record_submission(
-        "fresh-row-000000001", req, "queued", new_attempt=False
+        OWNER_A, "fresh-row-000000001", req, "queued", new_attempt=False
     )
     assert (first.inserted, first.stored_status) == (True, "ready")
     assert (second.inserted, second.stored_status) == (False, "ready")
@@ -662,7 +675,7 @@ def test_cache_hit_heals_a_row_stuck_in_an_intermediate_status():
         status="failed",
         error="No SPHEREx coverage found for this region.",
     )
-    SelectionRecorder(store).on_submitted(job, False)
+    SelectionRecorder(store).on_submitted(job, False, owner=OWNER_A)
     assert store.calls == [
         ("submission", "stuck-job", "failed", False),
         (
@@ -684,7 +697,9 @@ def test_lost_outcome_is_recovered_on_the_next_cache_hit(client):
 
     req = JobRequest(**region(26.5), channels=[44])
     store = get_selection_repository()
-    store.record_submission("stuck-row-0000000001", req, "discovering", new_attempt=True)
+    store.record_submission(
+        OWNER_A, "stuck-row-0000000001", req, "discovering", new_attempt=True
+    )
 
     job = JobState(
         id="stuck-row-0000000001",
@@ -692,7 +707,7 @@ def test_lost_outcome_is_recovered_on_the_next_cache_hit(client):
         status="failed",
         error="Coverage could not be determined: IRSA TAP discovery failed.",
     )
-    SelectionRecorder(store).on_submitted(job, False)
+    SelectionRecorder(store).on_submitted(job, False, owner=OWNER_A)
 
     saved = find_by_job(client, "stuck-row-0000000001")
     assert saved["job_status"] == "failed"
@@ -732,3 +747,220 @@ def test_outcome_carries_stage_kind_trace_and_timeline():
         "error_trace": "Traceback ...\nRuntimeError: boom",
         "events": events,
     }
+
+
+# -- owners: one browser per owner id (S1, S5) --------------------------------
+
+
+@requires_db
+def test_each_owner_keeps_its_own_row_for_the_same_job(client, migrated_db):
+    from app.core.database import make_session_factory
+    from app.repositories.selection import SelectionRepository
+    from app.schemas.jobs import JobRequest
+
+    repo = SelectionRepository(make_session_factory(migrated_db))
+    req = JobRequest(**region(40.5), channels=[44])
+
+    def submit(owner: uuid.UUID, new_attempt: bool):
+        return repo.record_submission(
+            owner, "owned-job", req, "queued", new_attempt=new_attempt
+        )
+
+    first_a = submit(OWNER_A, True)
+    first_b = submit(OWNER_B, True)
+    again_a = submit(OWNER_A, False)
+
+    assert (first_a.inserted, first_b.inserted, again_a.inserted) == (True, True, False)
+    [row_a] = repo.list(OWNER_A, limit=10)
+    [row_b] = repo.list(OWNER_B, limit=10)
+    assert row_a.id != row_b.id
+    assert (row_a.hits, row_b.hits) == (2, 1)
+
+    # The job's outcome is shared: it reaches every owner's row.
+    repo.record_outcome("owned-job", "failed", None, "boom")
+    assert {r.job_status for r in repo.list(OWNER_A, 10) + repo.list(OWNER_B, 10)} == {
+        "failed"
+    }
+
+    # Reads and writes never cross owners.
+    assert repo.get(OWNER_B, row_a.id) is None
+    assert repo.rename(OWNER_B, row_a.id, "Not mine") is None
+    assert repo.delete(OWNER_B, row_a.id) is False
+    assert repo.get(OWNER_A, row_a.id).name is None
+    assert repo.delete(OWNER_A, row_a.id) is True
+    assert repo.list(OWNER_A, 10) == []
+    assert len(repo.list(OWNER_B, 10)) == 1
+
+
+@requires_db
+def test_owner_migration_deletes_ownerless_selections_and_keeps_regions():
+    """Upgrading to owners removes every selection that has no owner (S5)."""
+    schema = f"test_{uuid.uuid4().hex[:12]}"
+    admin = get_engine(DATABASE_URL)
+    with admin.begin() as conn:
+        conn.execute(text(f'CREATE SCHEMA "{schema}"'))
+    url = schema_url(DATABASE_URL, schema)
+    previous = os.environ.get("DATABASE_URL")
+    os.environ["DATABASE_URL"] = url
+    try:
+        cfg = Config(os.path.join(SERVER_DIR, "alembic.ini"))
+        cfg.set_main_option("script_location", os.path.join(SERVER_DIR, "app/alembic"))
+        command.upgrade(cfg, "0005")
+        with get_engine(url).begin() as conn:
+            region_id = conn.execute(
+                text(
+                    "INSERT INTO sky_region (ra_deg, dec_deg, size_arcmin) "
+                    "VALUES (41.5, -20, 4) RETURNING id"
+                )
+            ).scalar_one()
+            conn.execute(
+                text(
+                    "INSERT INTO selection (region_id, job_id, channels, products, "
+                    "mode, stretch, job_status) VALUES (:r, 'legacy-job-000000000', "
+                    "ARRAY[44]::smallint[], ARRAY['image'], 'latest', 'asinh', 'ready')"
+                ),
+                {"r": region_id},
+            )
+
+        command.upgrade(cfg, "head")
+
+        with get_engine(url).connect() as conn:
+            assert conn.execute(text("SELECT count(*) FROM selection")).scalar_one() == 0
+            assert conn.execute(text("SELECT count(*) FROM sky_region")).scalar_one() == 1
+            nullable = conn.execute(
+                text(
+                    "SELECT is_nullable FROM information_schema.columns "
+                    "WHERE table_schema = current_schema() "
+                    "AND table_name = 'selection' AND column_name = 'owner_id'"
+                )
+            ).scalar_one()
+            assert nullable == "NO"
+    finally:
+        if previous is None:
+            os.environ.pop("DATABASE_URL", None)
+        else:
+            os.environ["DATABASE_URL"] = previous
+        get_engine(url).dispose()
+        with admin.begin() as conn:
+            conn.execute(text(f'DROP SCHEMA "{schema}" CASCADE'))
+
+
+# -- cookie consent: nothing is saved without it (S1, S2, S4) ------------------
+
+
+@requires_db
+def test_without_cookies_jobs_run_but_nothing_is_saved(client, migrated_db):
+    anonymous = browser(None)
+    resp = anonymous.post("/api/jobs", json={**region(42.5), "channels": [44]})
+    assert resp.status_code == 202
+
+    for call in (
+        anonymous.get("/api/selections"),
+        anonymous.get(f"/api/selections/{uuid.uuid4()}"),
+        anonymous.patch(f"/api/selections/{uuid.uuid4()}", json={"name": "x"}),
+        anonymous.delete(f"/api/selections/{uuid.uuid4()}"),
+        anonymous.post("/api/selections/claim", json={"job_ids": []}),
+    ):
+        assert call.status_code == 403
+        assert call.json()["detail"].startswith(
+            "Selections are saved only after accepting cookies."
+        )
+    with get_engine(migrated_db).connect() as conn:
+        assert conn.execute(text("SELECT count(*) FROM selection")).scalar_one() == 0
+
+
+@requires_db
+def test_a_browser_never_sees_or_changes_another_browsers_selections(client):
+    job = client.post("/api/jobs", json={**region(43.5), "channels": [44]}).json()
+    mine = find_by_job(client, job["id"])
+    other = browser(OWNER_B)
+
+    assert other.get("/api/selections").json()["items"] == []
+    assert other.get(f"/api/selections/{mine['id']}").status_code == 404
+    renamed = other.patch(f"/api/selections/{mine['id']}", json={"name": "x"})
+    assert renamed.status_code == 404
+    assert other.delete(f"/api/selections/{mine['id']}").status_code == 404
+    assert client.get(f"/api/selections/{mine['id']}").json()["name"] is None
+
+    # The same region selected by the other browser is its own record.
+    other.post("/api/jobs", json={**region(43.5), "channels": [44]})
+    theirs = find_by_job(other, job["id"])
+    assert theirs["id"] != mine["id"]
+    assert find_by_job(client, job["id"])["hits"] == 1
+
+
+@pytest.mark.parametrize("level", ["necessary", "all"])
+def test_accepting_cookies_issues_an_httponly_owner_cookie(level):
+    resp = TestClient(app).post("/api/consent", json={"level": level})
+    assert resp.status_code == 200
+    assert resp.json() == {"level": level, "records_enabled": True}
+    cookies = resp.headers.get_list("set-cookie")
+    consent = next(c for c in cookies if c.startswith("iris_consent="))
+    owner = next(c for c in cookies if c.startswith("iris_owner="))
+    assert consent.startswith(f"iris_consent={level};")
+    assert "HttpOnly" not in consent
+    uuid.UUID(owner.split(";")[0].split("=", 1)[1])
+    for cookie in (consent, owner):
+        assert "Max-Age=31536000" in cookie
+        assert "SameSite=lax" in cookie
+        assert "Path=/" in cookie
+    assert "HttpOnly" in owner
+
+
+def test_changing_the_choice_keeps_the_existing_owner():
+    returning = browser(OWNER_A)
+    resp = returning.post("/api/consent", json={"level": "all"})
+    owner = next(
+        c for c in resp.headers.get_list("set-cookie") if c.startswith("iris_owner=")
+    )
+    assert owner.startswith(f"iris_owner={OWNER_A};")
+
+
+def test_refusing_cookies_removes_the_owner_cookie():
+    resp = browser(OWNER_A).post("/api/consent", json={"level": "none"})
+    assert resp.json() == {"level": "none", "records_enabled": False}
+    cookies = resp.headers.get_list("set-cookie")
+    assert any(c.startswith("iris_consent=none;") for c in cookies)
+    removed = next(c for c in cookies if c.startswith("iris_owner="))
+    assert "Max-Age=0" in removed
+
+
+def test_unknown_consent_levels_are_rejected():
+    assert TestClient(app).post("/api/consent", json={"level": "some"}).status_code == 422
+
+
+@requires_db
+def test_accepting_later_recovers_the_selections_made_before(client):
+    anonymous = browser(None)
+    early = anonymous.post("/api/jobs", json={**region(44.5), "channels": [44]}).json()
+    wait_start = time.time()
+    while anonymous.get(f"/api/jobs/{early['id']}").json()["status"] not in (
+        "ready",
+        "failed",
+    ):
+        assert time.time() - wait_start < 10
+        time.sleep(0.02)
+
+    accepted = anonymous.post("/api/consent", json={"level": "necessary"})
+    assert accepted.status_code == 200  # the client now holds an owner cookie
+
+    resp = anonymous.post(
+        "/api/selections/claim",
+        json={"job_ids": [early["id"], early["id"], "unknown-job-00000000"]},
+    )
+    assert resp.status_code == 200
+    assert resp.json() == {"claimed": 1}
+
+    saved = find_by_job(anonymous, early["id"])
+    assert saved["hits"] == 1
+    detail = anonymous.get(f"/api/selections/{saved['id']}").json()
+    assert detail["job_status"] == "failed"
+    assert detail["job_error"] == "No SPHEREx coverage found for this region."
+    # Another browser still sees nothing.
+    assert client.get("/api/selections").json()["items"] == []
+
+
+@requires_db
+def test_claims_are_limited_to_100_jobs(client):
+    resp = client.post("/api/selections/claim", json={"job_ids": ["x"] * 101})
+    assert resp.status_code == 422
