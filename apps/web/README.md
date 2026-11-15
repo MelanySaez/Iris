@@ -53,7 +53,7 @@ The app opens on a landing page (`#/`): a full-screen star field, **Explore the 
 
 ## Guided tour
 
-A seven-step tour (React Joyride) walks through the viewer: welcome, **Find objects**, the map, the channel dock, the region tool, the workspace tabs and how to replay it. Start it from **Guided Tour** on the landing page or the **?** button in the top bar. It can be skipped at any step; finishing or skipping is remembered in `localStorage` (`iris_tour_seen`). Steps point at `data-tour` attributes, and a step whose anchor is not on screen (for example the rail on a phone) is left out.
+An eight-step tour (React Joyride) walks through the viewer: welcome, **Find objects**, the map, the right-click nearby search, the channel dock, the region tool, the workspace tabs and how to replay it. Start it from **Guided Tour** on the landing page or the **?** button in the top bar. It can be skipped at any step; finishing or skipping is remembered in `localStorage` (`iris_tour_seen`). Steps point at `data-tour` attributes, and a step whose anchor is not on screen (for example the rail on a phone) is left out.
 
 ## Search by name or catalogue code
 
@@ -64,6 +64,10 @@ under the box (official name, type, position and source), above the matching
 featured objects. Click it, or press **Enter** to take the first suggestion
 right away. Partial names are not completed: SIMBAD only resolves full names or
 codes. If every resolver is down, use **Go to coordinates**.
+
+## SIMBAD map layer
+
+The **SIMBAD** layer in Map layers shows the SIMBAD objects in the visible field. The CDS SIMBAD services (the HiPS catalog and TAP) have been unavailable, so the layer queries the Harvard CfA SIMBAD mirror (`https://simbad.cfa.harvard.edu/simbad/sim-tap/sync`) once the map stops moving: the 300 most-cited objects in view (`ORDER BY nbref DESC`), so the full-sky view shows the best-known objects and zooming in reveals more. Views wider than a hemisphere query the whole sky (the service rejects larger circles). Clicking a marker shows the object's name and type. The nearby-catalogs search uses the same mirror.
 
 ## Sky RGB composite
 
