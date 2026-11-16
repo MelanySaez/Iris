@@ -47,6 +47,23 @@ describe('AssistantWidget', () => {
     expect(screen.queryByRole('dialog', { name: 'Planet X assistant' })).toBeNull();
   });
 
+  it('keeps both icons in the launcher so the robot can turn into the close cross and back', async () => {
+    setup();
+    const launcher = screen.getByRole('button', { name: 'Open assistant' });
+    expect(launcher.getAttribute('data-state')).toBe('closed');
+    expect(launcher.querySelector('svg[data-icon="bot"]')).not.toBeNull();
+    expect(launcher.querySelector('svg[data-icon="close"]')).not.toBeNull();
+
+    await openPanel();
+    const open = screen.getByRole('button', { name: 'Close assistant' });
+    expect(open.getAttribute('data-state')).toBe('open');
+    expect(open.querySelector('svg[data-icon="bot"]')).not.toBeNull();
+    expect(open.querySelector('svg[data-icon="close"]')).not.toBeNull();
+
+    fireEvent.click(open);
+    expect(screen.getByRole('button', { name: 'Open assistant' }).getAttribute('data-state')).toBe('closed');
+  });
+
   it('sends the question with the UI context and runs the returned actions', async () => {
     const chat = vi.spyOn(api, 'assistantChat').mockResolvedValue({
       conversation_id: 'c',

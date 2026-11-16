@@ -40,6 +40,9 @@ export function App() {
   const tourTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Tours already started this session (by "?", the landing or a first visit).
   const toursOffered = useRef(new Set<TourId>());
+  // Set by the landing's Guided Tour button: every workspace then shows its tour
+  // once more on the next visit, even if this browser has seen it before.
+  const guidedVisit = useRef(false);
   const startTour = useCallback(
     (tour: TourId, delayMs: number) => {
       toursOffered.current.add(tour);
@@ -63,7 +66,7 @@ export function App() {
   useEffect(() => {
     if (route.type === 'landing') return undefined;
     const tour = tourForRoute(route.type);
-    if (hasSeenTour(tour) || toursOffered.current.has(tour)) return undefined;
+    if ((!guidedVisit.current && hasSeenTour(tour)) || toursOffered.current.has(tour)) return undefined;
     let polls = 0;
     const poll = setInterval(() => {
       polls += 1;
@@ -256,6 +259,8 @@ export function App() {
           onTour={() => {
             setLandingExit(true);
             setAppArriving(true);
+            guidedVisit.current = true;
+            toursOffered.current.clear();
             startTour('sky', 1100); // after the viewer has come out of the dark
           }}
           onExited={endLandingExit}

@@ -186,24 +186,23 @@ export function AssistantWidget({ getContext, onAction }: AssistantWidgetProps) 
         className={`assistant-launcher ${open ? 'is-open' : ''}`}
         aria-label={open ? 'Close assistant' : 'Open assistant'}
         aria-expanded={open}
+        data-state={open ? 'open' : 'closed'}
         onClick={() => setOpen((value) => !value)}
       >
-        {open ? (
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M6 6l12 12M18 6L6 18" />
-          </svg>
-        ) : (
-          // Robot head: antenna, rounded face, two eyes and a mouth, with side ears.
-          <svg viewBox="0 0 24 24" aria-hidden="true" data-icon="bot">
-            <path d="M12 3.5v3" />
-            <circle cx="12" cy="2.8" r="0.9" />
-            <rect x="4.5" y="6.5" width="15" height="12" rx="3.5" />
-            <path d="M2.5 11v3.5M21.5 11v3.5" />
-            <circle cx="9.2" cy="11.6" r="1.3" />
-            <circle cx="14.8" cy="11.6" r="1.3" />
-            <path d="M9.5 15.3h5" />
-          </svg>
-        )}
+        {/* Both icons stay mounted so CSS can turn the robot into the cross and back. */}
+        {/* Robot head: antenna, rounded face, two eyes and a mouth, with side ears. */}
+        <svg viewBox="0 0 24 24" aria-hidden="true" data-icon="bot" className="assistant-launcher-icon">
+          <path d="M12 3.5v3" />
+          <circle cx="12" cy="2.8" r="0.9" />
+          <rect x="4.5" y="6.5" width="15" height="12" rx="3.5" />
+          <path d="M2.5 11v3.5M21.5 11v3.5" />
+          <circle cx="9.2" cy="11.6" r="1.3" />
+          <circle cx="14.8" cy="11.6" r="1.3" />
+          <path d="M9.5 15.3h5" />
+        </svg>
+        <svg viewBox="0 0 24 24" aria-hidden="true" data-icon="close" className="assistant-launcher-icon">
+          <path d="M6 6l12 12M18 6L6 18" />
+        </svg>
       </button>
 
       {open && (

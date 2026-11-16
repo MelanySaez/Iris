@@ -17,6 +17,7 @@ import {
   interpolateMissingFlux,
   interpolatedLineSegments,
   estimatedRuns,
+  isolatedMeasurements,
   linearScale,
   logScale,
   logTicks,
@@ -619,6 +620,19 @@ function SpectrumChart({ entries, mode, showEstimates }: {
             {lineSegments(e.data.points, x, y).map((d, i) => (
               <path key={i} d={d} className="spectral-line" />
             ))}
+            {isolatedMeasurements(e.data.points)
+              .filter((p) => Number.isFinite(y(p.value as number)))
+              .map((p) => (
+                <circle
+                  key={`observed-${p.channel}`}
+                  cx={x(p.wavelength_um)}
+                  cy={y(p.value as number)}
+                  r={2.8}
+                  fill={SERIES_COLORS[e.slot]}
+                  stroke="none"
+                  className="spectral-observed-point"
+                />
+              ))}
             {interpolatedLineSegments(plottedSeries[entryIndex], x, y).map((d, i) => (
               <path key={`estimated-${i}`} d={d} className="spectral-estimated-line" />
             ))}
