@@ -17,7 +17,7 @@ export default defineConfig(({ mode }) => {
     },
     test: {
       environment: 'node',
-      include: ['src/**/*.test.ts', 'src/**/*.test.tsx', 'test/**/*.test.js'],
+      include: ['tests/**/*.test.ts', 'tests/**/*.test.tsx', 'tests/**/*.test.js'],
     },
   };
 });
