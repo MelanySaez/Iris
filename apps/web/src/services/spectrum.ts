@@ -118,6 +118,18 @@ export function interpolateMissingFlux(
 }
 
 /** Dashed chart-only links wherever a line segment touches an inferred point. */
+/**
+ * Measured channels whose neighbours (by wavelength) are both missing or only
+ * estimated. A line needs two measured points, so these would otherwise not be
+ * drawn at all; the chart marks them with a dot.
+ */
+export function isolatedMeasurements<T extends CubeSpectrumPoint & { interpolated?: boolean }>(points: T[]): T[] {
+  const ordered = [...points].sort((a, b) => a.wavelength_um - b.wavelength_um);
+  const measured = (p: T | undefined) =>
+    p !== undefined && p.value !== null && Number.isFinite(p.value) && !p.interpolated;
+  return ordered.filter((p, i) => measured(p) && !measured(ordered[i - 1]) && !measured(ordered[i + 1]));
+}
+
 /** A run of consecutive estimated channels, in wavelength order. */
 export interface EstimatedRun {
   points: DerivedSpectrumPoint[];

@@ -206,6 +206,17 @@ describe('SpectralLab', () => {
     expect(document.querySelectorAll('.spectral-estimated-line')).toHaveLength(3);
   });
 
+  it('draws measurements with no measured neighbour as points, with or without estimates', async () => {
+    getSpectrum.mockResolvedValue(spectrum([10, 12, null, 30, null, null, null, null, null, null, null, null, null, null, null, null, 50]));
+    render(<SpectralLab />);
+    await act(async () => fireEvent.click(catalogButton('Andromeda Galaxy')));
+    // Channel 3 is measured but both neighbours are gaps; channel 16 is the last, after a long gap.
+    expect(document.querySelectorAll('.spectral-observed-point')).toHaveLength(2);
+
+    fireEvent.click(screen.getByRole('switch', { name: 'Show estimates' }));
+    expect(document.querySelectorAll('.spectral-observed-point')).toHaveLength(2);
+  });
+
   it('hides every estimate from the chart, legend and table when Show estimates is off', async () => {
     getSpectrum.mockResolvedValue(spectrum([10, null, 30]));
     render(<SpectralLab />);
