@@ -1901,12 +1901,23 @@ button:disabled {
   border-bottom: 1px solid var(--plate-rule);
   font-size: 12px;
   line-height: 1.5;
-  color: var(--plate-text, #e0e0e5);
+  color: var(--plate-ink); /* the rail is white: dark text */
+  background: var(--plate-panel);
   overflow-wrap: anywhere;
 }
 
 .provider-trace summary {
   cursor: pointer;
+  color: var(--plate-ink);
+  font-weight: 600;
+}
+
+.provider-trace strong {
+  color: var(--plate-ink);
+}
+
+.provider-trace li {
+  color: var(--plate-muted); /* 7.7:1 on white */
 }
 
 .provider-trace ul {
@@ -2366,7 +2377,7 @@ button:disabled {
   left: 50%;
   transform: translateX(-50%);
   width: min(560px, calc(100% - 40px));
-  padding: 10px 14px;
+  padding: 10px 40px 10px 14px;
   background: rgba(20, 20, 20, 0.92);
   border: 1px solid rgba(255, 178, 122, 0.5);
   border-radius: var(--radius-md);
@@ -2381,14 +2392,15 @@ button:disabled {
 }
 
 .plate-fallback-notice {
+  position: relative;
   margin: 12px 16px 0;
-  padding: 10px 14px;
-  border: 1px solid var(--plate-rust);
+  padding: 10px 40px 10px 14px;
+  border: 1px solid #ff8a7a;
   border-left-width: 4px;
   border-radius: var(--radius-md);
-  background: var(--plate-rust-soft);
-  color: var(--plate-ink);
-  font-size: 12px;
+  background: #2b1d1b;
+  color: #f4f4f5; /* 14.8:1 on #2b1d1b */
+  font-size: 13px;
   line-height: 1.5;
   overflow-wrap: anywhere;
 }
@@ -2398,8 +2410,50 @@ button:disabled {
 }
 
 .plate-fallback-notice strong {
-  color: var(--plate-rust);
+  color: #ffb4a8; /* 9.5:1 on #2b1d1b */
 }
+
+.plate-fallback-chip {
+  align-self: flex-start;
+  margin: 10px 16px 0;
+  padding: 4px 10px;
+  border: 1px solid #ff8a7a;
+  border-radius: 999px;
+  background: #2b1d1b;
+  color: #ffb4a8;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.plate-fallback-chip:hover,
+.plate-fallback-chip:focus-visible {
+  background: #3a2623;
+}
+
+.notice-close-btn {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  width: 26px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: inherit;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.notice-close-btn:hover,
+.notice-close-btn:focus-visible {
+  border-color: currentColor;
+  background: rgba(255, 255, 255, 0.08);
+}
+
 
 .plate-cutout-missing {
   display: flex;
@@ -4014,4 +4068,117 @@ p.name-suggestion-error {
   .assistant-panel {
     transition: none;
   }
+}
+
+/* Live job progress inside the plate stage */
+.skeleton-box.progress-box {
+  width: min(460px, calc(100% - 40px));
+  height: auto;
+  padding: 18px 20px;
+  animation: none;
+}
+
+.stage-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: #f4f4f5;
+  font-size: 13px;
+}
+
+.stage-progress-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.stage-progress-stage {
+  font-weight: 600;
+}
+
+.stage-progress-pct {
+  color: #d4d4d8;
+}
+
+.stage-progress-activity {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 6px;
+  padding-top: 10px;
+  border-top: 1px solid #333338;
+  color: #d4d4d8; /* 11.5:1 on #1c1c1f */
+  font-size: 12px;
+}
+
+.stage-progress-activity.overdue {
+  color: #ffb4a8;
+}
+
+.stage-progress-track {
+  position: relative;
+  height: 6px;
+  border-radius: 3px;
+  background: #333338;
+  overflow: hidden;
+}
+
+.stage-progress-fill {
+  height: 100%;
+  width: 100%;
+  transform-origin: left center;
+  background: linear-gradient(90deg, var(--sky-accent), var(--sky-warm));
+  transition: transform 0.25s linear;
+}
+
+.stage-progress-track.indeterminate .stage-progress-fill {
+  width: 35%;
+  animation: stage-progress-slide 1.2s ease-in-out infinite;
+}
+
+@keyframes stage-progress-slide {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(290%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stage-progress-fill { transition: none; }
+  .stage-progress-track.indeterminate .stage-progress-fill {
+    animation: none;
+    width: 100%;
+    opacity: 0.5;
+  }
+}
+
+.stage-progress-total {
+  color: #a1a1aa; /* 6.6:1 on #1c1c1f */
+}
+
+.viewport-status {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  z-index: 20;
+  pointer-events: none;
+}
+
+.stage-status-chip {
+  display: inline-block;
+  padding: 3px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: var(--radius-sm);
+  background: rgba(0, 0, 0, 0.75);
+  color: #f4f4f5;
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
+.stage-status-chip.ready {
+  border-color: #6ee7a8;
+  color: #b7f5d0;
+}
+
+.stage-status-chip.failed {
+  border-color: #ff8a7a;
+  color: #ffb4a8;
 }

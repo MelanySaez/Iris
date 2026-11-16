@@ -3,6 +3,7 @@ import { api, ApiError } from '../../api';
 import { PreparingPlateCard } from '../PreparingPlateCard';
 import { EpochTimeline, ProviderTrace } from './EpochTimeline';
 import { CubeFallbackNotice, isCubeFallback, sourceLabel } from './SourceNotice';
+import { StageProgress, StageStatusChip } from './StageProgress';
 import {
   BLANK_CHANNELS,
   channelToBand,
@@ -125,14 +126,27 @@ export function PlateWorkspace({
   // LVF overlap diagnostics: an empty channel window means the slice render is
   // legitimately all-dim, not a rendering failure.
   const selectedWindow = activeFrame?.window_um ?? null;
+  // A cube cutout has one nominal wavelength (min == max): it is known, and it
+  // overlaps the channel when it falls inside the window.
+  const cubeCutout = activeCutout?.source === 'cube';
   const lvfKnown =
-    !!activeCutout && activeCutout.wavelength_max_um > activeCutout.wavelength_min_um;
+    !!activeCutout &&
+    (cubeCutout
+      ? activeCutout.wavelength_min_um > 0
+      : activeCutout.wavelength_max_um > activeCutout.wavelength_min_um);
   const noChannelOverlap =
     !!activeCutout &&
     !!selectedWindow &&
     lvfKnown &&
-    Math.min(selectedWindow[1], activeCutout.wavelength_max_um) <=
-      Math.max(selectedWindow[0], activeCutout.wavelength_min_um);
+    (cubeCutout
+      ? activeCutout.wavelength_min_um < selectedWindow[0] ||
+        activeCutout.wavelength_min_um > selectedWindow[1]
+      : Math.min(selectedWindow[1], activeCutout.wavelength_max_um) <=
+        Math.max(selectedWindow[0], activeCutout.wavelength_min_um));
+  // Stage warnings the user closed, per job and channel.
+  const warningKey = `${job.id}:${selectedChannel}`;
+  const [dismissedWarning, setDismissedWarning] = useState<string | null>(null);
+  const showLvfWarnings = dismissedWarning !== warningKey;
 
   // Fetch the authoritative channel table for the rail.
   useEffect(() => {
@@ -417,13 +431,14 @@ export function PlateWorkspace({
           <span className="ribbon-plate-id num">PLATE // {job.id}</span>
         </div>
         <div className="ribbon-center">
-          <span className="ribbon-collection">SPHEREx DR1 Level-2 Spectral Image</span>
-        </div>
-        <div className="ribbon-right">
-          <span className="ribbon-status-badge">
-            {job.status === 'ready' ? 'Ready' : job.stage || job.status}
+          <span className="ribbon-collection">
+            {cubeFallback
+              ? 'SPHEREx DR1 All-Sky Cube · fallback (no epochs)'
+              : 'SPHEREx DR1 Level-2 Spectral Image'}
           </span>
         </div>
+        {/* Job status lives inside the plate stage (StageProgress / StageStatusChip). */}
+        <div className="ribbon-right" />
       </nav>
 
       {/* Main 3-column Grid */}
@@ -485,7 +500,9 @@ export function PlateWorkspace({
               <span className="meta-key">Units</span>
               <span className="meta-val num">
                 {activeCutout
-                  ? `${activeCutout.image_unit} / ${activeCutout.variance_unit}`
+                  ? activeCutout.variance_unit
+                    ? `${activeCutout.image_unit} / ${activeCutout.variance_unit}`
+                    : activeCutout.image_unit
                   : '—'}
               </span>
             </div>
@@ -494,7 +511,17 @@ export function PlateWorkspace({
           {/* Explicit WCS-WAVE statement */}
           <div className="sheet-notice-box">
             <p className="notice-text">
-              <strong>WCS-WAVE approximate:</strong> Level-2 spectral images exhibit position-dependent LVF wavelength. Calibrated CWAVE/CBAND maps are not loaded in this visualization.
+              {cubeFallback ? (
+                <>
+                  <strong>DR1 All-Sky Cube:</strong> one combined image per channel. Its
+                  wavelength is the nominal channel centre, not a calibrated value, and it
+                  has no VARIANCE layer or individual epochs.
+                </>
+              ) : (
+                <>
+                  <strong>WCS-WAVE approximate:</strong> Level-2 spectral images exhibit position-dependent LVF wavelength. Calibrated CWAVE/CBAND maps are not loaded in this visualization.
+                </>
+              )}
             </p>
           </div>
 
@@ -518,8 +545,9 @@ export function PlateWorkspace({
                 ))
               ) : (
                 <p className="muted-text">
-                  Flag definitions are not available for this cutout. Re-run the job to
-                  parse the FITS flag headers.
+                  {cubeFallback
+                    ? 'The DR1 All-Sky Cube does not publish flag bit definitions; nonzero FLAGS values are shown as counts of set bits.'
+                    : 'Flag definitions are not available for this cutout. Re-run the job to parse the FITS flag headers.'}
                 </p>
               )}
             </div>
@@ -711,6 +739,11 @@ export function PlateWorkspace({
             <div className="viewport-fov-label num">
               {job.region.size_arcmin.toFixed(1)}′ × {job.region.size_arcmin.toFixed(1)}′
             </div>
+            {(hasCutout || job.status === 'ready' || job.status === 'failed') && (
+              <div className="viewport-status">
+                <StageStatusChip job={job} />
+              </div>
+            )}
 
             {/* Switching / Loading Skeleton */}
             {switchingChannel && (
@@ -735,14 +768,20 @@ export function PlateWorkspace({
             )}
 
             {/* LVF overlap diagnostics */}
-            {hasCutout && selectedWindow && !lvfKnown && (
+            {showLvfWarnings && hasCutout && selectedWindow && !lvfKnown && (
               <div className="plate-lvf-warning" role="note">
+                <button type="button" className="notice-close-btn" aria-label="Dismiss wavelength warning"
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onClick={() => setDismissedWarning(warningKey)}>×</button>
                 LVF wavelength coverage is unavailable for this cutout, so the channel
                 slice cannot be validated. The full detector image remains valid.
               </div>
             )}
-            {hasCutout && selectedWindow && noChannelOverlap && activeCutout && (
+            {showLvfWarnings && hasCutout && selectedWindow && noChannelOverlap && activeCutout && (
               <div className="plate-lvf-warning" role="note">
+                <button type="button" className="notice-close-btn" aria-label="Dismiss wavelength warning"
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onClick={() => setDismissedWarning(warningKey)}>×</button>
                 <strong>No channel overlap.</strong> Channel {selectedChannel} covers{' '}
                 {selectedWindow[0].toFixed(4)}–{selectedWindow[1].toFixed(4)} µm, but this
                 cutout&apos;s LVF spans {activeCutout.wavelength_min_um.toFixed(4)}–
@@ -809,9 +848,10 @@ export function PlateWorkspace({
                 )}
               </div>
             ) : job.status !== 'ready' && job.status !== 'failed' ? (
-              <div className="plate-loading-skeleton" role="status" aria-label="Preparing spectral cutout">
-                <div className="skeleton-box" aria-hidden="true" />
-                <span className="skeleton-label">{job.stage || 'Preparing spectral cutout…'}</span>
+              <div className="plate-loading-skeleton" aria-label="Preparing spectral cutout">
+                <div className="skeleton-box progress-box">
+                  <StageProgress job={job} />
+                </div>
               </div>
             ) : job.status === 'failed' ? (
               <div className="plate-cutout-missing">
@@ -1008,7 +1048,9 @@ export function PlateWorkspace({
               </div>
             ) : (
               <p className="readout-placeholder">
-                Move pointer over the cutout to inspect WCS-WAVE wavelength and flux. Click to pin.
+                {cubeFallback
+                  ? 'Move pointer over the cutout to inspect the cube flux and nominal channel wavelength. Click to pin.'
+                  : 'Move pointer over the cutout to inspect WCS-WAVE wavelength and flux. Click to pin.'}
               </p>
             )}
 

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { JobSnapshot } from '../../types';
 import { CubeFallbackNotice, isCubeFallback, sourceLabel } from './SourceNotice';
@@ -47,6 +47,15 @@ describe('cube fallback notice', () => {
     const fromFrames = job({ frames: [{ ...frame, window_um: [1, 2] }] });
     expect(isCubeFallback(fromFrames)).toBe(true);
     render(<CubeFallbackNotice job={fromFrames} />);
+    expect(screen.getByRole('status').textContent).toContain('No temporal information');
+  });
+
+  it('can be dismissed and brought back', () => {
+    render(<CubeFallbackNotice job={job({ discovery: { coverage_state: 'cube_fallback', fallback_notice: NOTICE } })} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Dismiss fallback notice' }));
+    expect(screen.queryByText(/No temporal information/)).toBeNull();
+    const reopen = screen.getByRole('button', { name: /Fallback data: DR1 All-Sky Cube, no temporal information/ });
+    fireEvent.click(reopen);
     expect(screen.getByRole('status').textContent).toContain('No temporal information');
   });
 

@@ -193,6 +193,24 @@ export interface JobSnapshot {
   multi_product_mosaic: string;
   discovery?: Record<string, unknown>;
   animation_reason?: string | null;
+  /** What the worker is doing right now; null between steps and when finished. */
+  activity?: JobActivity | null;
+}
+
+export interface JobActivity {
+  kind: 'discovery_attempt' | 'retry_wait' | 'fallback' | 'cube_read';
+  provider?: string;
+  attempt?: number;
+  max_attempts?: number;
+  /** Time budget of this step in seconds (attempt deadline or retry wait). */
+  budget_seconds?: number | null;
+  /** Seconds since the step started, measured by the server at snapshot time. */
+  elapsed_seconds?: number;
+  channel?: number;
+  channel_index?: number;
+  channels?: number;
+  tiles_done?: number;
+  tiles_total?: number | null;
 }
 
 export interface JobEvent {

@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import type { JobFrame, JobSnapshot } from '../../types';
 
 type DataSource = JobFrame['source'];
@@ -26,12 +27,20 @@ export function isCubeFallback(job: JobSnapshot): boolean {
  * combined image, so it carries no temporal information.
  */
 export function CubeFallbackNotice({ job }: { job: JobSnapshot }) {
+  const [dismissedFor, setDismissedFor] = useState<string | null>(null);
   if (!isCubeFallback(job)) return null;
+  if (dismissedFor === job.id) {
+    return <button type="button" className="plate-fallback-chip" onClick={() => setDismissedFor(null)}>
+      Fallback data: DR1 All-Sky Cube, no temporal information · show details
+    </button>;
+  }
   const notice = typeof job.discovery?.fallback_notice === 'string'
     ? job.discovery.fallback_notice
     : job.animation_reason ?? '';
   const span = notice.match(/from (\S+) to (\S+) into/);
   return <div className="plate-fallback-notice" role="status">
+    <button type="button" className="notice-close-btn" aria-label="Dismiss fallback notice"
+      onClick={() => setDismissedFor(job.id)}>×</button>
     <strong>Fallback data: IRSA TAP is unavailable.</strong>
     <p>
       This plate shows the SPHEREx DR1 All-Sky Cube read from S3
