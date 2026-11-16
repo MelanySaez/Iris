@@ -1132,3 +1132,66 @@ def test_status_reports_the_configured_model(monkeypatch):
         "enabled": True,
         "model": "my-model",
     }
+
+
+# -- popular and non-English object names -------------------------------------
+
+M16 = {
+    "query": "M16",
+    "name": "M  16",
+    "ra_deg": 274.688,
+    "dec_deg": -13.792,
+    "object_type": "Cluster",
+    "size_arcmin": 7.0,
+    "source": "simbad",
+    "alternatives": [],
+    "cached": False,
+}
+
+
+@pytest.mark.parametrize(
+    ("asked", "standard"),
+    [
+        ("Pillars of Creation", "M16"),
+        ("pilares de la creación", "M16"),
+        ("Los Pilares de la Creacion", "M16"),
+        ("Nebulosa del Águila", "M16"),
+        ("Galaxia de Andrómeda", "M31"),
+        ("Nebulosa de Orión", "M42"),
+    ],
+)
+def test_popular_names_simbad_does_not_know_resolve_through_their_designation(
+    asked, standard
+):
+    """Observed 2026-11-16: SIMBAD/NED reject 'Pillars of Creation' and Spanish names."""
+    from unittest.mock import patch
+
+    from app.services.assistant.tools import show_object
+
+    with patch(
+        "app.services.assistant.tools.resolve_name", return_value=M16
+    ) as resolver:
+        found = show_object({"name": asked})
+    resolver.assert_called_once_with(standard)
+    assert found["ra_deg"] == pytest.approx(274.688)
+    assert asked in found["name"] and "M 16" in found["name"]
+
+
+def test_names_simbad_knows_are_sent_unchanged():
+    from unittest.mock import patch
+
+    from app.services.assistant.tools import resolve_object_name
+
+    with patch(
+        "app.services.assistant.tools.resolve_name", return_value=M16
+    ) as resolver:
+        resolve_object_name({"name": "Eagle Nebula"})
+    resolver.assert_called_once_with("Eagle Nebula")
+
+
+def test_prompt_keeps_credits_for_the_app_and_translates_object_nicknames():
+    prompt = SYSTEM_PROMPT
+    assert "Pillars of Creation" in prompt
+    assert "astronomical" in prompt and "nickname" in prompt
+    assert "only when the person asks about Planet X itself" in prompt
+    assert "retry once with its standard designation" in prompt
