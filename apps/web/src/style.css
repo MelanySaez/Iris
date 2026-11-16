@@ -1359,6 +1359,28 @@ button:disabled {
   align-items: center;
 }
 
+/* Collapsed strips use the dark chrome of the ribbon and stage controls,
+   not the white panel paper. */
+.plate-columns-layout.sheet-collapsed > .plate-sheet,
+.plate-columns-layout.rail-collapsed > .spectral-rail {
+  background: #252528;
+  border-color: #36363a;
+}
+
+.plate-columns-layout.sheet-collapsed > .plate-sheet > .panel-toggle,
+.plate-columns-layout.rail-collapsed > .spectral-rail > .panel-toggle {
+  border-color: var(--sky-warm);
+  background: #1c1c1f;
+  color: var(--sky-warm); /* 9.0:1 on #1c1c1f */
+}
+
+.plate-columns-layout.sheet-collapsed > .plate-sheet > .panel-toggle:hover,
+.plate-columns-layout.sheet-collapsed > .plate-sheet > .panel-toggle:focus-visible,
+.plate-columns-layout.rail-collapsed > .spectral-rail > .panel-toggle:hover,
+.plate-columns-layout.rail-collapsed > .spectral-rail > .panel-toggle:focus-visible {
+  background: #2a2a2f;
+}
+
 /* Collapsed content leaves the layout and the tab order; the toggle stays. */
 .plate-columns-layout.sheet-collapsed > .plate-sheet > :not(.panel-toggle),
 .plate-columns-layout.rail-collapsed > .spectral-rail > :not(.panel-toggle) {
