@@ -4141,6 +4141,7 @@ p.name-suggestion-error {
 .spectral-subheading-coords { margin-top: 18px; margin-bottom: 8px; padding-top: 14px; border-top: 1px solid var(--sky-line); }
 .spectral-subheading-search { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--sky-line); }
 /* Featured objects: a native disclosure, collapsed by default, on a lightly shaded card. */
+.plate-disclosure,
 .spectral-featured {
   padding: 10px 12px;
   border: 1px solid var(--sky-line);
@@ -4150,15 +4151,18 @@ p.name-suggestion-error {
   interpolate-size: allow-keywords;
 }
 /* Eased open/close where ::details-content is supported; older browsers just toggle. */
+.plate-disclosure::details-content,
 .spectral-featured::details-content {
   block-size: 0;
   opacity: 0;
   overflow: hidden;
   transition: block-size 220ms ease, opacity 220ms ease, content-visibility 220ms allow-discrete;
 }
+.plate-disclosure[open]::details-content,
 .spectral-featured[open]::details-content { block-size: auto; opacity: 1; }
 .spectral-featured .spectral-catalog { padding-top: 10px; }
 /* The list also fades and slides in on open, in every browser. */
+.plate-disclosure[open] .provenance-content,
 .spectral-featured[open] .spectral-catalog { animation: spectral-featured-reveal 220ms ease-out; }
 @keyframes spectral-featured-reveal {
   from { opacity: 0; transform: translateY(-6px); }
@@ -4166,17 +4170,26 @@ p.name-suggestion-error {
 }
 .spectral-featured > summary .spectral-subheading-note { margin-bottom: 0; }
 @media (prefers-reduced-motion: reduce) {
+  .plate-disclosure::details-content, .plate-disclosure-toggle,
   .spectral-featured::details-content, .spectral-featured-toggle { transition: none; }
+  .plate-disclosure[open] .provenance-content,
   .spectral-featured[open] .spectral-catalog { animation: none; }
 }
+.plate-disclosure > summary,
 .spectral-featured > summary { display: grid; grid-template-columns: 1fr auto; column-gap: 8px; align-items: center; cursor: pointer; list-style: none; }
+.plate-disclosure > summary::-webkit-details-marker,
 .spectral-featured > summary::-webkit-details-marker { display: none; }
 .spectral-featured > summary .spectral-subheading-note { display: block; grid-column: 1; }
+.plate-disclosure > summary:focus-visible,
 .spectral-featured > summary:focus-visible { outline: 2px solid var(--sky-ink); outline-offset: 3px; border-radius: 4px; }
 /* Chevron at the right end: down while collapsed, turned up when open. */
+.plate-disclosure-toggle,
 .spectral-featured-toggle { grid-column: 2; grid-row: 1 / span 2; display: inline-flex; color: var(--sky-muted); transition: transform 120ms ease; }
+.plate-disclosure-toggle .sky-icon,
 .spectral-featured-toggle .sky-icon { width: 16px; height: 16px; }
+.plate-disclosure > summary:hover .plate-disclosure-toggle,
 .spectral-featured > summary:hover .spectral-featured-toggle { color: var(--sky-ink); }
+.plate-disclosure[open] .plate-disclosure-toggle,
 .spectral-featured[open] .spectral-featured-toggle { transform: rotate(180deg); }
 .spectral-catalog button { align-items: center; text-align: left; }
 .spectral-catalog-names { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
@@ -4399,10 +4412,6 @@ p.name-suggestion-error {
   color: #f4e6d8;              /* 12.5:1 on #2b2417 */
 }
 
-.plate-sheet .sheet-provenance-details {
-  background: var(--plate-raised);
-}
-
 .spectral-rail .channel-rail-item:hover:not(:disabled) {
   background: #26262b;
 }
@@ -4573,4 +4582,27 @@ p.name-suggestion-error {
     scrollbar-width: thin;
     scrollbar-color: var(--sky-line-strong) transparent;
   }
+}
+
+/* Plate "Provenance & Manifest": title and note laid out like the Spectral Lab
+   featured-objects summary (the disclosure itself shares .spectral-featured). */
+.plate-disclosure .plate-disclosure-title {
+  grid-column: 1;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--sky-ink);
+}
+
+.plate-disclosure .plate-disclosure-note {
+  grid-column: 1;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--sky-faint); /* 5.5:1 on #18181b */
+}
+
+.plate-disclosure .provenance-content {
+  margin-top: 0;
+  padding-top: 10px;
 }

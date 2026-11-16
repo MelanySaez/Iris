@@ -5,6 +5,7 @@ import { EpochTimeline, ProviderTrace } from './EpochTimeline';
 import { CubeFallbackNotice, isCubeFallback, sourceLabel } from './SourceNotice';
 import { StageProgress, StageStatusChip } from './StageProgress';
 import { PanelToggle, useCollapsiblePanels } from './PanelToggle';
+import { ChevronDownIcon } from '../SkyIcons';
 import {
   BLANK_CHANNELS,
   channelToBand,
@@ -560,12 +561,19 @@ export function PlateWorkspace({
           </div>
 
           {/* Collapsible Provenance block */}
+          {/* Same disclosure as Spectral Lab's "Featured objects" card. */}
           <details
-            className="sheet-provenance-details"
+            className="sheet-provenance-details plate-disclosure"
             open={isManifestOpen}
             onToggle={(e) => setIsManifestOpen(e.currentTarget.open)}
           >
-            <summary className="provenance-summary">Provenance & Manifest</summary>
+            <summary className="provenance-summary">
+              <span className="plate-disclosure-title">Provenance &amp; Manifest</span>
+              <span className="plate-disclosure-note">Release, cache and source products</span>
+              <span className="plate-disclosure-toggle" aria-hidden="true">
+                <ChevronDownIcon />
+              </span>
+            </summary>
             <div className="provenance-content">
               {manifestLoading ? (
                 <p className="loading-text">Loading DR1 manifest...</p>
