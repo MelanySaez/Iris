@@ -1379,25 +1379,15 @@ button:disabled {
   border-top: 0;
   border-bottom: 0;
   background: var(--sky-raised);
-  color: var(--signal); /* app accent (mustard): 8.4:1 on #222226 */
+  color: var(--sky-muted); /* 7.7:1 on #222226 */
   font-size: 0.62rem;
-  font-weight: 600;
   cursor: pointer;
 }
-
-/* Accent edge facing the stage, like the active tab underline. */
-.panel-toggle-left { box-shadow: inset -2px 0 0 var(--signal); }
-.panel-toggle-right { box-shadow: inset 2px 0 0 var(--signal); }
 
 .panel-toggle:hover,
 .panel-toggle:focus-visible {
   background: var(--sky-hover);
-  color: var(--signal-strong); /* 6.0:1 on #2a2a2f */
-}
-
-.panel-toggle:focus-visible {
-  outline: 2px solid var(--signal);
-  outline-offset: -2px;
+  color: var(--sky-ink);
 }
 
 .panel-toggle svg {
@@ -4307,8 +4297,9 @@ p.name-suggestion-error {
   --plate-faint: #8e8e98;      /* 5.5:1 on #18181b */
   --plate-rule: #2a2a2f;
   --plate-rule-strong: #3f3f46;
-  --plate-rust: #ff8a7a;       /* 7.7:1 on #18181b */
-  --plate-rust-soft: rgba(255, 138, 122, 0.12);
+  /* Titles, badges and selection use the app accent (mustard), not red. */
+  --plate-rust: var(--signal); /* #f5b041: 9.4:1 on #18181b */
+  --plate-rust-soft: rgba(245, 176, 65, 0.12);
   --plate-teal: #f4f4f5;
   --plate-teal-soft: rgba(244, 244, 245, 0.08);
   color: var(--plate-ink);
@@ -4340,4 +4331,14 @@ p.name-suggestion-error {
 .plate-sheet .flag-chip,
 .spectral-rail .flag-chip {
   background: #2f2f35;
+}
+
+/* Inside the dark panels the accent is mustard; errors stay red, and text on
+   a mustard badge is dark. */
+.spectral-rail .rail-source.error {
+  color: #ff8a7a; /* 7.7:1 on #18181b */
+}
+
+.spectral-rail .pinned-badge {
+  color: #18181b; /* 9.4:1 on #f5b041 */
 }
