@@ -237,6 +237,41 @@ def _fold(text: str) -> str:
     return "".join(ch for ch in decomposed if not unicodedata.combining(ch))
 
 
+# Popular nicknames and Spanish names SIMBAD/NED do not resolve (checked
+# 2026-11-16: "Pillars of Creation", "Pilares de la creación" and "Nebulosa
+# del Águila" fail, while M16 resolves), mapped to a designation they do know.
+# Keys are folded (lowercase, no accents), without a leading article.
+_NICKNAMES = {
+    "pillars of creation": "M16",
+    "pilares de la creacion": "M16",
+    "nebulosa del aguila": "M16",
+    "nebulosa aguila": "M16",
+    "galaxia de andromeda": "M31",
+    "nebulosa de orion": "M42",
+    "gran nebulosa de orion": "M42",
+    "nebulosa del cangrejo": "M1",
+    "pleyades": "M45",
+    "galaxia del remolino": "M51",
+    "galaxia del sombrero": "M104",
+    "nebulosa del anillo": "M57",
+    "nebulosa de la laguna": "M8",
+    "nebulosa trifida": "M20",
+    "galaxia del triangulo": "M33",
+    "nebulosa cabeza de caballo": "Horsehead Nebula",
+}
+_ARTICLES = ("the ", "los ", "las ", "la ", "el ")
+
+
+def _standard_name(name: str) -> str:
+    """Designation SIMBAD/NED know for a popular or Spanish name; else ``name``."""
+    key = " ".join(_fold(name).split())
+    for article in _ARTICLES:
+        if key.startswith(article):
+            key = key[len(article) :]
+            break
+    return _NICKNAMES.get(key, name)
+
+
 def search_catalog(tool_input: Any) -> dict[str, Any]:
     query = _check_fields("search_catalog", tool_input)["query"]
     if not isinstance(query, str) or not query.strip():
@@ -274,8 +309,9 @@ def resolve_object_name(tool_input: Any) -> dict[str, Any]:
     name = _check_fields("resolve_object_name", tool_input)["name"]
     if not isinstance(name, str) or not name.strip():
         raise ToolInputError("name must be a non-empty string")
+    standard = _standard_name(name)
     try:
-        found = resolve_name(name)
+        found = resolve_name(standard)
     except AppError as exc:  # not found, invalid name or providers unavailable
         raise ToolInputError(exc.detail) from None
     size = found.get("size_arcmin")
@@ -284,7 +320,13 @@ def resolve_object_name(tool_input: Any) -> dict[str, Any]:
     suggested = _REGION_DEFAULT if size is None else size
     return {
         # Text from external catalogues: cleaned and clearly marked as data.
-        "name": sanitize_untrusted(str(found["name"]), 80),
+        # A nickname keeps the person's words beside the catalogue designation.
+        "name": sanitize_untrusted(
+            str(found["name"])
+            if standard == name
+            else f"{name.strip()} ({found['name']})",
+            80,
+        ),
         "object_type": (
             sanitize_untrusted(str(found["object_type"]), 40)
             if found.get("object_type")
