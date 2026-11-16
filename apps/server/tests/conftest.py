@@ -45,3 +45,6 @@ def no_cube_network(monkeypatch):
         raise CubeUpstreamError("S3 cube access is disabled in tests")
 
     monkeypatch.setattr(discovery, "discover_cube", offline)
+    discovery.forget_recent_fallbacks()
+    yield
+    discovery.forget_recent_fallbacks()

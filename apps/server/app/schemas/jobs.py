@@ -121,6 +121,7 @@ class JobSnapshot(BaseModel):
     frames: list[FrameDescriptor] = Field(default_factory=list)
     cutouts: list[CutoutMetadata] = Field(default_factory=list)
     animation_reason: str | None = None
+    activity: dict[str, Any] | None = None
     discovery: dict[str, Any] = Field(default_factory=dict)
     cache: dict[str, bool] = Field(default_factory=lambda: {"hit": False})
     wavelength_status: str = "wcs_wave_approximate"

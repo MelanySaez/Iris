@@ -102,6 +102,9 @@ class JobState:
     derived_cache_complete: bool = True
     discovery: dict[str, Any] = field(default_factory=dict)
     animation_reason: str | None = None
+    # What the worker is doing right now, with its own progress budget; None
+    # between steps. Exposed so the UI can show live sub-progress.
+    activity: dict[str, Any] | None = None
 
     def _wavelength_status(self) -> str:
         """Job-level wavelength status: calibrated, cube nominal, or approximate."""
@@ -160,7 +163,17 @@ class JobState:
             else MULTI_PRODUCT_MOSAIC,
             "discovery": self.discovery,
             "animation_reason": self.animation_reason,
+            "activity": self._activity_snapshot(),
         }
+
+    def _activity_snapshot(self) -> dict[str, Any] | None:
+        if self.activity is None or self.status in ("ready", "failed"):
+            return None
+        snapshot = dict(self.activity)
+        started = snapshot.get("started_at")
+        if isinstance(started, (int, float)):
+            snapshot["elapsed_seconds"] = round(max(0.0, time.time() - started), 1)
+        return snapshot
 
 
 class JobObserver(Protocol):
@@ -436,6 +449,7 @@ class JobManager:
         job.error = message
         job.error_trace = trace
         job.status = "failed"
+        job.activity = None
         job.progress = 100
         job.stage = "Failed"
         job.events.append({"stage": job.stage, "at": time.time()})
@@ -456,16 +470,50 @@ class JobManager:
         outcome = attempt.get("outcome", "unknown")
         will_retry = bool(attempt.get("will_retry", False))
 
-        if outcome == "started":
+        event_type = attempt.get("event_type")
+        now = time.time()
+        if event_type == "provider_reuse":
+            stage = f"Reusing the {provider} result for this region"
+            job.activity = None
+        elif event_type == "provider_fallback":
+            count = attempt.get("result_count")
+            stage = {
+                "started": f"{provider} fallback · checking",
+                "succeeded": f"{provider} fallback · {count} products found",
+            }.get(outcome, f"{provider} fallback unavailable")
+            job.activity = (
+                {"kind": "fallback", "provider": provider, "started_at": now}
+                if outcome == "started"
+                else None
+            )
+        elif outcome == "started":
             stage = f"{provider} · Attempt {number} of {maximum} in progress"
+            job.activity = {
+                "kind": "discovery_attempt",
+                "provider": provider,
+                "attempt": number,
+                "max_attempts": maximum,
+                "started_at": now,
+                "budget_seconds": attempt.get("deadline_seconds"),
+            }
         elif outcome == "failed" and will_retry:
             stage = f"{provider} · Attempt {number} of {maximum} failed; retrying"
+            job.activity = {
+                "kind": "retry_wait",
+                "provider": provider,
+                "attempt": number,
+                "max_attempts": maximum,
+                "started_at": now,
+                "budget_seconds": attempt.get("retry_after_seconds"),
+            }
         elif outcome == "failed":
             stage = f"{provider} · Attempt {number} of {maximum} failed"
+            job.activity = None
         else:
             stage = f"{provider} · Attempt {number} of {maximum} succeeded"
+            job.activity = None
 
-        event = {**attempt, "stage": stage, "at": time.time()}
+        event = {**attempt, "stage": stage, "at": now}
         job.stage = stage
         job.events.append(event)
         logger.info(
@@ -582,11 +630,32 @@ class JobManager:
         cutouts: dict[int, CubeCutout] = {}
         for done, channel in enumerate(channels, 1):
             job.stage = f"Reading DR1 cube channel {channel} ({done}/{len(channels)})"
-            job.progress = 20 + int(55 * (done - 1) / len(channels))
+            job.progress = 20 + int(65 * (done - 1) / len(channels))
             job.events.append({"stage": job.stage, "at": time.time()})
+            job.activity = {
+                "kind": "cube_read",
+                "provider": CUBE_PROVIDER,
+                "channel": channel,
+                "channel_index": done,
+                "channels": len(channels),
+                "tiles_done": 0,
+                "tiles_total": None,
+                "started_at": time.time(),
+            }
+
+            def progress(tiles_done: int, tiles_total: int, index: int = done) -> None:
+                if job.activity is not None:
+                    job.activity.update(tiles_done=tiles_done, tiles_total=tiles_total)
+                share = tiles_done / tiles_total if tiles_total else 0.0
+                job.progress = 20 + int(65 * (index - 1 + share) / len(channels))
+
             try:
                 cutout = build_cube_cutout(
-                    req.ra_deg, req.dec_deg, req.size_arcmin, channel
+                    req.ra_deg,
+                    req.dec_deg,
+                    req.size_arcmin,
+                    channel,
+                    on_progress=progress,
                 )
             except CubeUpstreamError as exc:
                 self._fail(job, "cube_unavailable", str(exc))
@@ -598,6 +667,7 @@ class JobManager:
             cutouts[channel] = cutout
             job.cutout_objects[(cutout.detector, 0, channel)] = cutout
 
+        job.activity = None
         job.status = "rendering"
         job.progress = 85
         job.stage = "Rendering frames"
@@ -687,6 +757,7 @@ class JobManager:
                 size,
                 on_attempt=lambda attempt: self._record_discovery_attempt(job, attempt),
             )
+            job.activity = None
             job.discovery = {
                 key: discovery[key]
                 for key in (
@@ -697,6 +768,7 @@ class JobManager:
                     "warning",
                     "temporal_available",
                     "fallback_notice",
+                    "reused",
                 )
                 if key in discovery
             }

@@ -14,7 +14,8 @@ from __future__ import annotations
 
 import logging
 import math
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import Any
@@ -27,7 +28,12 @@ from astropy.time import Time
 from astropy.wcs import WCS
 from astropy_healpix import HEALPix
 
-from app.core.config import CUBE_FETCH_TIMEOUT, CUBE_ORDER, CUBE_S3_BASE_URL
+from app.core.config import (
+    CUBE_FETCH_TIMEOUT,
+    CUBE_ORDER,
+    CUBE_S3_BASE_URL,
+    CUBE_TILE_WORKERS,
+)
 from app.exceptions.domain import CubeUpstreamError, SpectrumNotFoundError
 from app.services.cube_spectrum import (
     CubeLayout,
@@ -39,7 +45,7 @@ from app.services.cube_spectrum import (
     invalidate_tile,
     tile_for,
 )
-from app.services.fits import DerivedCutout
+from app.services.fits import DerivedCutout, load_derived_cutout
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +57,7 @@ CUBE_OBS_ID = "SPHEREx DR1 All-Sky Cube"
 CUBE_VERSION = CUBE_S3_BASE_URL.rstrip("/").rsplit("/", 1)[-1]
 CUBE_HDUS = ("IMAGE", "FLAGS", "NHITS")
 DETECTORS = (1, 2, 3, 4, 5, 6)
+ProgressCallback = Callable[[int, int], None]
 
 __all__ = [
     "CUBE_COVERAGE_STATE",
@@ -230,8 +237,21 @@ def _layout(client: httpx.Client, npix: int) -> CubeLayout:
     return get_layout(client, npix, "s3")
 
 
+def cube_cutout_uri(ra: float, dec: float, size_arcmin: float, channel: int) -> str:
+    """Stable identity of one channel cutout (also its derived-cache key)."""
+    return (
+        f"cube:{CUBE_VERSION}:{CUBE_ORDER}:{ra % 360.0:.6f}:{dec:.6f}:"
+        f"{size_arcmin:g}:ch{channel}"
+    )
+
+
 def _build(
-    client: httpx.Client, ra: float, dec: float, size_arcmin: float, channel: int
+    client: httpx.Client,
+    ra: float,
+    dec: float,
+    size_arcmin: float,
+    channel: int,
+    on_progress: ProgressCallback | None = None,
 ) -> CubeCutout:
     center = _layout(client, tile_for(ra, dec))
     info = _check_channel(center, channel)
@@ -243,8 +263,9 @@ def _build(
     image = np.full(shape, np.nan, dtype=np.float32)
     flags = np.zeros(shape, dtype=np.int32)
     nhits = np.zeros(shape, dtype=np.int32)
-    provenance = []
-    for npix in sorted(int(t) for t in np.unique(tiles)):
+    tile_ids = sorted(int(t) for t in np.unique(tiles))
+
+    def read_tile(npix: int) -> tuple[int, dict[str, np.ndarray], np.ndarray, dict]:
         mask = tiles == npix
         try:
             layout = center if npix == center.npix else _layout(client, npix)
@@ -259,9 +280,26 @@ def _build(
             values, ok, prov = _sample_tile(
                 client, layout, channel, world_ra[mask], world_dec[mask]
             )
+        return npix, values, ok, prov
+
+    if on_progress:
+        on_progress(0, len(tile_ids))
+    results = {}
+    workers = max(1, min(CUBE_TILE_WORKERS, len(tile_ids)))
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        futures = [pool.submit(read_tile, npix) for npix in tile_ids]
+        for done, future in enumerate(as_completed(futures), 1):
+            npix, values, ok, prov = future.result()
+            results[npix] = (values, ok, prov)
+            if on_progress:
+                on_progress(done, len(tile_ids))
+
+    provenance = []
+    for npix in tile_ids:  # apply in tile order, whatever order reads finished in
+        values, ok, prov = results[npix]
         if not values:
             continue
-        idx = np.flatnonzero(mask)[ok]
+        idx = np.flatnonzero(tiles == npix)[ok]
         image.flat[idx] = values["IMAGE"][ok]
         flags.flat[idx] = values["FLAGS"][ok]
         nhits.flat[idx] = values["NHITS"][ok]
@@ -272,9 +310,7 @@ def _build(
         [0, shape[1], shape[1], 0], [0, 0, shape[0], shape[0]]
     )
     header = dict(wcs.to_header())
-    uri = (
-        f"cube:{CUBE_VERSION}:{CUBE_ORDER}:{ra:.6f}:{dec:.6f}:{size_arcmin:g}:ch{channel}"
-    )
+    uri = cube_cutout_uri(ra, dec, size_arcmin, channel)
     metadata: dict[str, Any] = {
         "wcs_header": header,
         "spatial_header": header,
@@ -348,11 +384,28 @@ def build_cube_cutout(
     channel: int,
     *,
     client: httpx.Client | None = None,
+    on_progress: ProgressCallback | None = None,
+    use_cache: bool = True,
 ) -> CubeCutout:
-    """Resample one channel of the cube onto a north-up TAN grid of the region."""
+    """Resample one channel of the cube onto a north-up TAN grid of the region.
+
+    ``on_progress(done, total)`` is called as tiles finish. A cutout already in
+    the derived cache (same region, channel and cube version) is reused
+    without any network access.
+    """
     ra = ra_deg % 360.0
+    if use_cache:
+        cached = load_derived_cutout(
+            cube_cutout_uri(ra, dec_deg, size_arcmin, channel), channel // 17 + 1
+        )
+        if isinstance(cached, CubeCutout) and cached.metadata.get("provenance"):
+            if on_progress:
+                on_progress(1, 1)
+            return cached
     with _session(client) as session:
-        return _guard(lambda: _build(session, ra, dec_deg, size_arcmin, channel))
+        return _guard(
+            lambda: _build(session, ra, dec_deg, size_arcmin, channel, on_progress)
+        )
 
 
 def discover_cube(

@@ -134,6 +134,14 @@ JOB_SNAPSHOT_LRU_SIZE = 32
 HIPS_FETCH_TIMEOUT = 10.0
 TAP_QUERY_TIMEOUT = 30.0
 TAP_QUERY_RETRIES = 1
+# Wall-clock budget of one TAP attempt, all result pages included. Shown to
+# the user as the attempt's progress budget.
+TAP_ATTEMPT_DEADLINE_SECONDS = 45.0
+# A region whose TAP discovery failed and was served by a fallback reuses that
+# fallback result for this long instead of retrying TAP and its fallbacks.
+FALLBACK_REUSE_SECONDS = 600.0
+# Cube tiles read concurrently for one channel of a large region.
+CUBE_TILE_WORKERS = 4
 CUTOUT_CONNECT_TIMEOUT = 10.0
 CUTOUT_READ_TIMEOUT = 90.0
 CUTOUT_DOWNLOAD_RETRIES = 2

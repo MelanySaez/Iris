@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import copy
 import hashlib
 import io
 import json
 import logging
 import math
 import re
+import threading
 import time
 from collections.abc import Callable
 from typing import Any
@@ -20,8 +22,10 @@ from astropy.time import Time
 from app.core.config import (
     DISCOVERY_CACHE_DIR,
     DISCOVERY_TTL_SECONDS,
+    FALLBACK_REUSE_SECONDS,
     MAX_REGION_SIZE_ARCMIN,
     MIN_REGION_SIZE_ARCMIN,
+    TAP_ATTEMPT_DEADLINE_SECONDS,
     TAP_QUERY_RETRIES,
     TAP_QUERY_TIMEOUT,
     TAP_SYNC_URL,
@@ -60,6 +64,19 @@ def discovery_cache_key(ra_deg: float, dec_deg: float, size_arcmin: float) -> st
     return hashlib.sha1(token.encode("utf-8")).hexdigest()
 
 
+class TapServiceError(ValueError):
+    """IRSA TAP answered without a result table (QUERY_STATUS=ERROR or no TABLE).
+
+    The query is fixed and server-built, so this is a provider failure, not
+    invalid user input: it is treated as an outage and may fall back.
+    """
+
+
+_QUERY_STATUS_ERROR = re.compile(
+    rb'<INFO[^>]*name="QUERY_STATUS"[^>]*value="ERROR"[^>]*>(.*?)</INFO>', re.S
+)
+
+
 def parse_tap_votable(
     xml_bytes: bytes,
     ra_deg: float,
@@ -67,7 +84,16 @@ def parse_tap_votable(
     size_arcmin: float,
 ) -> list[dict[str, Any]]:
     """Parse TAP sync votable output into product descriptors."""
-    table = Table.read(io.BytesIO(xml_bytes), format="votable", use_names_over_ids=True)
+    status = _QUERY_STATUS_ERROR.search(xml_bytes)
+    if status:
+        message = status.group(1).decode("utf-8", "replace").strip()
+        raise TapServiceError(message[:200] or "QUERY_STATUS=ERROR")
+    try:
+        table = Table.read(
+            io.BytesIO(xml_bytes), format="votable", use_names_over_ids=True
+        )
+    except ValueError as exc:
+        raise TapServiceError(f"IRSA TAP returned no result table ({exc})") from None
     products: list[dict[str, Any]] = []
 
     # Map column names
@@ -117,6 +143,37 @@ def parse_tap_votable(
     return products
 
 
+class DeadlineExceeded(Exception):
+    """One TAP attempt used up its wall-clock budget (an outage, not bad input)."""
+
+
+_recent_fallbacks: dict[str, tuple[float, dict[str, Any]]] = {}
+_recent_fallbacks_lock = threading.Lock()
+
+
+def _remember_fallback(key: str, result: dict[str, Any]) -> None:
+    with _recent_fallbacks_lock:
+        _recent_fallbacks[key] = (time.time(), copy.deepcopy(result))
+
+
+def _recent_fallback(key: str) -> tuple[float, dict[str, Any]] | None:
+    """A fallback result for this region younger than FALLBACK_REUSE_SECONDS."""
+    with _recent_fallbacks_lock:
+        entry = _recent_fallbacks.get(key)
+        if entry is None:
+            return None
+        if time.time() - entry[0] > FALLBACK_REUSE_SECONDS:
+            del _recent_fallbacks[key]
+            return None
+        return entry[0], copy.deepcopy(entry[1])
+
+
+def forget_recent_fallbacks() -> None:
+    """Drop every remembered fallback (tests and explicit refreshes)."""
+    with _recent_fallbacks_lock:
+        _recent_fallbacks.clear()
+
+
 def query_irsa_tap(
     ra_deg: float,
     dec_deg: float,
@@ -161,18 +218,37 @@ ORDER BY a.uri
             "attempt": attempt,
             "max_attempts": max_attempts,
         }
-        _notify_discovery_attempt(on_attempt, {**attempt_info, "outcome": "started"})
+        _notify_discovery_attempt(
+            on_attempt,
+            {
+                **attempt_info,
+                "outcome": "started",
+                "deadline_seconds": TAP_ATTEMPT_DEADLINE_SECONDS,
+            },
+        )
         detail: str | None = None
+        deadline = time.monotonic() + TAP_ATTEMPT_DEADLINE_SECONDS
+
+        def remaining() -> float:
+            left = deadline - time.monotonic()
+            if left <= 0:
+                raise DeadlineExceeded(
+                    f"attempt took longer than {TAP_ATTEMPT_DEADLINE_SECONDS:g} s"
+                )
+            return min(TAP_QUERY_TIMEOUT, left)
+
         try:
             with httpx.Client(timeout=TAP_QUERY_TIMEOUT) as client:
-                resp = client.post(TAP_SYNC_URL, data=data)
+                resp = client.post(TAP_SYNC_URL, data=data, timeout=remaining())
                 if resp.status_code == 200:
                     products = []
                     seen = set()
                     complete = False
                     for page in range(TAP_MAX_PAGES):
                         if page:
-                            resp = client.post(TAP_SYNC_URL, data=data)
+                            resp = client.post(
+                                TAP_SYNC_URL, data=data, timeout=remaining()
+                            )
                             resp.raise_for_status()
                         batch = parse_tap_votable(
                             resp.content, ra_deg, dec_deg, size_arcmin
@@ -236,6 +312,15 @@ def _try_cube_fallback(
     Returns the cube discovery (products and user notice), or None when the
     cube tiles cannot be read either. Both outcomes are recorded as events.
     """
+    observe(
+        {
+            "event_type": "provider_fallback",
+            "provider": CUBE_PROVIDER,
+            "fallback": True,
+            "outcome": "started",
+            "detail": "Checking the DR1 All-Sky Cube tiles on S3.",
+        }
+    )
     try:
         found = discover_cube(ra_deg, dec_deg, size_arcmin)
     except CubeUpstreamError as exc:
@@ -323,6 +408,32 @@ def resolve_region(
         except Exception:
             pass
 
+    if not force_refresh and (recent := _recent_fallback(cache_key)) is not None:
+        failed_at, reused = recent
+        provider = (
+            CUBE_PROVIDER if reused.get("coverage_state") == CUBE_COVERAGE_STATE else "S3"
+        )
+        age = max(0, int(start_time - failed_at))
+        event = {
+            "event_type": "provider_reuse",
+            "provider": provider,
+            "fallback": True,
+            "outcome": "succeeded",
+            "coverage_state": reused.get("coverage_state"),
+            "coverage_complete": False,
+            "temporal_available": reused.get("temporal_available", True),
+            "result_count": len(reused.get("products", [])),
+            "detail": (
+                f"IRSA TAP failed {age} s ago for this region; reusing the {provider} "
+                "result instead of retrying TAP and its fallbacks."
+            ),
+        }
+        _notify_discovery_attempt(on_attempt, event)
+        reused["provider_trace"] = [event]
+        reused["reused"] = True
+        reused["query_ms"] = int((time.time() - start_time) * 1000)
+        return reused
+
     provider_trace: list[dict[str, Any]] = []
     fallback_notice: str | None = None
 
@@ -346,7 +457,8 @@ def resolve_region(
         warning
         and re.search(
             r"HTTP 5\d\d|(?:Read|Connect|Write|Pool)Timeout|"
-            r"ConnectError|ReadError|RemoteProtocolError",
+            r"ConnectError|ReadError|RemoteProtocolError|DeadlineExceeded|"
+            r"TapServiceError",
             warning,
         )
     )
@@ -363,7 +475,7 @@ def resolve_region(
                 "outcome": "succeeded" if products else "unavailable",
                 "coverage_state": coverage_state,
                 "coverage_complete": complete,
-                "detail": warning,
+                "detail": re.sub(r":\s*<.*", "", warning or "", flags=re.S)[:240],
                 "result_count": len(products),
             }
         )
@@ -432,6 +544,9 @@ def resolve_region(
             "positively indexed footprints are known."
         ],
     }
+
+    if unavailable and products:
+        _remember_fallback(cache_key, result)
 
     # Save to disk cache. Only definitive outcomes are cached: a transient TAP
     # failure ("unknown") must not poison the region for the whole TTL.

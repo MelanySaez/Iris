@@ -55,7 +55,7 @@ def test_area_discovery_pages_and_marks_complete(monkeypatch):
         def __exit__(self, *args):
             pass
 
-        def post(self, url, data):
+        def post(self, url, data, **kwargs):
             queries.append(data["QUERY"])
             return httpx.Response(
                 200,

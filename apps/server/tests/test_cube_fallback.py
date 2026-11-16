@@ -94,7 +94,12 @@ class S3Tiles:
 
 @pytest.fixture
 def tiles(tmp_path, monkeypatch):
+    import app.services.fits as fits_service
+
     monkeypatch.setattr(cube, "CUBE_CACHE_DIR", tmp_path)
+    derived = tmp_path / "derived"
+    derived.mkdir()
+    monkeypatch.setattr(fits_service, "DERIVED_CACHE_DIR", derived)
     server = S3Tiles(build_tile())
     client = httpx.Client(transport=httpx.MockTransport(server))
     # Every position maps to the one synthetic tile.
@@ -509,3 +514,227 @@ def test_selection_records_skip_synthetic_cube_products():
         type("J", (), {"request": None})(), {"coverage_state": "complete", "products": []}
     )
     assert [d["coverage_state"] for d in store.calls] == ["complete"]
+
+
+# --- Progress, deadlines and reuse (T5/T6) ------------------------------------
+
+
+def _outage(monkeypatch, tmp_path, tap_calls: list | None = None):
+    """TAP down (HTTP 502), empty L2 index, working cube."""
+    monkeypatch.setattr(discovery, "DISCOVERY_CACHE_DIR", tmp_path)
+
+    def tap(*args, **kwargs):
+        if tap_calls is not None:
+            tap_calls.append(1)
+        return [], "IRSA TAP returned HTTP 502"
+
+    monkeypatch.setattr(discovery, "query_irsa_tap", tap)
+    monkeypatch.setattr(
+        discovery,
+        "query_index",
+        lambda *a, **kw: {
+            "products": [],
+            "coverage_state": "unknown_not_indexed",
+            "coverage_complete": False,
+        },
+    )
+    monkeypatch.setattr(discovery, "discover_cube", lambda *a, **kw: cube_discovery())
+
+
+def test_a_region_served_by_the_cube_reuses_it_without_retrying_tap(
+    monkeypatch, tmp_path
+):
+    tap_calls: list = []
+    _outage(monkeypatch, tmp_path, tap_calls)
+    first = discovery.resolve_region(5, 5, 4)
+    events: list = []
+    second = discovery.resolve_region(5, 5, 4, on_attempt=events.append)
+
+    assert tap_calls == [1]
+    assert first["coverage_state"] == second["coverage_state"] == "cube_fallback"
+    assert second["reused"] is True
+    assert second["fallback_notice"] == first["fallback_notice"]
+    assert [e["event_type"] for e in events] == ["provider_reuse"]
+    assert "reusing the S3 DR1 All-Sky Cube result" in events[0]["detail"]
+    assert events[0]["temporal_available"] is False
+
+
+def test_reuse_is_bounded_and_skipped_on_explicit_refresh(monkeypatch, tmp_path):
+    tap_calls: list = []
+    _outage(monkeypatch, tmp_path, tap_calls)
+    discovery.resolve_region(6, 5, 4)
+    discovery.resolve_region(6, 5, 4, force_refresh=True)
+    assert len(tap_calls) == 2
+    monkeypatch.setattr(discovery, "FALLBACK_REUSE_SECONDS", -1)
+    discovery.resolve_region(6, 5, 4)
+    assert len(tap_calls) == 3
+
+
+def test_successful_tap_results_are_not_remembered_as_fallbacks(monkeypatch, tmp_path):
+    monkeypatch.setattr(discovery, "DISCOVERY_CACHE_DIR", tmp_path)
+    product = {
+        "id": "p",
+        "uri": "u",
+        "source": "remote",
+        "detector": 1,
+        "date_mjd": 1.0,
+        "date_iso": "2025-01-01T00:00:00Z",
+    }
+    calls: list = []
+    monkeypatch.setattr(
+        discovery, "query_irsa_tap", lambda *a, **kw: calls.append(1) or ([product], None)
+    )
+    discovery.resolve_region(7, 5, 4, force_refresh=True)
+    discovery.resolve_region(7, 5, 4, force_refresh=True)
+    assert len(calls) == 2
+
+
+def test_tap_attempt_announces_and_enforces_its_deadline(monkeypatch):
+    monkeypatch.setattr(discovery, "TAP_ATTEMPT_DEADLINE_SECONDS", 0.0)
+    monkeypatch.setattr(discovery.time, "sleep", lambda s: None)
+    events: list = []
+    products, error = discovery.query_irsa_tap(1, 1, 4, on_attempt=events.append)
+
+    assert products == []
+    assert error.startswith("DeadlineExceeded")
+    started = [e for e in events if e["outcome"] == "started"]
+    assert [e["deadline_seconds"] for e in started] == [0.0, 0.0]
+    failed = [e for e in events if e["outcome"] == "failed"]
+    assert failed[-1]["will_retry"] is False
+
+
+def test_deadline_exceeded_counts_as_an_outage(monkeypatch, tmp_path):
+    _outage(monkeypatch, tmp_path)
+    monkeypatch.setattr(
+        discovery,
+        "query_irsa_tap",
+        lambda *a, **kw: ([], "DeadlineExceeded: attempt took longer than 45 s"),
+    )
+    result = discovery.resolve_region(8, 5, 4)
+    assert result["coverage_state"] == "cube_fallback"
+
+
+def test_job_activity_tracks_the_running_attempt_and_retry_wait():
+    from app.schemas.jobs import JobRequest
+    from app.services.jobs import JobState, job_manager
+
+    job = JobState(
+        id=f"activity-{time.time_ns()}",
+        request=JobRequest(ra_deg=1, dec_deg=1, size_arcmin=4, channels=[20]),
+        status="discovering",
+    )
+    base = {
+        "event_type": "discovery_attempt",
+        "provider": "IRSA TAP",
+        "attempt": 1,
+        "max_attempts": 2,
+    }
+    job_manager._record_discovery_attempt(
+        job, {**base, "outcome": "started", "deadline_seconds": 45.0}
+    )
+    activity = job.to_snapshot()["activity"]
+    assert activity["kind"] == "discovery_attempt"
+    assert (activity["attempt"], activity["max_attempts"]) == (1, 2)
+    assert activity["budget_seconds"] == 45.0
+    assert activity["elapsed_seconds"] >= 0
+
+    job_manager._record_discovery_attempt(
+        job, {**base, "outcome": "failed", "will_retry": True, "retry_after_seconds": 0.5}
+    )
+    assert job.to_snapshot()["activity"]["kind"] == "retry_wait"
+
+    job_manager._record_discovery_attempt(
+        job,
+        {
+            "event_type": "provider_fallback",
+            "provider": fallback.CUBE_PROVIDER,
+            "outcome": "started",
+        },
+    )
+    assert job.stage == "S3 DR1 All-Sky Cube fallback · checking"
+    assert job.to_snapshot()["activity"]["kind"] == "fallback"
+
+    job_manager._record_discovery_attempt(
+        job,
+        {
+            "event_type": "provider_fallback",
+            "provider": fallback.CUBE_PROVIDER,
+            "outcome": "succeeded",
+            "result_count": 6,
+        },
+    )
+    assert job.stage == "S3 DR1 All-Sky Cube fallback · 6 products found"
+    assert job.to_snapshot()["activity"] is None
+
+
+def test_tile_progress_is_reported_and_tiles_are_read_in_parallel(tiles, monkeypatch):
+    server, client = tiles
+    monkeypatch.setattr(
+        fallback, "_tiles_for", lambda ra, dec: np.where(ra > RA, 1901, 1902)
+    )
+    calls: list = []
+    cutout = fallback.build_cube_cutout(
+        RA, DEC, 6.0, 10, client=client, on_progress=lambda d, t: calls.append((d, t))
+    )
+    assert calls[0] == (0, 2)
+    assert calls[-1] == (2, 2)
+    assert [p["tile"] for p in cutout.metadata["provenance"]] == [1901, 1902]
+
+
+def test_built_cube_cutouts_are_reused_without_network(tiles):
+    server, client = tiles
+    built = fallback.build_cube_cutout(RA, DEC, 4.0, 20, client=client)
+    save_derived_cutout(built)
+    before = len(server.ranges)
+    calls: list = []
+    again = fallback.build_cube_cutout(
+        RA, DEC, 4.0, 20, client=client, on_progress=lambda d, t: calls.append((d, t))
+    )
+    assert len(server.ranges) == before
+    assert np.array_equal(again.image, built.image)
+    assert calls == [(1, 1)]
+
+
+IRSA_USAGE_FAULT = b"""<?xml version="1.0" encoding="utf-8"?>
+<VOTABLE version="1.3" xmlns="http://www.ivoa.net/xml/VOTable/v1.3">
+  <RESOURCE type="results">
+    <INFO name="QUERY_STATUS" value="ERROR">UsageFault: BAD_REQUEST: \
+Invalid or unsupported ADQL query string.</INFO>
+  </RESOURCE>
+</VOTABLE>"""
+
+
+def test_tap_error_status_reports_the_irsa_message():
+    with pytest.raises(discovery.TapServiceError, match="UsageFault: BAD_REQUEST"):
+        discovery.parse_tap_votable(IRSA_USAGE_FAULT, 1, 1, 4)
+
+
+def test_tap_answering_200_without_a_table_falls_back(monkeypatch, tmp_path):
+    """Observed 2026-11-15: IRSA answered HTTP 200 + QUERY_STATUS=ERROR."""
+    real_tap = discovery.query_irsa_tap
+    _outage(monkeypatch, tmp_path)
+    monkeypatch.setattr(discovery.time, "sleep", lambda s: None)
+
+    class Client:
+        def __init__(self, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            pass
+
+        def post(self, url, data, **kwargs):
+            return httpx.Response(
+                200, content=IRSA_USAGE_FAULT, request=httpx.Request("POST", url)
+            )
+
+    monkeypatch.setattr(discovery.httpx, "Client", Client)
+    monkeypatch.setattr(discovery, "query_irsa_tap", real_tap)
+    events: list = []
+    result = discovery.resolve_region(9, 5, 4, on_attempt=events.append)
+
+    failed = [e for e in events if e.get("outcome") == "failed"]
+    assert "UsageFault: BAD_REQUEST" in failed[-1]["detail"]
+    assert result["coverage_state"] == "cube_fallback"
