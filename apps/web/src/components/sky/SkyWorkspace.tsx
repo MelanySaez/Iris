@@ -1493,8 +1493,8 @@ export function SkyWorkspace({
               <button
                 type="button"
                 className="tool-btn"
-                aria-label="Show all sky"
-                title="Show all sky"
+                aria-label="Zoom out to the full sky"
+                title="Zoom out to the full sky"
                 onClick={handleAllSky}
               >
                 <AllSkyIcon />
