@@ -9,6 +9,9 @@ import {
   normalizeSelectionName,
   RECORDS_PAGE_SIZE,
   removeSelection,
+  isSelectionPending,
+  mergeSelectionPage,
+  RECORDS_POLL_MS,
 } from '../../services/records';
 import { loadSelectionView } from '../../services/selectionView';
 import type { FailureDetails } from '../../services/records';
@@ -212,6 +215,30 @@ export function RecordsWorkspace({
   useEffect(() => {
     if (recordsEnabled) void loadPage();
   }, [loadPage, recordsEnabled]);
+
+  // A record saved while its job was still running would otherwise keep
+  // showing that status (and "Inspect") until a manual refresh. Re-read the
+  // first page every few seconds while any shown record is pending.
+  const hasPending = items.some(isSelectionPending);
+  const [pollTick, setPollTick] = useState(0);
+  useEffect(() => {
+    if (!recordsEnabled || !hasPending) return;
+    let active = true;
+    const timer = window.setTimeout(async () => {
+      try {
+        const page = await api.listSelections({ limit: RECORDS_PAGE_SIZE });
+        if (active) setItems((prev) => mergeSelectionPage(prev, page.items));
+      } catch {
+        // A failed refresh keeps the rows on screen; the next tick retries.
+      } finally {
+        if (active) setPollTick((tick) => tick + 1);
+      }
+    }, RECORDS_POLL_MS);
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+    };
+  }, [recordsEnabled, hasPending, pollTick]);
 
   /** Returns whether the name was stored, so the editor knows whether to close. */
   const handleRename = async (selection: SelectionSummary, name: string | null) => {

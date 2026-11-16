@@ -16,6 +16,28 @@ export function canOpenInPlate(selection: SelectionSummary): boolean {
   return selection.job_status === 'ready';
 }
 
+/** Pause between status refreshes while a selection's job is still running. */
+export const RECORDS_POLL_MS = 3000;
+
+/** The selection's job has not reached a final status (ready or failed) yet. */
+export function isSelectionPending(selection: SelectionSummary): boolean {
+  return selection.job_status !== 'ready' && selection.job_status !== 'failed';
+}
+
+/**
+ * Merge a freshly fetched first page into the rows on screen: known rows are
+ * replaced in place, unseen rows are added on top, older pages are kept.
+ */
+export function mergeSelectionPage(
+  shown: SelectionSummary[],
+  fresh: SelectionSummary[],
+): SelectionSummary[] {
+  const byId = new Map(fresh.map((item) => [item.id, item]));
+  const known = new Set(shown.map((item) => item.id));
+  const added = fresh.filter((item) => !known.has(item.id));
+  return [...added, ...shown.map((item) => byId.get(item.id) ?? item)];
+}
+
 export function removeSelection(list: SelectionSummary[], id: string): SelectionSummary[] {
   return list.filter((item) => item.id !== id);
 }

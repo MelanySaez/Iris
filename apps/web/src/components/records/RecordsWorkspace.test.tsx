@@ -68,3 +68,30 @@ describe('RecordsWorkspace tour anchors', () => {
     expect(anchors()).toEqual(['records-intro', 'records-table', 'records-actions']);
   });
 });
+
+describe('RecordsWorkspace live status', () => {
+  const selection = (job_status: string) => ({
+    id: 's1', job_id: 'j1',
+    region: { ra_deg: 1.57, dec_deg: 0.62, size_arcmin: 121.5, fov_deg: 2, coverage: 'unknown', checked_at: '2026-11-15T00:00:00Z' },
+    channels: [44], products: ['image'], mode: 'latest', stretch: 'asinh', job_status,
+    job_error: null, failed_stage: null, error_kind: null, error_trace: null, job_events: null,
+    view_mode: null, rgb_channels: null, name: null, hits: 1,
+    created_at: '2026-11-15T00:00:00Z', last_seen_at: '2026-11-15T00:00:00Z',
+  });
+
+  it('refreshes a record whose job is still running until it finishes', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const list = vi.spyOn(api, 'listSelections')
+      .mockResolvedValueOnce({ items: [selection('queued')], next_before: null } as never)
+      .mockResolvedValue({ items: [selection('ready')], next_before: null } as never);
+    render(<RecordsWorkspace onOpenPlate={vi.fn()} recordsEnabled onOpenCookieSettings={vi.fn()} />);
+    expect(await screen.findByRole('button', { name: 'Inspect' })).toBeTruthy();
+
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(await screen.findByRole('button', { name: 'Open' })).toBeTruthy();
+    const calls = list.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(9000);
+    expect(list.mock.calls.length).toBe(calls); // nothing pending: polling stopped
+    vi.useRealTimers();
+  });
+});

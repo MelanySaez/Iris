@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+  isSelectionPending,
+  mergeSelectionPage,
   canOpenInPlate,
   describeSelectionRegion,
   describeSelectionView,
@@ -167,5 +169,25 @@ describe('normalizeSelectionName', () => {
   it('accepts 80 characters and rejects more', () => {
     expect(normalizeSelectionName('x'.repeat(80))).toEqual({ name: 'x'.repeat(80) });
     expect(normalizeSelectionName('x'.repeat(81))).toEqual({ error: 'Names can be at most 80 characters.' });
+  });
+});
+
+describe('record status refresh', () => {
+  const row = (id: string, job_status: SelectionSummary['job_status']) =>
+    ({ id, job_status } as SelectionSummary);
+
+  it('treats every non-final job status as pending', () => {
+    expect(['queued', 'discovering', 'downloading', 'extracting', 'rendering']
+      .map((status) => isSelectionPending(row('a', status as SelectionSummary['job_status']))))
+      .toEqual([true, true, true, true, true]);
+    expect(isSelectionPending(row('a', 'ready'))).toBe(false);
+    expect(isSelectionPending(row('a', 'failed'))).toBe(false);
+  });
+
+  it('updates known rows in place, adds new ones on top and keeps older pages', () => {
+    const shown = [row('new', 'queued'), row('old', 'ready'), row('page2', 'ready')];
+    const fresh = [row('newer', 'queued'), row('new', 'ready'), row('old', 'ready')];
+    expect(mergeSelectionPage(shown, fresh).map((r) => `${r.id}:${r.job_status}`))
+      .toEqual(['newer:queued', 'new:ready', 'old:ready', 'page2:ready']);
   });
 });
