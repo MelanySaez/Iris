@@ -162,3 +162,14 @@ class AssistantProviderRateLimitedError(ServiceUnavailableError):
 
 class AssistantModelUnavailableError(UpstreamServiceError):
     """The model provider could not answer the request."""
+
+
+# -- user FITS uploads --------------------------------------------------------
+
+
+class UploadRejectedError(RequestValidationError):
+    """The uploaded file is not a SPHEREx FITS that Plate can open."""
+
+
+class UploadTooLargeError(AppError):
+    status_code = 413

@@ -105,13 +105,17 @@ class JobState:
     # What the worker is doing right now, with its own progress budget; None
     # between steps. Exposed so the UI can show live sub-progress.
     activity: dict[str, Any] | None = None
+    # Set for plates opened from the user's own FITS (filename, format, extent).
+    upload: dict[str, Any] | None = None
 
     def _wavelength_status(self) -> str:
         """Job-level wavelength status: calibrated, cube nominal, or approximate."""
         if self.frames and all(f.get("calibrated") for f in self.frames):
             return "calibrated_cwave_cband"
-        if self.frames and all(f.get("source") == "cube" for f in self.frames):
-            return str(self.frames[0]["wavelength_status"])
+        statuses = {f.get("wavelength_status") for f in self.frames}
+        if len(statuses) == 1 and None not in statuses:
+            # Cube fallback and uploads label every frame with their status.
+            return str(statuses.pop())
         return WAVELENGTH_STATUS
 
     def to_snapshot(self) -> dict[str, Any]:
@@ -164,6 +168,7 @@ class JobState:
             "discovery": self.discovery,
             "animation_reason": self.animation_reason,
             "activity": self._activity_snapshot(),
+            "upload": self.upload,
         }
 
     def _activity_snapshot(self) -> dict[str, Any] | None:
@@ -416,6 +421,7 @@ class JobManager:
             cache_hit=True,
             discovery=snap.get("discovery", {}),
             animation_reason=snap.get("animation_reason"),
+            upload=snap.get("upload"),
         )
 
         # Cutouts are reloaded from the derived cache using the persisted source
@@ -1039,7 +1045,10 @@ def resolve_cutout(
 
     with job_manager.lock:
         # Reconstruct mosaics on demand, retaining at most four large arrays per job.
-        if channel is not None and cutout.metadata.get("calibrated"):
+        if channel is not None and (
+            cutout.metadata.get("calibrated")
+            or cutout.metadata.get("channel") is not None
+        ):
             while len(job.cutout_objects) >= 4:
                 job.cutout_objects.pop(next(iter(job.cutout_objects)))
         job.cutout_objects[key] = cutout

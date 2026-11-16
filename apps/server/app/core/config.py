@@ -104,6 +104,8 @@ CUBE_S3_BASE_URL = (
 )
 CUBE_FETCH_TIMEOUT = 30.0
 CUBE_CACHE_DIR = CACHE_DIR / "cube"
+# User FITS opened in Plate, stored by content hash.
+UPLOAD_DIR = CACHE_DIR / "uploads"
 CUBE_SPECTRUM_CACHE_DIR = CUBE_CACHE_DIR / "spectra"
 
 # Object-name resolution (SIMBAD mirror, then NED). The CDS primary SIMBAD has
@@ -142,6 +144,8 @@ TAP_ATTEMPT_DEADLINE_SECONDS = 45.0
 FALLBACK_REUSE_SECONDS = 600.0
 # Cube tiles read concurrently for one channel of a large region.
 CUBE_TILE_WORKERS = 4
+# Largest FITS a user can open in Plate (a DR1 All-Sky Cube tile is ~321 MB).
+MAX_UPLOAD_BYTES = 512 * 1024 * 1024
 CUTOUT_CONNECT_TIMEOUT = 10.0
 CUTOUT_READ_TIMEOUT = 90.0
 CUTOUT_DOWNLOAD_RETRIES = 2

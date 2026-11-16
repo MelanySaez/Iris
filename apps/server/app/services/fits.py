@@ -259,12 +259,12 @@ def load_derived_cutout(
 
     cutout_type = DerivedCutout
     extra = {}
-    if metadata.get("source") == "cube":
-        from app.services.cube_fallback import CubeCutout
-
-        cutout_type = CubeCutout
+    if metadata.get("source") in ("cube", "upload") and not metadata.get("calibrated"):
         with np.load(npz_path) as saved:
             if "nhits" in saved:
+                from app.services.cube_fallback import CubeCutout
+
+                cutout_type = CubeCutout
                 extra = {"nhits": saved["nhits"]}
     elif metadata.get("calibrated") and metadata.get("channel") is not None:
         from app.services.mosaics import MosaicCutout

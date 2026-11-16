@@ -107,13 +107,18 @@ def _tiles_for(ra: np.ndarray, dec: np.ndarray) -> np.ndarray:
 
 
 def _pixel_scale_arcsec(layout: CubeLayout) -> float:
-    """Native pixel size at the tile centre: square root of the pixel's sky area.
+    """Native pixel size at the tile centre (see ``pixel_scale_from_wcs``)."""
+    wcs = celestial_wcs(fits.Header.fromstring(layout.celestial_header))
+    return pixel_scale_from_wcs(wcs, layout.width, layout.height)
 
-    Measured on the tile WCS so it holds for the HEALPix (HPX) projection, whose
+
+def pixel_scale_from_wcs(wcs: WCS, width: int, height: int) -> float:
+    """Pixel size at the image centre: square root of the pixel's sky area.
+
+    Measured on the WCS so it holds for the HEALPix (HPX) projection, whose
     pixels are rotated 45 degrees in the projection plane.
     """
-    wcs = celestial_wcs(fits.Header.fromstring(layout.celestial_header))
-    cx, cy = (layout.width - 1) / 2.0, (layout.height - 1) / 2.0
+    cx, cy = (width - 1) / 2.0, (height - 1) / 2.0
     ra, dec = wcs.pixel_to_world_values([cx, cx + 1, cx], [cy, cy, cy + 1])
     cos_dec = math.cos(math.radians(float(dec[0])))
     dx = ((float(ra[1] - ra[0]) + 180) % 360 - 180) * cos_dec, float(dec[1] - dec[0])
