@@ -19,6 +19,14 @@ function separationArcsec(a: { ra_deg: number; dec_deg: number }, b: { ra_deg: n
   return (2 * Math.asin(Math.min(1, Math.sqrt(h))) * 180 * 3600) / Math.PI;
 }
 
+/** True when both positions fall within one SPHEREx pixel, so they sample the same spectrum. */
+export function samePixel(
+  a: { ra_deg: number; dec_deg: number },
+  b: { ra_deg: number; dec_deg: number },
+): boolean {
+  return separationArcsec(a, b) <= SPHEREX_PIXEL_ARCSEC;
+}
+
 /**
  * Name of the spectrum at a region's centre. The object's own name wins while
  * the centre still samples it (within one SPHEREx pixel); otherwise the label

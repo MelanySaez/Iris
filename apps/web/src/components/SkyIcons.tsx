@@ -13,6 +13,10 @@ export function SearchIcon() {
   return <Icon><circle cx="10.5" cy="10.5" r="6" /><path d="m15 15 5 5" /></Icon>;
 }
 
+export function ChevronDownIcon() {
+  return <Icon><path d="m6 9 6 6 6-6" /></Icon>;
+}
+
 export function WarningIcon() {
   return <Icon><path d="M12 4 21 19.5H3Z" /><path d="M12 10v4.2" /><path d="M12 17h.01" /></Icon>;
 }
