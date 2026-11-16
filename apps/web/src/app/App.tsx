@@ -4,6 +4,7 @@ import { TopBar } from '../components/TopBar';
 import { WorkspaceErrorBoundary } from '../components/WorkspaceErrorBoundary';
 import { PlateWorkspace } from '../components/plate/PlateWorkspace';
 import { RecordsWorkspace } from '../components/records/RecordsWorkspace';
+import { PlateFitsLoader } from '../components/plate/PlateFitsLoader';
 import {
   SkyWorkspace,
   type AssistantSkyCommand,
@@ -112,7 +113,7 @@ export function App() {
 
   // If URL changes to #/plate/{id}, keep activeJobId in sync
   useEffect(() => {
-    if (route.type === 'plate' && route.jobId !== activeJobId) {
+    if (route.type === 'plate' && route.jobId && route.jobId !== activeJobId) {
       setActiveJobId(route.jobId);
     }
   }, [route, activeJobId]);
@@ -325,7 +326,18 @@ export function App() {
         {/* Plate Workspace - rendered when route is plate and job is loaded */}
         {isPlate && (
           <div className="workspace-layer plate-layer layer-active" aria-hidden={false}>
-            {activeJob ? (
+            {route.jobId === null ? (
+              <WorkspaceErrorBoundary workspace="Plate">
+                <PlateFitsLoader
+                  onOpened={(snap) => {
+                    updateSnapshot(snap);
+                    setActiveJobId(snap.id);
+                    navigate({ type: 'plate', jobId: snap.id });
+                  }}
+                  onBrowseSky={() => navigate('#/sky')}
+                />
+              </WorkspaceErrorBoundary>
+            ) : activeJob ? (
               <WorkspaceErrorBoundary workspace="Plate">
                 <PlateWorkspace
                   job={activeJob}
@@ -334,6 +346,7 @@ export function App() {
                   onRetryPoll={retryPoll}
                   onBackToSky={() => navigate('#/sky')}
                   onRequestNewJob={handleStartJob}
+                  onOpenFits={() => navigate({ type: 'plate', jobId: null })}
                 />
               </WorkspaceErrorBoundary>
             ) : pollError ? (<div className="plate-loading-page" role="alert"><h2>Could not load the spectral job</h2><p>{pollError}</p><button type="button" onClick={retryPoll}>Try again</button></div>) : (

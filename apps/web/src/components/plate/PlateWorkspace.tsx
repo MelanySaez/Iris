@@ -2,9 +2,10 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, ApiError } from '../../api/api';
 import { PreparingPlateCard } from '../PreparingPlateCard';
 import { EpochTimeline, ProviderTrace } from './EpochTimeline';
-import { CubeFallbackNotice, isCubeFallback, sourceLabel } from './SourceNotice';
+import { CubeFallbackNotice, isCubeFallback, sourceLabel, UploadNotice } from './SourceNotice';
 import { StageProgress, StageStatusChip } from './StageProgress';
 import { PanelToggle, useCollapsiblePanels } from './PanelToggle';
+import { channelCutoutLoaded, uploadChannelUnavailable } from './plateChannels';
 import { ChevronDownIcon } from '../SkyIcons';
 import {
   BLANK_CHANNELS,
@@ -40,6 +41,8 @@ interface PlateWorkspaceProps {
   onRetryPoll?: () => void;
   onBackToSky: () => void;
   onRequestNewJob: (req: JobCreateRequest) => Promise<void>;
+  /** Open Plate's FITS loader to load another file. */
+  onOpenFits?: () => void;
 }
 
 export function PlateWorkspace({
@@ -49,6 +52,7 @@ export function PlateWorkspace({
   onRetryPoll,
   onBackToSky,
   onRequestNewJob,
+  onOpenFits,
 }: PlateWorkspaceProps) {
   // Navigation & selection state
   const [selectedChannel, setSelectedChannel] = useState<number>(() => {
@@ -103,6 +107,9 @@ export function PlateWorkspace({
   const hasCutout = detectorCutouts.length > 0;
   // The DR1 All-Sky Cube fallback: one combined image, no VARIANCE layer.
   const cubeFallback = isCubeFallback(job);
+  // Cube tiles opened from the user's file share the cube's limits (one image
+  // per channel, no VARIANCE, nominal wavelengths) and its copy.
+  const cubeLike = cubeFallback || job.upload?.format === 'dr1_cube_tile';
   const panels = useCollapsiblePanels();
   const activeCutout =
     detectorCutouts.find((c) => c.epoch === epochA) ?? detectorCutouts[0] ?? null;
@@ -259,10 +266,17 @@ export function PlateWorkspace({
       setChannelError(null);
 
       const targetDetector = channelToBand(targetChannel);
-      const hasDetectorCutout = job.cutouts?.some((c) => c.detector === targetDetector);
 
-      // If already covered, frame switch is instant
-      if (hasDetectorCutout) {
+      // If already covered, frame switch is instant. Cube cutouts are per
+      // channel, so a cutout of the same detector is not enough for them.
+      if (channelCutoutLoaded(job, targetChannel)) {
+        return;
+      }
+      // An uploaded file never starts a Sky job: explain what it covers.
+      const uploadBlock = uploadChannelUnavailable(job, targetChannel);
+      if (uploadBlock) {
+        setSelectedChannel(previousChannel);
+        setChannelError(uploadBlock);
         return;
       }
 
@@ -435,13 +449,22 @@ export function PlateWorkspace({
         </div>
         <div className="ribbon-center">
           <span className="ribbon-collection">
-            {cubeFallback
-              ? 'SPHEREx DR1 All-Sky Cube · fallback (no epochs)'
-              : 'SPHEREx DR1 Level-2 Spectral Image'}
+            {job.upload
+              ? `Your FITS · ${job.upload.filename}`
+              : cubeFallback
+                ? 'SPHEREx DR1 All-Sky Cube · fallback (no epochs)'
+                : 'SPHEREx DR1 Level-2 Spectral Image'}
           </span>
         </div>
         {/* Job status lives inside the plate stage (StageProgress / StageStatusChip). */}
-        <div className="ribbon-right" />
+        <div className="ribbon-right">
+          {onOpenFits && (
+            <button type="button" className="ribbon-back-btn" onClick={onOpenFits}
+              title="Open your own SPHEREx FITS in Plate">
+              Open FITS…
+            </button>
+          )}
+        </div>
       </nav>
 
       {/* Main 3-column Grid */}
@@ -468,7 +491,9 @@ export function PlateWorkspace({
             <div className="meta-pair">
               <span className="meta-key">FOV</span>
               <span className="meta-val num">
-                {formatAngle(job.region.size_arcmin / 60)} ({job.region.size_arcmin.toFixed(1)}′)
+                {job.upload
+                  ? `${formatAngle(job.upload.extent_arcmin / 60)} (${job.upload.extent_arcmin.toFixed(1)}′)`
+                  : `${formatAngle(job.region.size_arcmin / 60)} (${job.region.size_arcmin.toFixed(1)}′)`}
               </span>
             </div>
           </div>
@@ -492,7 +517,9 @@ export function PlateWorkspace({
             <div className="meta-pair">
               <span className="meta-key">Source</span>
               <span className="meta-val chip-source">
-                {activeCutout?.source === 'cube' ? sourceLabel('cube') : activeCutout?.source ?? '—'}
+                {activeCutout?.source === 'cube' || activeCutout?.source === 'upload'
+                  ? sourceLabel(activeCutout.source)
+                  : activeCutout?.source ?? '—'}
               </span>
             </div>
             <div className="meta-pair">
@@ -518,7 +545,7 @@ export function PlateWorkspace({
           {/* Explicit WCS-WAVE statement */}
           <div className="sheet-notice-box">
             <p className="notice-text">
-              {cubeFallback ? (
+              {cubeLike ? (
                 <>
                   <strong>DR1 All-Sky Cube:</strong> one combined image per channel. Its
                   wavelength is the nominal channel centre, not a calibrated value, and it
@@ -552,7 +579,7 @@ export function PlateWorkspace({
                 ))
               ) : (
                 <p className="muted-text">
-                  {cubeFallback
+                  {cubeLike
                     ? 'The DR1 All-Sky Cube does not publish flag bit definitions; nonzero FLAGS values are shown as counts of set bits.'
                     : 'Flag definitions are not available for this cutout. Re-run the job to parse the FITS flag headers.'}
                 </p>
@@ -614,6 +641,7 @@ export function PlateWorkspace({
           open={panels.sheetOpen} onToggle={panels.toggleSheet} />
         <main className="plate-stage" aria-label="Plate Viewport">
           <CubeFallbackNotice job={job} />
+          <UploadNotice job={job} />
           {/* Controls Bar */}
           <div className="stage-controls-bar" data-tour="plate-image">
             {/* Left: Product tabs (underlined text tabs) */}
@@ -627,7 +655,7 @@ export function PlateWorkspace({
               >
                 IMAGE
               </button>
-              {cubeFallback ? (
+              {cubeLike ? (
                 <button
                   type="button"
                   className="product-tab tab-action"
@@ -1070,7 +1098,7 @@ export function PlateWorkspace({
               </div>
             ) : (
               <p className="readout-placeholder">
-                {cubeFallback
+                {cubeLike
                   ? 'Move pointer over the cutout to inspect the cube flux and nominal channel wavelength. Click to pin.'
                   : 'Move pointer over the cutout to inspect WCS-WAVE wavelength and flux. Click to pin.'}
               </p>
@@ -1079,7 +1107,7 @@ export function PlateWorkspace({
             <div className="readout-footer-note">
               {activeFrame?.calibrated
                 ? 'Verified CWAVE/CBAND calibration · channel-specific mosaic.'
-                : cubeFallback
+                : cubeLike
                   ? 'DR1 All-Sky Cube: nominal channel wavelength, not calibrated · no VARIANCE layer.'
                   : 'WCS-WAVE is approximate; calibrated CWAVE/CBAND is not loaded.'}
             </div>

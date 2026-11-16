@@ -74,7 +74,7 @@ export interface RegionResolveResponse {
   warning: string | null;
   products: Array<{
     id: string;
-    source: 'remote' | 's3' | 'mixed' | 'cube';
+    source: 'remote' | 's3' | 'mixed' | 'cube' | 'upload';
     detector: number;
     band: string;
     obs_id: string;
@@ -125,7 +125,7 @@ export interface JobCutout {
   epoch: number;
   obs_id: string;
   date_iso: string;
-  source: 'remote' | 's3' | 'mixed' | 'cube';
+  source: 'remote' | 's3' | 'mixed' | 'cube' | 'upload';
   uri?: string;
   version?: string;
   shape: [number, number];
@@ -150,7 +150,7 @@ export interface JobFrame {
   epoch: number;
   obs_id: string;
   date_iso: string;
-  source: 'remote' | 's3' | 'mixed' | 'cube';
+  source: 'remote' | 's3' | 'mixed' | 'cube' | 'upload';
   width: number;
   height: number;
   url: string;
@@ -195,6 +195,20 @@ export interface JobSnapshot {
   animation_reason?: string | null;
   /** What the worker is doing right now; null between steps and when finished. */
   activity?: JobActivity | null;
+  /** Set when the plate was opened from the user's own FITS file. */
+  upload?: JobUpload | null;
+}
+
+export interface JobUpload {
+  filename: string;
+  format: 'spherex_l2' | 'dr1_cube_tile';
+  /** Detector of a Level-2 image; null for a cube tile (all detectors). */
+  detector: number | null;
+  /** True sky extent of the file, which can exceed the 180′ region limit. */
+  extent_arcmin: number;
+  temporal_available: boolean;
+  date_beg?: string;
+  date_end?: string;
 }
 
 export interface JobActivity {

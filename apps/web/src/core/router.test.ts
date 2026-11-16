@@ -11,6 +11,9 @@ describe('router', () => {
     expect(parseHash('#/sky')).toEqual({ type: 'sky' });
     expect(parseHash('#/unknown')).toEqual({ type: 'sky' });
     expect(parseHash('#/plate/abc')).toEqual({ type: 'plate', jobId: 'abc' });
+    expect(parseHash('#/plate')).toEqual({ type: 'plate', jobId: null });
+    expect(parseHash('#/plate/')).toEqual({ type: 'plate', jobId: null });
+    expect(routeToHash({ type: 'plate', jobId: null })).toBe('#/plate');
     expect(routeToHash({ type: 'plate', jobId: 'a b' })).toBe('#/plate/a%20b');
     expect(routeToHash({ type: 'sky' })).toBe('#/sky');
   });
