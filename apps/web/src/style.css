@@ -1332,6 +1332,62 @@ button:disabled {
   overflow: hidden;
 }
 
+/* Collapsible sidebars: the column shrinks to 0 and the stage takes the room. */
+.plate-columns-layout {
+  transition: grid-template-columns 0.2s ease;
+}
+
+.plate-columns-layout.sheet-collapsed {
+  grid-template-columns: 0 1fr 300px;
+}
+
+.plate-columns-layout.rail-collapsed {
+  grid-template-columns: 260px 1fr 0;
+}
+
+.plate-columns-layout.sheet-collapsed.rail-collapsed {
+  grid-template-columns: 0 1fr 0;
+}
+
+.plate-columns-layout.sheet-collapsed > .plate-sheet,
+.plate-columns-layout.rail-collapsed > .spectral-rail {
+  width: 0;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  visibility: hidden;
+}
+
+.panel-toggle {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #3f3f46;
+  border-radius: var(--radius-sm);
+  background: #1c1c1f;
+  color: #e4e4e7; /* 13.4:1 on #1c1c1f */
+  cursor: pointer;
+}
+
+.panel-toggle:hover,
+.panel-toggle:focus-visible {
+  border-color: #a1a1aa;
+  background: #2a2a2f;
+}
+
+.panel-toggle[aria-expanded='false'] {
+  border-color: var(--sky-warm);
+  color: var(--sky-warm);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .plate-columns-layout { transition: none; }
+}
+
 /* Column 1: Plate Sheet (Left, 260px) */
 .plate-sheet {
   width: 260px;
@@ -2272,10 +2328,18 @@ button:disabled {
   }
 
   /* Plate Workspace: Stacks vertically (Stage first, then Sheet, then Rail) */
-  .plate-columns-layout {
+  .plate-columns-layout,
+  .plate-columns-layout.sheet-collapsed,
+  .plate-columns-layout.rail-collapsed,
+  .plate-columns-layout.sheet-collapsed.rail-collapsed {
     grid-template-columns: 1fr;
     grid-template-rows: auto auto auto;
     overflow-y: auto;
+  }
+
+  .plate-columns-layout.sheet-collapsed > .plate-sheet,
+  .plate-columns-layout.rail-collapsed > .spectral-rail {
+    display: none;
   }
 
   .plate-stage {

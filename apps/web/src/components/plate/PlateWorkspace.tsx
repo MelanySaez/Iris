@@ -4,6 +4,7 @@ import { PreparingPlateCard } from '../PreparingPlateCard';
 import { EpochTimeline, ProviderTrace } from './EpochTimeline';
 import { CubeFallbackNotice, isCubeFallback, sourceLabel } from './SourceNotice';
 import { StageProgress, StageStatusChip } from './StageProgress';
+import { PanelToggle, useCollapsiblePanels } from './PanelToggle';
 import {
   BLANK_CHANNELS,
   channelToBand,
@@ -101,6 +102,7 @@ export function PlateWorkspace({
   const hasCutout = detectorCutouts.length > 0;
   // The DR1 All-Sky Cube fallback: one combined image, no VARIANCE layer.
   const cubeFallback = isCubeFallback(job);
+  const panels = useCollapsiblePanels();
   const activeCutout =
     detectorCutouts.find((c) => c.epoch === epochA) ?? detectorCutouts[0] ?? null;
 
@@ -442,9 +444,12 @@ export function PlateWorkspace({
       </nav>
 
       {/* Main 3-column Grid */}
-      <div className="plate-columns-layout">
-        {/* Column 1: Plate Sheet (260 px) */}
-        <aside className="plate-sheet" aria-label="Plate Metadata Sheet">
+      <div
+        className={`plate-columns-layout${panels.sheetOpen ? '' : ' sheet-collapsed'}${panels.railOpen ? '' : ' rail-collapsed'}`}
+      >
+        {/* Column 1: Plate Sheet (260 px, collapsible) */}
+        <aside className="plate-sheet" aria-label="Plate Metadata Sheet"
+          aria-hidden={!panels.sheetOpen} inert={!panels.sheetOpen}>
           <div className="sheet-header">
             <h2 className="sheet-title">Plate Record</h2>
             <span className="sheet-badge num">{currentDetectorStr}</span>
@@ -600,6 +605,8 @@ export function PlateWorkspace({
           <CubeFallbackNotice job={job} />
           {/* Controls Bar */}
           <div className="stage-controls-bar">
+            <PanelToggle side="left" label="plate record" open={panels.sheetOpen}
+              onToggle={panels.toggleSheet} />
             {/* Left: Product tabs (underlined text tabs) */}
             <div className="stage-product-tabs" role="tablist" aria-label="Cutout Products">
               <button
@@ -725,6 +732,8 @@ export function PlateWorkspace({
                 Reset
               </button>
             </div>
+            <PanelToggle side="right" label="spectral channels" open={panels.railOpen}
+              onToggle={panels.toggleRail} />
           </div>
 
           {/* Charcoal Matte Viewport */}
@@ -904,11 +913,13 @@ export function PlateWorkspace({
           </div>
         </main>
 
-        {/* Column 3: Spectral Rail (300 px) */}
+        {/* Column 3: Spectral Rail (300 px, collapsible) */}
         <aside
           ref={railContainerRef}
           className="spectral-rail"
-          tabIndex={0}
+          aria-hidden={!panels.railOpen}
+          inert={!panels.railOpen}
+          tabIndex={panels.railOpen ? 0 : -1}
           onKeyDown={handleRailKeyDown}
           aria-label="102-channel spectral rail"
         >
