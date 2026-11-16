@@ -42,6 +42,9 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 
 RUN chown -R app:app /workspace/server
 
+# The runtime user has no writable home; keep uv's runtime cache in /tmp.
+ENV UV_CACHE_DIR=/tmp/uv-cache
+
 USER app
 
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
