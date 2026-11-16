@@ -17,9 +17,9 @@ Fix found while exploring (part of S1's "plate works"): cube cutouts are per cha
 
 - T1 | S2, S3 | inline | complete (commit 8974c59) | backend: upload service (format detection, L2 + cube tile → job with frames/cutouts), POST /api/uploads, schema source "upload", snapshot `upload` metadata; offline tests
 - T2 | S1, S2 | inline | complete (commit ef1e66f) | web: router `#/plate` without id, TopBar Plate always enabled, FITS loader view (file picker + drop, upload progress), upload labels/notes in Plate, channel switching for uploads and per-channel cutouts; tests
-- T3 | S1–S3 | inline | verified (commit pending) | docs + browser check
+- T3 | S1–S3 | inline | complete (commit e70a42f) | docs + browser check
 
-- T4 | S4 | inline | verified (commit pending) | 350 MB cap in browser/server, clear rejection message, boundary tests and docs
+- T4 | S4 | inline | complete (commit e70a42f) | 350 MB cap in browser/server, clear rejection message, boundary tests and docs
 
 ## Log
 
@@ -35,3 +35,5 @@ L7. User correction (verbatim): "necesito que limites que el archivo .fits que s
 
 L8. T3/T4 verified: Chromium smoke on isolated localhost services and temporary cache passed direct Plate entry; explicit 350 MB rejection before any HTTP upload; unsupported-file 422 and retry; real SPHEREx L2 dr1-cutout.fits opened with rendered pixels; unavailable detector error without Sky requests; Open FITS/replacement; synthetic 102-channel cube switching channels 1, 2 and 70; ready-job reload; zero page errors and no POSTs except intended uploads. Full official cube timing not measured: no full real tile is present locally; synthetic tile evidence is not a real-tile performance claim. Documentation updated in root/backend/frontend READMEs. No meaningful RED for passive docs; structural readback and links checked.
 L9. S4 RED: 3 backend cap/message tests and 2 frontend picker/drop tests failed before implementation; null-channel regression test also failed. GREEN: 13 upload tests, 10 focused frontend tests; final suites in isolated no-.env scratch: 323 backend passed, 38 skipped (29 database configuration, 9 explicit live IRSA/S3 opt-in), 9 warnings; 485 frontend passed. Typecheck and production build passed after removing unused detector variable; build has existing bundle-size warning. Ruff check/format pass; git diff --check pass. Independent verifier confirmed cumulative-stream cap rejection preserves previously cached bytes and prior differential probe found unchanged existing L2 pixel/PNG results. Risk: item 2 (untrusted upload validation and size cap), item 3 (shared channel filter); independent scoped verification passes. Local commit closes T3/T4; no merge/push authorized.
+
+L10. Local completion commit: e70a42f (200 authored changed lines across code, tests and docs). Read-only native review mode is on globally. Assessment of this unit against ef1e66f is high/review_due (item 2); independent functional verification is complete. Native review consent is separate and remains pending. Untracked experiment/root package files are explicitly excluded from this candidate. No remote delivery performed. Temporary test services stopped and created scratch directories removed.
