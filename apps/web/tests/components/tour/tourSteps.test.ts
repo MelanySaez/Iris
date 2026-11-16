@@ -5,7 +5,7 @@ const ids = (tour: keyof typeof TOURS) => TOURS[tour].map((step) => step.id);
 
 describe('guided tours, one per workspace', () => {
   it('walks Sky along the demo path, including the hidden right-click search', () => {
-    expect(ids('sky')).toEqual(['welcome', 'search', 'map', 'nearby', 'channels', 'region', 'workspaces', 'replay']);
+    expect(ids('sky')).toEqual(['welcome', 'search', 'map', 'nearby', 'channels', 'region', 'replay']);
   });
 
   it('ends the Sky tour by saying every tab has its own guide behind the same button', () => {

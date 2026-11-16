@@ -61,14 +61,6 @@ const SKY: TourStep[] = [
       'Pick this tool and drag a box on the map. From a selected region you can open its spectral plate or plot its spectrum.',
   },
   {
-    id: 'workspaces',
-    target: '[data-tour="workspaces"]',
-    placement: 'bottom',
-    title: 'Your workspaces',
-    content:
-      'Sky is the map. Plate shows the detector images of a selected region. Spectral Lab compares spectra. Records keeps your saved selections.',
-  },
-  {
     id: 'replay',
     target: '[data-tour="tour-help"]',
     placement: 'bottom-end',

@@ -19,6 +19,7 @@ import {
   spectrumKey,
   interpolateMissingFlux,
   estimatedRuns,
+  isolatedMeasurements,
   zoomDomainAt,
   panDomain,
 } from '../../src/services/spectrum';
@@ -216,6 +217,26 @@ describe('interpolateMissingFlux', () => {
     const result = interpolateMissingFlux(raw, 0);
     expect(result[1].value).toBeNull();
     expect(result[1].interpolated).toBe(false);
+  });
+});
+
+describe('isolatedMeasurements', () => {
+  it('returns measured channels with no measured neighbour, which a line cannot draw', () => {
+    const raw = [
+      point(0, 1, 10), point(1, 2, 12),
+      { ...point(2, 3, null), available: false },
+      point(3, 4, 30),
+      { ...point(4, 5, null), available: false },
+      point(5, 6, 50),
+    ];
+    expect(isolatedMeasurements(raw).map((p) => p.channel)).toEqual([3, 5]);
+  });
+
+  it('ignores estimates: a channel next to an estimate is still drawn as a single measurement', () => {
+    const derived = interpolateMissingFlux([
+      point(0, 1, 10), { ...point(1, 2, null), available: false }, point(2, 3, 30),
+    ], 2);
+    expect(isolatedMeasurements(derived).map((p) => p.channel)).toEqual([0, 2]);
   });
 });
 
