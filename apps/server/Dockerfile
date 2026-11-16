@@ -16,6 +16,9 @@ ENV UV_LINK_MODE=copy
 
 WORKDIR /workspace/server/
 
+# Keep the application process unprivileged in the runtime container.
+RUN groupadd --system app && useradd --system --gid app --home-dir /nonexistent --no-create-home app
+
 # Ref: https://docs.astral.sh/uv/guides/integration/docker/#using-the-environment
 ENV PATH="/workspace/server/.venv/bin:$PATH"
 
@@ -36,5 +39,9 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     --mount=type=bind,source=uv.lock,target=uv.lock \
     --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
     uv sync --frozen
+
+RUN chown -R app:app /workspace/server
+
+USER app
 
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

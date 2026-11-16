@@ -25,6 +25,8 @@ services:
       context: ./apps/server
       dockerfile: Dockerfile
     command: bash scripts/prestart.sh
+    security_opt:
+      - no-new-privileges:true
     depends_on:
       db:
         condition: service_healthy
@@ -46,6 +48,8 @@ services:
         restart: true
       prestart:
         condition: service_completed_successfully
+    security_opt:
+      - no-new-privileges:true
     networks:
       - default
       - traefik-public
