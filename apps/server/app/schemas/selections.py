@@ -14,6 +14,16 @@ from app.models.selection import Selection, SkyRegion, SpectralProduct
 MAX_SELECTION_NAME_LENGTH = 80
 
 
+def normalize_selection_name(value: str | None) -> str | None:
+    """Normalize optional names consistently for creation, claims and renaming."""
+    if value is None:
+        return None
+    value = value.strip()
+    if len(value) > MAX_SELECTION_NAME_LENGTH:
+        raise ValueError(f"name must be at most {MAX_SELECTION_NAME_LENGTH} characters")
+    return value or None
+
+
 class SelectionRegionOut(BaseModel):
     ra_deg: float
     dec_deg: float
@@ -115,14 +125,7 @@ class SelectionRename(BaseModel):
     @field_validator("name")
     @classmethod
     def _normalize(cls, value: str | None) -> str | None:
-        if value is None:
-            return None
-        value = value.strip()
-        if len(value) > MAX_SELECTION_NAME_LENGTH:
-            raise ValueError(
-                f"name must be at most {MAX_SELECTION_NAME_LENGTH} characters"
-            )
-        return value or None
+        return normalize_selection_name(value)
 
 
 class SelectionDetail(SelectionSummary):

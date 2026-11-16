@@ -59,7 +59,7 @@ def claim_selections(
             jobs.append(job_manager.get_job(job_id))
         except NotFoundError:
             continue
-    return ClaimResponse(claimed=service.claim(owner, jobs))
+    return ClaimResponse(claimed=service.claim(owner, jobs, body.names))
 
 
 @router.get("/{selection_id}", response_model=SelectionDetail)

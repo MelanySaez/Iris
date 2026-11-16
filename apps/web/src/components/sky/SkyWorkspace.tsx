@@ -424,6 +424,7 @@ export function SkyWorkspace({
     height: number;
   } | null>(null);
   const [selectedRegion, setSelectedRegion] = useState<RegionRequest | null>(null);
+  const [draftId, setDraftId] = useState(0);
   // A drawn or adjusted region stays a draft until the user confirms it.
   const [regionConfirmed, setRegionConfirmed] = useState(true);
   // Object a region was created from (search, featured, recent): names its spectrum while the centre is on it.
@@ -871,6 +872,7 @@ export function SkyWorkspace({
 
     // Valid region: keep it as an adjustable draft until the user confirms it.
     setSelectedRegion({ ra_deg: regionBounds.ra_deg, dec_deg: regionBounds.dec_deg, size_arcmin: regionBounds.clamped_size_arcmin });
+    setDraftId((id) => id + 1);
     setRegionConfirmed(false);
   };
 
@@ -905,7 +907,7 @@ export function SkyWorkspace({
     regionEdit.current = null;
   };
 
-  const handleConfirmRegion = () => {
+  const handleConfirmRegion = (name?: string) => {
     if (!selectedRegion) return;
     setRegionConfirmed(true);
     const liveCenter = viewerRef.current?.getRaDec?.();
@@ -917,6 +919,7 @@ export function SkyWorkspace({
     );
     void onStartJob({
       ...selectedRegion,
+      ...(name ? { name } : {}),
       channels: [currentChannel],
       products: ['image'],
       mode: 'latest',
@@ -986,6 +989,7 @@ export function SkyWorkspace({
         setMode('pan');
         setRegionError(null);
         setSelectedRegion({ ra_deg: action.ra_deg, dec_deg: action.dec_deg, size_arcmin: action.size_arcmin });
+        setDraftId((draft) => draft + 1);
         setRegionConfirmed(false);
       } else if (action.type === 'set_channel') {
         if (rgbOn) {
@@ -1564,7 +1568,7 @@ export function SkyWorkspace({
           {/* Bottom-centre stack: the region bar always sits right above the dock, whatever its height */}
           <div className="sky-bottom-stack">
             {selectedRegion && !regionConfirmed && (
-              <RegionConfirmBar region={selectedRegion} onConfirm={handleConfirmRegion} onDiscard={handleClearRegion} />
+              <RegionConfirmBar key={draftId} region={selectedRegion} onConfirm={handleConfirmRegion} onDiscard={handleClearRegion} />
             )}
           {/* Bottom-Center Channel Dock */}
           <div className="sky-channel-dock float" aria-label="Channel slider dock" data-tour="channels">

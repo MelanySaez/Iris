@@ -125,7 +125,7 @@ export function App() {
   const handleStartJob = useCallback(
     async (req: JobCreateRequest) => {
       // Without cookies the backend saves nothing; the job is recovered on acceptance.
-      const finishJob = beginJob();
+      const finishJob = beginJob(req.name);
       try {
         const snap = await api.createJob(req);
         finishJob(snap.id);

@@ -317,7 +317,8 @@ class JobManager:
         Observers hear about the submission before a new job is scheduled, so
         no lifecycle event can reach them ahead of ``on_submitted``.
         """
-        job, is_new = self._submit(req)
+        # Jobs are shared across owners; only the submission observer sees a name.
+        job, is_new = self._submit(req.model_copy(update={"name": None}))
         self._notify("on_submitted", job, is_new, req, owner)
         if is_new:
             self.pool.submit(self._run_job, job)

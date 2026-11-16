@@ -2614,6 +2614,14 @@ button:disabled {
 /* Blur, shadow and radius come from .float; the panel fill and border keep the bar's own glass tint. */
 .region-confirm-bar { position: relative; display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 12px; max-width: 100%; padding: 8px 44px 8px 18px; background: var(--sky-panel); border: 1px solid var(--sky-border); font-size: 12px; color: var(--sky-ink); }
 .region-confirm-hint { color: var(--sky-muted); }
+.region-name-field { display: flex; flex-direction: column; gap: 4px; min-width: 0; width: min(220px, 100%); color: var(--sky-muted); font-size: 10px; text-align: left; }
+.region-name-field input { width: 100%; min-width: 0; box-sizing: border-box; padding: 6px 8px; border: 1px solid var(--sky-border); border-radius: var(--radius-sm); background: var(--sky-bg); color: var(--sky-ink); font: inherit; font-size: 12px; }
+.region-name-field input:focus-visible { outline: 2px solid var(--sky-accent); outline-offset: 2px; }
+.region-name-error { color: var(--sky-accent); flex-basis: 100%; }
+/* The confirm button sits on the input's baseline row, at the input's height. */
+.region-name-row { display: flex; align-items: flex-end; gap: 8px; }
+.region-name-field input { height: 30px; }
+.region-name-row .region-confirm-btn { height: 30px; display: inline-flex; align-items: center; white-space: nowrap; }
 .region-confirm-btn { padding: 5px 14px; border: 1px solid var(--sky-accent); border-radius: var(--radius-md); background: var(--sky-accent); color: var(--sky-bg); font-size: 11px; font-weight: 700; cursor: pointer; transition: filter 0.15s; }
 .region-confirm-btn:hover, .region-confirm-btn:focus-visible { filter: brightness(1.12); }
 @media (max-width: 640px) { .region-confirm-hint { display: none; } }

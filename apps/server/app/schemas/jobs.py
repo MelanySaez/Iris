@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.schemas.regions import RegionDescriptor
+from app.schemas.selections import normalize_selection_name
 
 
 class JobView(BaseModel):
@@ -43,6 +44,13 @@ class JobRequest(BaseModel):
     stretch: Literal["asinh", "linear"] = "asinh"
     # Display metadata for the selection record; excluded from the job id.
     view: JobView | None = None
+    # Owner-specific submission metadata, never serialized into shared job snapshots.
+    name: str | None = Field(default=None, exclude=True)
+
+    @field_validator("name")
+    @classmethod
+    def _normalize_name(cls, value: str | None) -> str | None:
+        return normalize_selection_name(value)
 
 
 class FlagBitDef(BaseModel):
