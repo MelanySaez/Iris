@@ -8,9 +8,29 @@ When IRSA TAP discovery is unavailable, a job is now served in this order:
 3. **DR1 All-Sky Cube tiles on S3** (this document). Used only when steps 1 and 2 give
    nothing. Covers the whole sky, but has **no temporal information**.
 
-The fallback starts only on provider outages: timeouts, transport errors or HTTP 5xx.
+The fallback starts only on provider failures:
+
+- timeouts, transport errors or HTTP 5xx;
+- an attempt that exceeds its 45 s wall-clock budget, counting every result page
+  (`DeadlineExceeded`);
+- a TAP answer with no result table, for example `QUERY_STATUS=ERROR` (`TapServiceError`).
+  On 2026-11-15, IRSA answered HTTP 200 with `UsageFault: BAD_REQUEST: Invalid or
+  unsupported ADQL query string` to spatial queries that the app had sent unchanged,
+  while trivial queries hung for more than 60 s. The query is built by the server, not
+  supplied by the user, so this counts as a provider failure. The trace shows IRSA's
+  message.
+
 An empty but successful TAP answer still means "no coverage". A fallback result is never
 cached as definitive discovery.
+
+### Reusing a fallback
+
+When TAP fails for a region and a fallback serves it, that result is kept in memory for
+10 minutes (`FALLBACK_REUSE_SECONDS`). Another job for the same region — for example,
+loading FLAGS after IMAGE — reuses it with a `provider_reuse` event instead of retrying TAP
+and the fallbacks. Cube cutouts that were already built are read from the derived cache
+without network access. Measured live: the FLAGS job finished in 0.2 s. `force_refresh`
+skips the reuse.
 
 ## What the user sees
 
@@ -25,6 +45,27 @@ cached as definitive discovery.
   there is no VARIANCE layer; and wavelengths are nominal and not calibrated.
 - The timeline shows one chip, `DR1 All-Sky Cube (S3) · combined, no epochs`, and
   playback is disabled. The VARIANCE tab shows `n/a`.
+- The notice and the stage warnings have a close button. A dismissed fallback notice
+  leaves a chip that reopens it.
+
+## Progress the user sees
+
+Job status is shown inside the plate stage, in every state:
+
+- While the job runs, the loading box shows the overall progress bar and percentage and
+  the current step from `job.activity`:
+
+  | `activity.kind` | Shown as |
+  | --- | --- |
+  | `discovery_attempt` | `IRSA TAP · attempt 1 of 2`, `12 s of 45 s max`, filling bar |
+  | `retry_wait` | `Retrying IRSA TAP · attempt 2 of 2`, countdown to the next attempt |
+  | `fallback` | `S3 DR1 All-Sky Cube · checking`, elapsed time, indeterminate bar |
+  | `cube_read` | `Sky tiles for channel 44`, `3 of 8 sky tiles`, filling bar |
+
+  The server sends `elapsed_seconds`. The page advances it between polls, so the bar
+  keeps moving without depending on the browser clock.
+- When the job is ready or has failed, a status chip in the top-right corner of the stage
+  shows `Ready` or `Failed · <error kind>`.
 
 ## How a cutout is built
 
@@ -83,7 +124,7 @@ whole tiles for the 180′ case would have meant ~2.6 GB.
 - **Exploratory values.** Wavelengths are nominal channel centres; IRSA describes cube
   spectra as quick-look, not forced photometry. Zodiacal light is not subtracted.
 - **Resolution.** 12.88″/px versus ~6.2″/px in L2 images.
-- **Tile reads are sequential.** The 180′ case reads 8 tiles × 3 HDUs one after another.
-  Reading them in parallel is an open optimization.
+- **Tile reads run in parallel**, up to `CUBE_TILE_WORKERS = 4` tiles per channel. Channels
+  are still read one after another.
 - Synthetic cube products are not stored in the selection database, so a fallback never
   becomes recorded SPHEREx coverage.
