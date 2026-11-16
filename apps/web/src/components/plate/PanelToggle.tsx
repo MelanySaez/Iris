@@ -44,20 +44,25 @@ export function useCollapsiblePanels() {
 interface PanelToggleProps {
   side: 'left' | 'right';
   label: string;
+  /** id of the panel this strip collapses. */
+  controls: string;
   open: boolean;
   onToggle: () => void;
 }
 
-/** Chevron button that collapses or expands one sidebar of the plate. */
-export function PanelToggle({ side, label, open, onToggle }: PanelToggleProps) {
+/**
+ * Full-height strip between a sidebar and the stage that collapses or expands
+ * the sidebar. Same shape as the Spectral Lab sidebar toggle.
+ */
+export function PanelToggle({ side, label, controls, open, onToggle }: PanelToggleProps) {
   // The chevron points the way the panel will move.
   const pointsLeft = side === 'left' ? open : !open;
-  const action = `${open ? 'Hide' : 'Show'} ${label}`;
   return <button type="button" className={`panel-toggle panel-toggle-${side}`}
-    aria-label={action} title={action} aria-expanded={open} onClick={onToggle}>
-    <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" fill="none"
-      stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    aria-label={`${open ? 'Hide' : 'Show'} ${label}`} aria-expanded={open}
+    aria-controls={controls} onClick={onToggle}>
+    <svg aria-hidden="true" viewBox="0 0 16 16" focusable="false">
       <path d={pointsLeft ? 'M10 3 5 8l5 5' : 'M6 3l5 5-5 5'} />
     </svg>
+    <span>{open ? 'Hide' : 'Show'}</span>
   </button>;
 }

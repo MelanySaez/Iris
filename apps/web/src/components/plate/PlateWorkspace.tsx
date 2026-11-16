@@ -448,10 +448,8 @@ export function PlateWorkspace({
         className={`plate-columns-layout${panels.sheetOpen ? '' : ' sheet-collapsed'}${panels.railOpen ? '' : ' rail-collapsed'}`}
       >
         {/* Column 1: Plate Sheet (260 px, collapsible) */}
-        <aside className="plate-sheet" aria-label="Plate Metadata Sheet">
-          {/* Stays visible when collapsed: the panel shrinks to this button. */}
-          <PanelToggle side="left" label="plate record" open={panels.sheetOpen}
-            onToggle={panels.toggleSheet} />
+        <aside id="plate-sheet" className="plate-sheet" aria-label="Plate Metadata Sheet"
+          aria-hidden={!panels.sheetOpen} inert={!panels.sheetOpen}>
           <div className="sheet-header">
             <h2 className="sheet-title">Plate Record</h2>
             <span className="sheet-badge num">{currentDetectorStr}</span>
@@ -603,6 +601,8 @@ export function PlateWorkspace({
         </aside>
 
         {/* Column 2: Plate Stage (Center) */}
+        <PanelToggle side="left" label="plate record" controls="plate-sheet"
+          open={panels.sheetOpen} onToggle={panels.toggleSheet} />
         <main className="plate-stage" aria-label="Plate Viewport">
           <CubeFallbackNotice job={job} />
           {/* Controls Bar */}
@@ -912,15 +912,18 @@ export function PlateWorkspace({
         </main>
 
         {/* Column 3: Spectral Rail (300 px, collapsible) */}
+        <PanelToggle side="right" label="spectral channels" controls="plate-rail"
+          open={panels.railOpen} onToggle={panels.toggleRail} />
         <aside
+          id="plate-rail"
           ref={railContainerRef}
+          aria-hidden={!panels.railOpen}
+          inert={!panels.railOpen}
           className="spectral-rail"
           tabIndex={panels.railOpen ? 0 : -1}
           onKeyDown={handleRailKeyDown}
           aria-label="102-channel spectral rail"
         >
-          <PanelToggle side="right" label="spectral channels" open={panels.railOpen}
-            onToggle={panels.toggleRail} />
           {pollError && (
             <div className="plate-poll-alert" role="alert">
               <strong>Job updates interrupted</strong>

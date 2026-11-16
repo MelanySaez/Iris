@@ -6,8 +6,8 @@ import { PanelToggle, useCollapsiblePanels } from './PanelToggle';
 function Harness() {
   const panels = useCollapsiblePanels();
   return <>
-    <PanelToggle side="left" label="plate record" open={panels.sheetOpen} onToggle={panels.toggleSheet} />
-    <PanelToggle side="right" label="spectral channels" open={panels.railOpen} onToggle={panels.toggleRail} />
+    <PanelToggle side="left" label="plate record" controls="plate-sheet" open={panels.sheetOpen} onToggle={panels.toggleSheet} />
+    <PanelToggle side="right" label="spectral channels" controls="plate-rail" open={panels.railOpen} onToggle={panels.toggleRail} />
     <output aria-label="state">{`${panels.sheetOpen}:${panels.railOpen}`}</output>
   </>;
 }
@@ -20,9 +20,12 @@ describe('collapsible plate panels', () => {
     render(<Harness />);
     const left = screen.getByRole('button', { name: 'Hide plate record' });
     expect(left.getAttribute('aria-expanded')).toBe('true');
+    expect(left.textContent).toBe('Hide');
+    expect(left.getAttribute('aria-controls')).toBe('plate-sheet');
     fireEvent.click(left);
     expect(screen.getByLabelText('state').textContent).toBe('false:true');
     expect(screen.getByRole('button', { name: 'Show plate record' }).getAttribute('aria-expanded')).toBe('false');
+    expect(screen.getByRole('button', { name: 'Show plate record' }).textContent).toBe('Show');
     fireEvent.click(screen.getByRole('button', { name: 'Hide spectral channels' }));
     expect(screen.getByLabelText('state').textContent).toBe('false:false');
   });

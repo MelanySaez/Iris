@@ -1332,100 +1332,73 @@ button:disabled {
   overflow: hidden;
 }
 
-/* Collapsible sidebars: a collapsed sidebar shrinks to a 28px strip that
-   keeps only its toggle, so the control always sits on the sidebar. */
+/* Collapsible sidebars, shaped like the Spectral Lab sidebar toggle: a
+   full-height 34px strip sits between each sidebar and the stage and stays
+   visible; the sidebar itself collapses to 0. */
 .plate-columns-layout {
-  transition: grid-template-columns 0.2s ease;
+  grid-template-columns: 260px 34px 1fr 34px 300px;
+  transition: grid-template-columns 220ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
+.plate-columns-layout > .plate-sheet { grid-column: 1; grid-row: 1; }
+.plate-columns-layout > .panel-toggle-left { grid-column: 2; grid-row: 1; }
+.plate-columns-layout > .plate-stage { grid-column: 3; grid-row: 1; }
+.plate-columns-layout > .panel-toggle-right { grid-column: 4; grid-row: 1; }
+.plate-columns-layout > .spectral-rail { grid-column: 5; grid-row: 1; }
+
 .plate-columns-layout.sheet-collapsed {
-  grid-template-columns: 28px 1fr 300px;
+  grid-template-columns: 0 34px 1fr 34px 300px;
 }
 
 .plate-columns-layout.rail-collapsed {
-  grid-template-columns: 260px 1fr 28px;
+  grid-template-columns: 260px 34px 1fr 34px 0;
 }
 
 .plate-columns-layout.sheet-collapsed.rail-collapsed {
-  grid-template-columns: 28px 1fr 28px;
+  grid-template-columns: 0 34px 1fr 34px 0;
 }
 
 .plate-columns-layout.sheet-collapsed > .plate-sheet,
 .plate-columns-layout.rail-collapsed > .spectral-rail {
-  width: 28px;
+  width: 0;
   min-width: 0;
-  padding: 6px 0 0;
+  padding-inline: 0;
+  border: 0;
   overflow: hidden;
-  align-items: center;
-}
-
-/* Collapsed strips use the dark chrome of the ribbon and stage controls,
-   not the white panel paper. */
-.plate-columns-layout.sheet-collapsed > .plate-sheet,
-.plate-columns-layout.rail-collapsed > .spectral-rail {
-  background: #252528;
-  border-color: #36363a;
-}
-
-.plate-columns-layout.sheet-collapsed > .plate-sheet > .panel-toggle,
-.plate-columns-layout.rail-collapsed > .spectral-rail > .panel-toggle {
-  border-color: var(--sky-warm);
-  background: #1c1c1f;
-  color: var(--sky-warm); /* 9.0:1 on #1c1c1f */
-}
-
-.plate-columns-layout.sheet-collapsed > .plate-sheet > .panel-toggle:hover,
-.plate-columns-layout.sheet-collapsed > .plate-sheet > .panel-toggle:focus-visible,
-.plate-columns-layout.rail-collapsed > .spectral-rail > .panel-toggle:hover,
-.plate-columns-layout.rail-collapsed > .spectral-rail > .panel-toggle:focus-visible {
-  background: #2a2a2f;
-}
-
-/* Collapsed content leaves the layout and the tab order; the toggle stays. */
-.plate-columns-layout.sheet-collapsed > .plate-sheet > :not(.panel-toggle),
-.plate-columns-layout.rail-collapsed > .spectral-rail > :not(.panel-toggle) {
-  display: none;
+  opacity: 0;
+  visibility: hidden;
 }
 
 .panel-toggle {
-  flex: none;
-  width: 24px;
-  height: 24px;
-  display: inline-flex;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  border: 1px solid var(--plate-rule-strong);
-  border-radius: var(--radius-sm);
-  background: var(--plate-panel);
-  color: var(--plate-ink); /* 17.7:1 on white */
+  gap: 0.25rem;
+  min-width: 0;
+  padding: 0.5rem 0.2rem;
+  border: 1px solid var(--sky-line);
+  border-top: 0;
+  border-bottom: 0;
+  background: var(--sky-raised);
+  color: var(--sky-muted); /* 7.7:1 on #222226 */
+  font-size: 0.62rem;
   cursor: pointer;
-}
-
-.plate-sheet > .panel-toggle {
-  align-self: flex-end;
-  margin-bottom: -6px; /* sits in the sheet's top padding, beside the header */
-}
-
-.spectral-rail > .panel-toggle {
-  align-self: flex-start;
-  margin: 6px 0 4px 8px;
-}
-
-.plate-columns-layout.sheet-collapsed > .plate-sheet > .panel-toggle,
-.plate-columns-layout.rail-collapsed > .spectral-rail > .panel-toggle {
-  align-self: center;
-  margin: 0;
 }
 
 .panel-toggle:hover,
 .panel-toggle:focus-visible {
-  border-color: var(--plate-ink);
-  background: var(--plate-paper);
+  background: var(--sky-hover);
+  color: var(--sky-ink);
 }
 
-.panel-toggle[aria-expanded='false'] {
-  border-color: var(--plate-rust);
-  color: var(--plate-rust); /* 4.7:1 on white */
+.panel-toggle svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -2381,12 +2354,32 @@ button:disabled {
     overflow-y: auto;
   }
 
-  /* Stacked: a collapsed panel becomes a full-width row holding its toggle. */
+  /* Stacked: the strips become full-width rows above their panels. */
+  .plate-columns-layout > .plate-sheet,
+  .plate-columns-layout > .panel-toggle,
+  .plate-columns-layout > .plate-stage,
+  .plate-columns-layout > .spectral-rail {
+    grid-column: 1;
+    grid-row: auto;
+  }
+
+  .plate-columns-layout > .panel-toggle {
+    flex-direction: row;
+    min-height: 34px;
+    border: 1px solid var(--sky-line);
+    border-left: 0;
+    border-right: 0;
+  }
+
+  .plate-columns-layout > .plate-stage { order: 1; }
+  .plate-columns-layout > .panel-toggle-left { order: 2; }
+  .plate-columns-layout > .plate-sheet { order: 3; }
+  .plate-columns-layout > .panel-toggle-right { order: 4; }
+  .plate-columns-layout > .spectral-rail { order: 5; }
+
   .plate-columns-layout.sheet-collapsed > .plate-sheet,
   .plate-columns-layout.rail-collapsed > .spectral-rail {
-    width: auto;
-    padding: 6px 12px;
-    align-items: flex-start;
+    display: none;
   }
 
   .plate-stage {
