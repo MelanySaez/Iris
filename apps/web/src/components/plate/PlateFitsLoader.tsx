@@ -16,6 +16,7 @@ type LoaderState =
   | { kind: 'error'; message: string };
 
 const ACCEPT = '.fits,.fit,.fts,application/fits,image/fits';
+const MAX_UPLOAD_BYTES = 350_000_000;
 
 /** Plate without a job: open the user's own SPHEREx FITS. */
 export function PlateFitsLoader({ onOpened, onBrowseSky }: PlateFitsLoaderProps) {
@@ -25,6 +26,10 @@ export function PlateFitsLoader({ onOpened, onBrowseSky }: PlateFitsLoaderProps)
 
   const open = async (file: File | undefined) => {
     if (!file || busy) return;
+    if (file.size > MAX_UPLOAD_BYTES) {
+      setState({ kind: 'error', message: 'The file exceeds the 350 MB upload limit. Choose a smaller FITS file.' });
+      return;
+    }
     setState({ kind: 'uploading', name: file.name, percent: 0 });
     try {
       const job = await api.uploadFits(file, (sent, total) => {
@@ -91,7 +96,7 @@ export function PlateFitsLoader({ onOpened, onBrowseSky }: PlateFitsLoaderProps)
           the cube fallback: one image per channel, no VARIANCE and no epochs.
         </li>
       </ul>
-      <p className="plate-fits-note">Up to 512 MB. Opened files are not saved in Records.</p>
+      <p className="plate-fits-note">Up to 350 MB. Opened files are not saved in Records.</p>
     </div>
 
     <button type="button" className="plate-fits-sky" onClick={onBrowseSky}>

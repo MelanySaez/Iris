@@ -116,7 +116,7 @@ export interface FlagBit {
 }
 
 export interface JobCutout {
-  channel?: number;
+  channel?: number | null;
   calibrated?: boolean;
   wavelength_status?: string;
   provenance?: Array<Record<string, unknown>>;

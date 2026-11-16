@@ -145,7 +145,7 @@ FALLBACK_REUSE_SECONDS = 600.0
 # Cube tiles read concurrently for one channel of a large region.
 CUBE_TILE_WORKERS = 4
 # Largest FITS a user can open in Plate (a DR1 All-Sky Cube tile is ~321 MB).
-MAX_UPLOAD_BYTES = 512 * 1024 * 1024
+MAX_UPLOAD_BYTES = 350_000_000  # 350 MB (decimal bytes, matching the upload UI)
 CUTOUT_CONNECT_TIMEOUT = 10.0
 CUTOUT_READ_TIMEOUT = 90.0
 CUTOUT_DOWNLOAD_RETRIES = 2

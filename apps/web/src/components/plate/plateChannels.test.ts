@@ -2,12 +2,12 @@ import { describe, expect, it } from 'vitest';
 import type { JobSnapshot } from '../../types/types';
 import { channelCutoutLoaded, uploadChannelUnavailable } from './plateChannels';
 
-const job = (cutouts: Array<{ detector: number; channel?: number }>, upload: JobSnapshot['upload'] = null) =>
+const job = (cutouts: Array<{ detector: number; channel?: number | null }>, upload: JobSnapshot['upload'] = null) =>
   ({ cutouts, upload } as unknown as JobSnapshot);
 
 describe('plate channel availability', () => {
-  it('treats a detector cutout as covering all of its channels', () => {
-    const level2 = job([{ detector: 3 }]);
+  it.each([undefined, null])('treats a detector cutout with channel %s as covering all of its channels', (channel) => {
+    const level2 = job([{ detector: 3, channel }]);
     expect(channelCutoutLoaded(level2, 40)).toBe(true); // D3
     expect(channelCutoutLoaded(level2, 10)).toBe(false); // D1
   });

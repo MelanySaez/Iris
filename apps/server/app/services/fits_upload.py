@@ -77,8 +77,13 @@ class UploadWriter:
     def write(self, chunk: bytes) -> None:
         self.size += len(chunk)
         if self.size > MAX_UPLOAD_BYTES:
+            limit = (
+                f"{MAX_UPLOAD_BYTES // 1_000_000} MB"
+                if MAX_UPLOAD_BYTES % 1_000_000 == 0
+                else f"{MAX_UPLOAD_BYTES} bytes"
+            )
             raise UploadTooLargeError(
-                f"The file is larger than the {MAX_UPLOAD_BYTES} bytes Plate accepts."
+                f"The file exceeds the {limit} upload limit. Choose a smaller FITS file."
             )
         self._digest.update(chunk)
         self._handle.write(chunk)
@@ -205,6 +210,9 @@ def _open_level2(path: Path, job_id: str, filename: str) -> JobState:
     with fits.open(path, memmap=True) as hdul:
         header = hdul["IMAGE"].header
         ny, nx = hdul["IMAGE"].data.shape
+        for name in ("VARIANCE", "FLAGS"):
+            if hdul[name].shape != (ny, nx):
+                raise UploadRejectedError(f"{name} does not have the IMAGE shape.")
         spatial = WCS(header).celestial
         detector = int(header.get("DETECTOR", 0))
     if detector not in range(1, 7):

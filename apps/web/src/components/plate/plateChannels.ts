@@ -6,11 +6,15 @@ import { channelToBand } from '../../services/channels';
  * cover all channels of their detector; cube cutouts (fallback or uploaded
  * tiles) are per channel, so only the exact channel counts.
  */
-export function channelCutoutLoaded(job: JobSnapshot, channel: number): boolean {
+export function cutoutsForChannel(job: JobSnapshot, channel: number) {
   const detector = channelToBand(channel);
-  return (job.cutouts ?? []).some(
-    (c) => c.detector === detector && (c.channel === undefined || c.channel === channel),
+  return (job.cutouts ?? []).filter(
+    (c) => c.detector === detector && (c.channel == null || c.channel === channel),
   );
+}
+
+export function channelCutoutLoaded(job: JobSnapshot, channel: number): boolean {
+  return cutoutsForChannel(job, channel).length > 0;
 }
 
 /**

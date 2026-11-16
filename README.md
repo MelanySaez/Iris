@@ -2,6 +2,23 @@
 
 Nasa Space Challenge 2026
 
+## Open your own SPHEREx FITS
+
+Open **Plate** directly and choose a FITS file, or drop it onto the loader.
+You do not need to select a region in Sky first. Upload progress is shown while
+the file transfers, followed by a reading indicator until the plate is ready.
+The existing Sky → Plate workflow is also available.
+
+Plate accepts SPHEREx Level-2 images/cutouts and DR1 All-Sky Cube tiles
+(`Npix…_cube.fits`), up to 350 MB per file. Level-2 files expose their detector's
+17 channels, image, variance and flags. Cube tiles expose their channel planes
+and flags, with nominal wavelengths, no variance and no temporal information.
+Files are uploaded to the backend cache and are **not saved in Records**.
+Use **Open FITS** in an existing plate to open another file.
+
+See the [backend guide](apps/server/README.md#user-fits-uploads) for required
+FITS extensions, the upload API and cache behavior.
+
 ## Local development with Nix flakes
 
 The repository includes a reproducible development shell with Node, pnpm,

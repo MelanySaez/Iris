@@ -18,6 +18,28 @@ pnpm dev
 
 Open the Vite localhost URL. The frontend needs IRSA network access for the official HiPS and localhost/HTTPS for its service worker. Vite proxies `/api` to the FastAPI server on port 8000.
 
+## Open a local FITS in Plate
+
+Open **Plate** in the top bar, or go directly to `#/plate`. Choose a FITS file
+or drag it onto the loader. The upload percentage is followed by a server-reading
+indicator; the ready plate opens automatically. **Open FITS** returns to the
+loader so you can choose another file. Selecting a region in Sky still opens
+its prepared plate through the usual workflow.
+
+Supported files (up to 350 MB):
+
+- SPHEREx Level-2 image/cutout: `IMAGE`, `VARIANCE`, `FLAGS` and the key-W
+  `WCS-WAVE` lookup. Only its detector's 17 channels are available.
+- DR1 All-Sky Cube tile (`Npix…_cube.fits`): `IMAGE`, `FLAGS`, `NHITS` cubes
+  and `SPECTRAL_CHANNELS`. Channels use nominal wavelengths; there is no variance
+  or temporal information.
+
+Unsupported files show a readable error and can be replaced with another file.
+Uploads are sent to the backend and cached by content hash, so the same bytes
+reopen the same plate. They are not saved in Records. See the
+[upload API guide](../server/README.md#user-fits-uploads) for the request and cache
+layout.
+
 ## Container image
 
 Build the image from the frontend directory:

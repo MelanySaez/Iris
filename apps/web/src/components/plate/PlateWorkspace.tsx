@@ -5,7 +5,7 @@ import { EpochTimeline, ProviderTrace } from './EpochTimeline';
 import { CubeFallbackNotice, isCubeFallback, sourceLabel, UploadNotice } from './SourceNotice';
 import { StageProgress, StageStatusChip } from './StageProgress';
 import { PanelToggle, useCollapsiblePanels } from './PanelToggle';
-import { channelCutoutLoaded, uploadChannelUnavailable } from './plateChannels';
+import { channelCutoutLoaded, cutoutsForChannel, uploadChannelUnavailable } from './plateChannels';
 import { ChevronDownIcon } from '../SkyIcons';
 import {
   BLANK_CHANNELS,
@@ -98,12 +98,11 @@ export function PlateWorkspace({
   const railContainerRef = useRef<HTMLDivElement>(null);
 
   // Identify current detector from selectedChannel
-  const currentDetectorNum = channelToBand(selectedChannel);
   const currentDetectorStr = channelToDetector(selectedChannel);
 
   // Cutouts for the current detector only. Never fall back to another
   // detector's cutout, which would mislabel the plate.
-  const detectorCutouts = job.cutouts?.filter((c) => c.detector === currentDetectorNum && (c.channel === undefined || c.channel === selectedChannel)) ?? [];
+  const detectorCutouts = cutoutsForChannel(job, selectedChannel);
   const hasCutout = detectorCutouts.length > 0;
   // The DR1 All-Sky Cube fallback: one combined image, no VARIANCE layer.
   const cubeFallback = isCubeFallback(job);

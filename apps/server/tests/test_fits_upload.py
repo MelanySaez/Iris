@@ -199,3 +199,51 @@ def test_oversized_upload_is_refused(monkeypatch):
 def test_empty_upload_is_rejected():
     resp = upload(TestClient(app), b"")
     assert resp.status_code == 422
+
+
+@pytest.mark.parametrize("layer", ["VARIANCE", "FLAGS"])
+def test_level2_mismatched_layer_is_rejected_before_publishing(layer):
+    with fits.open(io.BytesIO(build_l2())) as hdul:
+        hdul[layer].data = hdul[layer].data[:2, :2].copy()
+        stream = io.BytesIO()
+        hdul.writeto(stream)
+    jobs_before = set(job_manager.jobs)
+    derived_before = set(fits_service.DERIVED_CACHE_DIR.iterdir())
+
+    resp = upload(TestClient(app), stream.getvalue())
+
+    assert resp.status_code == 422, resp.text
+    assert resp.json()["detail"] == f"{layer} does not have the IMAGE shape."
+    assert set(job_manager.jobs) == jobs_before
+    assert set(fits_service.DERIVED_CACHE_DIR.iterdir()) == derived_before
+
+
+def test_upload_cap_is_350_decimal_megabytes():
+    assert upload_service.MAX_UPLOAD_BYTES == 350_000_000
+
+
+def test_upload_at_limit_is_accepted_but_one_more_byte_is_rejected(monkeypatch):
+    body = build_l2()
+    monkeypatch.setattr(upload_service, "MAX_UPLOAD_BYTES", len(body))
+    client = TestClient(app)
+    accepted = upload(client, body)
+    assert accepted.status_code == 200
+    jobs_before = set(job_manager.jobs)
+    files_before = {p: p.read_bytes() for p in upload_service.UPLOAD_DIR.iterdir()}
+    refused = upload(client, body + b"x")
+    assert refused.status_code == 413
+    assert "upload limit" in refused.json()["detail"]
+    assert set(job_manager.jobs) == jobs_before
+    assert {
+        p: p.read_bytes() for p in upload_service.UPLOAD_DIR.iterdir()
+    } == files_before
+
+
+def test_oversized_upload_message_names_350_mb():
+    with upload_service.UploadWriter() as writer:
+        writer.size = 350_000_000
+        with pytest.raises(
+            upload_service.UploadTooLargeError, match="350 MB upload limit"
+        ):
+            writer.write(b"x")
+    assert not list(upload_service.UPLOAD_DIR.iterdir())

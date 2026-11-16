@@ -59,3 +59,24 @@ describe('PlateFitsLoader', () => {
     expect(upload).toHaveBeenCalledTimes(1);
   });
 });
+
+it.each(['picker', 'drop'])('rejects a file above 350 MB through %s before uploading and permits retry', (method) => {
+  const upload = vi.spyOn(api, 'uploadFits').mockReturnValue(new Promise(() => {}));
+  const onOpened = vi.fn();
+  render(<PlateFitsLoader onOpened={onOpened} onBrowseSky={vi.fn()} />);
+  const oversized = file();
+  Object.defineProperty(oversized, 'size', { value: 350_000_001 });
+  if (method === 'picker') {
+    fireEvent.change(screen.getByLabelText('Choose a FITS file'), { target: { files: [oversized] } });
+  } else {
+    fireEvent.drop(screen.getByRole('region', { name: 'Open a SPHEREx FITS' }), { dataTransfer: { files: [oversized] } });
+  }
+  expect(screen.getByRole('alert').textContent).toBe('The file exceeds the 350 MB upload limit. Choose a smaller FITS file.');
+  expect(upload).not.toHaveBeenCalled();
+  expect(onOpened).not.toHaveBeenCalled();
+  const atLimit = file();
+  Object.defineProperty(atLimit, 'size', { value: 350_000_000 });
+  fireEvent.change(screen.getByLabelText('Choose a FITS file'), { target: { files: [atLimit] } });
+  expect(upload).toHaveBeenCalledTimes(1);
+  expect(screen.queryByRole('alert')).toBeNull();
+});
