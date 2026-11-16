@@ -1,5 +1,5 @@
-import type { AssistantAction, AssistantUiContext } from './assistant';
-import type { ConsentLevel } from './consent';
+import type { AssistantAction, AssistantUiContext } from '../services/assistant';
+import type { ConsentLevel } from '../core/consent';
 import type {
   CatalogObject,
   CatalogResponse,
@@ -18,7 +18,7 @@ import type {
   SelectionListResponse,
   SelectionSummary,
   StretchMode,
-} from './types';
+} from '../types/types';
 
 export interface AssistantChatRequest {
   conversation_id: string;

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { JobEvent, JobSnapshot } from '../types';
+import type { JobEvent, JobSnapshot } from '../types/types';
 
 interface PreparingPlateCardProps {
   job: JobSnapshot;

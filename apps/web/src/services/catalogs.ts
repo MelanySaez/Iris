@@ -1,4 +1,4 @@
-import featuredObjectsJson from './data/featured-objects.json';
+import featuredObjectsJson from '../data/featured-objects.json';
 
 export interface FeaturedObject {
   id: string;

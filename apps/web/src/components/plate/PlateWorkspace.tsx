@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { api, ApiError } from '../../api';
+import { api, ApiError } from '../../api/api';
 import { PreparingPlateCard } from '../PreparingPlateCard';
 import {
   BLANK_CHANNELS,
@@ -8,7 +8,7 @@ import {
   getNextAvailableChannel,
   isChannelAvailable,
   TOTAL_CHANNELS,
-} from '../../channels';
+} from '../../services/channels';
 import {
   formatAngle,
   formatDateIso,
@@ -16,7 +16,7 @@ import {
   formatFlux,
   formatRa,
   formatWavelength,
-} from '../../format';
+} from '../../utils/format';
 import type {
   ChannelsResponse,
   FrameRenderMode,
@@ -26,7 +26,7 @@ import type {
   PixelReadout,
   ProductType,
   StretchMode,
-} from '../../types';
+} from '../../types/types';
 
 interface PlateWorkspaceProps {
   job: JobSnapshot;

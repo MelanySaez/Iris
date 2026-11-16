@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { api, ApiError } from '../../api';
-import type { AssistantUiContext } from '../../assistant';
+import { api, ApiError } from '../../api/api';
+import type { AssistantUiContext } from '../../services/assistant';
 import { AssistantWidget } from './AssistantWidget';
 
 const context: AssistantUiContext = { workspace: 'sky', channel: 44, color_mode: 'single' };

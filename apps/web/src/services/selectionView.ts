@@ -1,5 +1,5 @@
 import type { RgbChannels } from './rgb';
-import type { RegionRequest } from './types';
+import type { RegionRequest } from '../types/types';
 import { validateCoordinates } from './region';
 
 /**

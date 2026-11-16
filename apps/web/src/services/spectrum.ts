@@ -1,4 +1,4 @@
-import type { CubeSpectrumPoint } from './types';
+import type { CubeSpectrumPoint } from '../types/types';
 
 /**
  * Categorical series colours (dark mode), validated against the sky surface

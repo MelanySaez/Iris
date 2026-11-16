@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
-import type { SpectralChannel } from '../../hips';
-import { RGB_PRESETS, presetChannels, type RgbChannels } from '../../rgb';
+import type { SpectralChannel } from '../../api/hips';
+import { RGB_PRESETS, presetChannels, type RgbChannels } from '../../services/rgb';
 
 interface RgbControlsProps {
   ready: boolean;

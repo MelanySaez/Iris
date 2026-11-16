@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef } from 'react';
-import type { ConsentLevel } from '../../consent';
+import type { ConsentLevel } from '../../core/consent';
 
 /** CSS variable other fixed bottom elements (the chat button) offset themselves by. */
 const HEIGHT_VARIABLE = '--consent-bar-height';

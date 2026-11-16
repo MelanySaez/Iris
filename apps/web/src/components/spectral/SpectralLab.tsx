@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { FormEvent, KeyboardEvent, PointerEvent as ReactPointerEvent } from 'react';
-import { LAB_FEATURED } from '../../labFeatured';
-import { api, ApiError } from '../../api';
-import { runEnterLookup } from '../../searchEnter';
-import { samePixel } from '../../spectrumLabel';
+import { LAB_FEATURED } from '../../services/labFeatured';
+import { api, ApiError } from '../../api/api';
+import { runEnterLookup } from '../../utils/searchEnter';
+import { samePixel } from '../../services/spectrumLabel';
 import { ChevronDownIcon, SearchIcon } from '../SkyIcons';
 import { NameSuggestion, type ResolvedTarget, type SubmitLookup } from '../sky/NameSuggestion';
 import {
@@ -27,9 +27,9 @@ import {
   parseCoordinates,
   spectrumKey,
   zoomDomainAt,
-} from '../../spectrum';
-import type { YScaleMode } from '../../spectrum';
-import type { CubeSpectrumResponse } from '../../types';
+} from '../../services/spectrum';
+import type { YScaleMode } from '../../services/spectrum';
+import type { CubeSpectrumResponse } from '../../types/types';
 import './SpectralLab.css';
 
 interface SpectrumEntry {

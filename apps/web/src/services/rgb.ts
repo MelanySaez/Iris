@@ -1,5 +1,5 @@
 import { isChannelAvailable } from './channels';
-import type { SpectralChannel } from './hips';
+import type { SpectralChannel } from '../api/hips';
 
 /** Channel index painted in each colour of the composite. */
 export type RgbChannels = { r: number; g: number; b: number };

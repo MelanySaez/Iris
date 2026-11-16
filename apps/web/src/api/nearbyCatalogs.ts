@@ -1,4 +1,4 @@
-import { FEATURED_OBJECTS, type FeaturedObject } from './catalogs';
+import { FEATURED_OBJECTS, type FeaturedObject } from '../services/catalogs';
 import { TocatsCatalogClient, type TocatsQueryResult } from './tocats';
 
 export const DEFAULT_NEARBY_RADIUS_DEG = 0.5;

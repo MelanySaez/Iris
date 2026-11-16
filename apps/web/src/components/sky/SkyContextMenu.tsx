@@ -4,7 +4,7 @@ import {
   searchNearbyCatalogs,
   type NearbyCatalogId,
   type NearbyCatalogSource,
-} from '../../nearbyCatalogs';
+} from '../../api/nearbyCatalogs';
 import './SkyContextMenu.css';
 
 export interface SkyContextTarget {

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { api, ApiError } from '../../api';
+import { api, ApiError } from '../../api/api';
 import {
   canOpenInPlate,
   describeSelectionRegion,
@@ -9,10 +9,10 @@ import {
   normalizeSelectionName,
   RECORDS_PAGE_SIZE,
   removeSelection,
-} from '../../records';
-import { loadSelectionView } from '../../selectionView';
-import type { FailureDetails } from '../../records';
-import type { RegionRequest, SelectionSummary } from '../../types';
+} from '../../services/records';
+import { loadSelectionView } from '../../services/selectionView';
+import type { FailureDetails } from '../../services/records';
+import type { RegionRequest, SelectionSummary } from '../../types/types';
 
 interface RecordsWorkspaceProps {
   onOpenPlate: (jobId: string) => void;

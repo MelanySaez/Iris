@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { api, ApiError, CURATED_CATALOG_FALLBACK } from './api';
-import { parseHash, routeToHash } from './router';
+import { api, ApiError, CURATED_CATALOG_FALLBACK } from '../api/api';
+import { parseHash, routeToHash } from '../core/router';
 import {
   MAX_SPECTRA,
   SERIES_COLORS,
@@ -22,7 +22,7 @@ import {
   zoomDomainAt,
   panDomain,
 } from './spectrum';
-import type { CubeSpectrumPoint } from './types';
+import type { CubeSpectrumPoint } from '../types/types';
 
 function point(channel: number, wavelength: number, value: number | null): CubeSpectrumPoint {
   return {

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act, cleanup, renderHook } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { api } from '../api';
+import { api } from '../api/api';
 import { useRecordsConsent } from './useRecordsConsent';
 
 afterEach(() => {

@@ -1,13 +1,13 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { CubeSpectrumResponse } from '../../types';
+import type { CubeSpectrumResponse } from '../../types/types';
 
 const getSpectrum = vi.fn();
 const resolveName = vi.fn();
 
-vi.mock('../../api', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../api')>();
+vi.mock('../../api/api', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../api/api')>();
   return {
     ...actual,
     api: {
@@ -17,7 +17,7 @@ vi.mock('../../api', async (importOriginal) => {
   };
 });
 
-const { ApiError } = await import('../../api');
+const { ApiError } = await import('../../api/api');
 const { SpectralLab } = await import('./SpectralLab');
 
 function spectrum(values: (number | null)[], npix = 1901): CubeSpectrumResponse {

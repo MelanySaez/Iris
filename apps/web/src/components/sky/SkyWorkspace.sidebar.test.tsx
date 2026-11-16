@@ -6,8 +6,8 @@ vi.mock('aladin-lite', () => ({ default: {} }));
 import { SkyWorkspace } from './SkyWorkspace';
 import { TopBar } from '../TopBar';
 import { AllSkyIcon } from '../SkyIcons';
-import { HIPS_CATALOG_PROVIDERS, LOCAL_CATALOG_STYLE } from '../../catalogs';
-import { TOCATS_CATALOGS } from '../../tocats';
+import { HIPS_CATALOG_PROVIDERS, LOCAL_CATALOG_STYLE } from '../../services/catalogs';
+import { TOCATS_CATALOGS } from '../../api/tocats';
 
 describe('Sky workspace sidebar', () => {
   it('presents position, object discovery, then map layers', () => {

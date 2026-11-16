@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { GuideCue } from '../../assistant';
+import type { GuideCue } from '../../services/assistant';
 
 /** Pause before measuring, so a workspace switch or map move can settle. */
 export const GUIDE_DELAY_MS = 350;

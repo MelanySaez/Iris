@@ -12,7 +12,7 @@ const aladin = vi.hoisted(() => {
 });
 vi.mock('aladin-lite', () => ({ default: { catalog: aladin.catalog, marker: aladin.marker } }));
 const query = vi.hoisted(() => vi.fn());
-vi.mock('../nearbyCatalogs', () => ({ querySimbadCone: query, MAX_NEARBY_RESULTS: 300 }));
+vi.mock('../api/nearbyCatalogs', () => ({ querySimbadCone: query, MAX_NEARBY_RESULTS: 300 }));
 
 import { useSimbadViewportLayer } from './useSimbadViewportLayer';
 

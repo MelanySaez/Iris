@@ -4,15 +4,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // The Sky map and Spectral Lab need Aladin/WebGL; stub them so the test drives the real shell.
 const skyProps = vi.hoisted(() => vi.fn());
-vi.mock('./components/sky/SkyWorkspace', () => ({
+vi.mock('../components/sky/SkyWorkspace', () => ({
   SkyWorkspace: (props: unknown) => {
     skyProps(props);
     return <div>sky workspace</div>;
   },
 }));
-vi.mock('./components/spectral/SpectralLab', () => ({ SpectralLab: () => <div>spectral lab</div> }));
-vi.mock('./api', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('./api')>();
+vi.mock('../components/spectral/SpectralLab', () => ({ SpectralLab: () => <div>spectral lab</div> }));
+vi.mock('../api/api', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../api/api')>();
   return {
     ...actual,
     api: {
@@ -26,9 +26,9 @@ vi.mock('./api', async (importOriginal) => {
   };
 });
 
-import { api } from './api';
+import { api } from '../api/api';
 import { App } from './App';
-import type { SelectionSummary } from './types';
+import type { SelectionSummary } from '../types/types';
 
 const recorded: SelectionSummary = {
   id: 'sel-1',

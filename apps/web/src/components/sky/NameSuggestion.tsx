@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ApiError } from '../../api';
-import type { SubmitResult } from '../../searchEnter';
-import type { ResolvedAlternative, ResolvedName } from '../../types';
+import { ApiError } from '../../api/api';
+import type { SubmitResult } from '../../utils/searchEnter';
+import type { ResolvedAlternative, ResolvedName } from '../../types/types';
 
 export interface ResolvedTarget {
   ra_deg: number;

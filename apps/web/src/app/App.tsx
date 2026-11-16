@@ -1,28 +1,28 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { api, ApiError } from './api';
-import { TopBar } from './components/TopBar';
-import { WorkspaceErrorBoundary } from './components/WorkspaceErrorBoundary';
-import { PlateWorkspace } from './components/plate/PlateWorkspace';
-import { RecordsWorkspace } from './components/records/RecordsWorkspace';
+import { api, ApiError } from '../api/api';
+import { TopBar } from '../components/TopBar';
+import { WorkspaceErrorBoundary } from '../components/WorkspaceErrorBoundary';
+import { PlateWorkspace } from '../components/plate/PlateWorkspace';
+import { RecordsWorkspace } from '../components/records/RecordsWorkspace';
 import {
   SkyWorkspace,
   type AssistantSkyCommand,
   type SelectionRestoreRequest,
   type SkyUiState,
-} from './components/sky/SkyWorkspace';
-import { AssistantWidget, type ActionResult } from './components/assistant/AssistantWidget';
-import { AssistantGuide, type GuideCueItem } from './components/assistant/AssistantGuide';
-import { Landing } from './components/landing/Landing';
-import { GuidedTour, hasSeenTour, tourAnchorsReady } from './components/tour/GuidedTour';
-import { tourForRoute, type TourId } from './components/tour/tourSteps';
-import { ConsentBar } from './components/consent/ConsentBar';
-import { guideCueFor, type AssistantAction, type AssistantUiContext } from './assistant';
-import { SpectralLab, type SpectrumRequest } from './components/spectral/SpectralLab';
-import type { SpectrumTarget } from './components/sky/SelectionActions';
-import { useJobPoller } from './hooks/useJobPoller';
-import { useRecordsConsent } from './hooks/useRecordsConsent';
-import { useRoute } from './router';
-import type { JobCreateRequest, RegionRequest } from './types';
+} from '../components/sky/SkyWorkspace';
+import { AssistantWidget, type ActionResult } from '../components/assistant/AssistantWidget';
+import { AssistantGuide, type GuideCueItem } from '../components/assistant/AssistantGuide';
+import { Landing } from '../components/landing/Landing';
+import { GuidedTour, hasSeenTour, tourAnchorsReady } from '../components/tour/GuidedTour';
+import { tourForRoute, type TourId } from '../components/tour/tourSteps';
+import { ConsentBar } from '../components/consent/ConsentBar';
+import { guideCueFor, type AssistantAction, type AssistantUiContext } from '../services/assistant';
+import { SpectralLab, type SpectrumRequest } from '../components/spectral/SpectralLab';
+import type { SpectrumTarget } from '../components/sky/SelectionActions';
+import { useJobPoller } from '../hooks/useJobPoller';
+import { useRecordsConsent } from '../hooks/useRecordsConsent';
+import { useRoute } from '../core/router';
+import type { JobCreateRequest, RegionRequest } from '../types/types';
 
 export function App() {
   const { route, navigate } = useRoute();
