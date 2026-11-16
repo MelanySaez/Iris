@@ -61,6 +61,8 @@ Every region selected in Sky creates a job. There are no accounts, so records ar
 
 Once cookies are accepted, the backend saves each selection for this browser. Open **Records** in the top bar to list them, open a ready plate, inspect a pending or failed job in Plate, or delete it. Plate shows discovery attempts and retry timing in the spectral rail; failed jobs offer an explicit retry.
 
+The Sky selection confirmation card includes **Selection name (optional)**. Enter up to 80 characters before confirming; the name appears in Records when cookies are accepted, including when acceptance happens later in the same visit. Leaving it blank preserves an existing name for the same selection.
+
 The **Name** column labels a selection: click the name or **Untitled** (or press **✎**), then edit in place without resizing the grid. Press **Enter** or leave the field to save; **Escape** discards the draft, and an empty name removes it. Names are stored by the backend (up to 80 characters), so every browser sees them.
 
 The **View** column shows how the map looked when the region was selected: `Single` or `RGB · 16/32/46` (the evaluated channel is in **Channels**). It reads this browser's saved view first (when it belongs to the same evaluated channel) and otherwise the view the backend recorded; selections made before views were recorded show `—`. The **Channels** column is always the channel the job evaluated, which in RGB mode is the last single channel, not the composite.

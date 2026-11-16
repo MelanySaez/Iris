@@ -94,6 +94,23 @@ describe('SkyWorkspace right-click pinning', () => {
     else Reflect.deleteProperty(navigator, 'serviceWorker');
   });
 
+  it('sends the name from the confirmation card and resets it for a new draft', async () => {
+    const onStartJob = vi.fn().mockResolvedValue(undefined);
+    const props = { activeJob: null, onStartJob, onOpenPlate: vi.fn(), onViewSpectrum: vi.fn(), onRetryJob: vi.fn() };
+    const { rerender } = render(<SkyWorkspace {...props} assistantCommands={[
+      { id: 1, action: { type: 'show_region', ra_deg: 12, dec_deg: -3, size_arcmin: 6 } },
+    ]} />);
+    const input = await screen.findByRole('textbox', { name: 'Selection name (optional)' });
+    fireEvent.change(input, { target: { value: 'Old draft' } });
+    rerender(<SkyWorkspace {...props} assistantCommands={[
+      { id: 2, action: { type: 'show_region', ra_deg: 13, dec_deg: -3, size_arcmin: 6 } },
+    ]} />);
+    await waitFor(() => expect((screen.getByRole('textbox', { name: 'Selection name (optional)' }) as HTMLInputElement).value).toBe(''));
+    fireEvent.change(screen.getByRole('textbox', { name: 'Selection name (optional)' }), { target: { value: '  M101 core  ' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm region' }));
+    expect(onStartJob).toHaveBeenCalledWith(expect.objectContaining({ ra_deg: 13, name: 'M101 core' }));
+  });
+
   it('keeps the map controls working while the region tool is active', async () => {
     const setFoV = vi.fn();
     Object.assign(viewer, { setFoV });

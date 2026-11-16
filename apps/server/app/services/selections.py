@@ -66,7 +66,12 @@ class SelectionService:
         if not self.repository.delete(owner_id, selection_id):
             raise SelectionNotFoundError("Selection not found.")
 
-    def claim(self, owner_id: uuid.UUID, jobs: list[JobState]) -> int:
+    def claim(
+        self,
+        owner_id: uuid.UUID,
+        jobs: list[JobState],
+        names: dict[str, str | None] | None = None,
+    ) -> int:
         """Save, for a browser that just accepted cookies, the jobs it submitted
         before accepting. Each job the browser does not have yet becomes its
         selection with the current status and, when finished, its outcome; jobs
@@ -74,8 +79,9 @@ class SelectionService:
         recorder = SelectionRecorder(self.repository)
         added = 0
         for job in jobs:
+            request = job.request.model_copy(update={"name": (names or {}).get(job.id)})
             if not self.repository.claim_submission(
-                owner_id, job.id, job.request, job.status
+                owner_id, job.id, request, job.status
             ):
                 continue
             added += 1

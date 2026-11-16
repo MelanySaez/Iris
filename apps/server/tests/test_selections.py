@@ -1081,3 +1081,78 @@ def test_large_region_survives_selection_persistence(client):
     saved = find_by_job(client, response.json()["id"])
     assert saved["region"]["size_arcmin"] == 180
     assert saved["region"]["fov_deg"] == 3
+
+
+@requires_db
+def test_name_on_creation_is_owner_scoped_and_never_cached(client):
+    payload = {**region(23.12345), "channels": [44]}
+    other = browser(OWNER_B)
+    with patch.object(job_manager, "_run_job", return_value=None):
+        first = client.post("/api/jobs", json={**payload, "name": "  M101 core  "})
+        second = other.post("/api/jobs", json={**payload, "name": "Other browser"})
+        assert first.status_code == second.status_code == 202
+        job_id = first.json()["id"]
+        assert second.json()["id"] == job_id
+        assert find_by_job(client, job_id)["name"] == "M101 core"
+        assert find_by_job(other, job_id)["name"] == "Other browser"
+        assert "name" not in first.json()["request"]
+        assert "name" not in other.get(f"/api/jobs/{job_id}").json()["request"]
+        assert getattr(job_manager.get_job(job_id).request, "name", None) is None
+        client.post("/api/jobs", json=payload)
+        assert find_by_job(client, job_id)["name"] == "M101 core"
+        client.post("/api/jobs", json={**payload, "name": "   "})
+        assert find_by_job(client, job_id)["name"] == "M101 core"
+        client.post("/api/jobs", json={**payload, "name": "y" * 80})
+        assert find_by_job(client, job_id)["name"] == "y" * 80
+
+
+@requires_db
+def test_late_claim_uses_only_this_browsers_name_and_preserves_existing_records(client):
+    payload = {**region(23.54321), "channels": [44]}
+    anonymous = browser(None, None)
+    with patch.object(job_manager, "_run_job", return_value=None):
+        early = anonymous.post("/api/jobs", json={**payload, "name": "Private draft"})
+        assert early.status_code == 202
+        job_id = early.json()["id"]
+        assert client.get("/api/selections").json()["items"] == []
+        response = client.post(
+            "/api/selections/claim",
+            json={"job_ids": [job_id], "names": {job_id: "  My saved name  "}},
+        )
+        assert response.status_code == 200
+        assert response.json() == {"claimed": 1}
+        assert find_by_job(client, job_id)["name"] == "My saved name"
+        other = browser(OWNER_B)
+        other.post("/api/selections/claim", json={"job_ids": [job_id]})
+        assert find_by_job(other, job_id)["name"] is None
+        again = client.post(
+            "/api/selections/claim",
+            json={"job_ids": [job_id], "names": {job_id: "Do not overwrite"}},
+        )
+        assert again.json() == {"claimed": 0}
+        assert find_by_job(client, job_id)["name"] == "My saved name"
+
+
+def test_invalid_creation_name_is_rejected_before_submitting_any_job():
+    before = set(job_manager.jobs)
+    response = TestClient(app).post(
+        "/api/jobs", json={**region(23.99991), "channels": [44], "name": "x" * 81}
+    )
+    assert response.status_code == 422
+    assert set(job_manager.jobs) == before
+
+
+@requires_db
+def test_invalid_claim_name_is_rejected_without_creating_a_record(client):
+    with patch.object(job_manager, "_run_job", return_value=None):
+        early = (
+            browser(None, None)
+            .post("/api/jobs", json={**region(23.99992), "channels": [44]})
+            .json()
+        )
+        response = client.post(
+            "/api/selections/claim",
+            json={"job_ids": [early["id"]], "names": {early["id"]: "x" * 81}},
+        )
+        assert response.status_code == 422
+        assert client.get("/api/selections").json()["items"] == []

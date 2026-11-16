@@ -282,11 +282,11 @@ export const api = {
   },
 
   /** Save, under the new owner cookie, the jobs submitted before accepting cookies. */
-  async claimSelections(jobIds: string[]): Promise<{ claimed: number }> {
+  async claimSelections(jobIds: string[], names?: Record<string, string>): Promise<{ claimed: number }> {
     return request('/api/selections/claim', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ job_ids: jobIds }),
+      body: JSON.stringify({ job_ids: jobIds, ...(names ? { names } : {}) }),
     });
   },
 };

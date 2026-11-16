@@ -11,6 +11,17 @@ describe('api client', () => {
     vi.unstubAllGlobals();
   });
 
+  it('sends optional per-browser names when claiming pending selections', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ claimed: 1 }) });
+    vi.stubGlobal('fetch', fetchMock);
+    await api.claimSelections(['job-a'], { 'job-a': 'M101 core' });
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({
+      job_ids: ['job-a'], names: { 'job-a': 'M101 core' },
+    });
+    await api.claimSelections(['job-b']);
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toEqual({ job_ids: ['job-b'] });
+  });
+
   it('calls getHealth with GET /api/health', async () => {
     const mockHealth = {
       status: 'ok',

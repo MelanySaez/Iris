@@ -116,12 +116,15 @@ class SelectionRepository:
                 mode=req.mode,
                 stretch=req.stretch,
                 job_status=status,
+                name=req.name,
                 **_view_columns(req),
             )
             changes: dict[str, Any] = {
                 "hits": Selection.hits + 1,
                 "last_seen_at": func.now(),
             }
+            if req.name is not None:
+                changes["name"] = stmt.excluded.name
             if req.view is not None:
                 # Keep the latest view. Requests without one (e.g. from Plate)
                 # leave the recorded view untouched.
@@ -160,6 +163,7 @@ class SelectionRepository:
                     mode=req.mode,
                     stretch=req.stretch,
                     job_status=status,
+                    name=req.name,
                     **_view_columns(req),
                 )
                 .on_conflict_do_nothing(

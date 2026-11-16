@@ -99,6 +99,8 @@ export interface RegionResolveResponse {
 export type JobView = { mode: 'single'; rgb?: null } | { mode: 'rgb'; rgb: [number, number, number] };
 
 export interface JobCreateRequest {
+  /** Optional display name for this browser's selection record. */
+  name?: string;
   ra_deg: number;
   dec_deg: number;
   size_arcmin: number;

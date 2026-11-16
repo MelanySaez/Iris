@@ -264,6 +264,18 @@ describe('App cookie consent', () => {
     expect(screen.queryByRole('region', { name: 'Cookie consent' })).toBeNull();
   });
 
+  it('passes a submitted name through creation and later consent recovery', async () => {
+    render(<App />);
+    const { onStartJob } = skyProps.mock.calls.at(-1)![0] as {
+      onStartJob: (req: unknown) => Promise<void>;
+    };
+    const request = { ra_deg: 1, dec_deg: 2, size_arcmin: 6, channels: [44], name: 'M101 core' };
+    await act(async () => { await onStartJob(request); });
+    expect(api.createJob).toHaveBeenCalledWith(request);
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Accept necessary' })); });
+    expect(api.claimSelections).toHaveBeenCalledWith(['early-job'], { 'early-job': 'M101 core' });
+  });
+
   it('tells Records visitors that selections cannot be saved without cookies', async () => {
     setConsentCookie('none');
     window.location.hash = '#/records';
