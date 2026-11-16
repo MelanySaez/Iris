@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Aladin, { type AladinCatalog, type AladinViewer } from 'aladin-lite';
-import { api, CURATED_CATALOG_FALLBACK } from '../../api';
+import { api, CURATED_CATALOG_FALLBACK } from '../../api/api';
 import {
   FEATURED_OBJECTS,
   featuredObjectPopup,
   LOCAL_CATALOG_STYLE,
-} from '../../catalogs';
-import { TocatsCatalogClient, TocatsViewportCache, TOCATS_CATALOGS, type TocatsCatalogId } from '../../tocats';
+} from '../../services/catalogs';
+import { TocatsCatalogClient, TocatsViewportCache, TOCATS_CATALOGS, type TocatsCatalogId } from '../../api/tocats';
 import {
   type TocatsCatalogLayerRefs,
   type TocatsLayerState,
@@ -20,40 +20,40 @@ import {
   getNextAvailableChannel,
   isChannelAvailable,
   TOTAL_CHANNELS,
-} from '../../channels';
-import { formatAngle, formatDec, formatRa, formatWavelength } from '../../format';
+} from '../../services/channels';
+import { formatAngle, formatDec, formatRa, formatWavelength } from '../../utils/format';
 import {
   channelVirtualHipsUrl,
   imagePropertiesFromCube,
   parseChannels,
   SPHEREX_HIPS_ROOT,
   type SpectralChannel,
-} from '../../hips';
-import { pointerToIcrs, resolveInitialProjection, setChannelImageLayer } from '../../aladinView';
+} from '../../api/hips';
+import { pointerToIcrs, resolveInitialProjection, setChannelImageLayer } from '../../api/aladinView';
 import { useSimbadViewportLayer, type SimbadLayerStatus } from '../../hooks/useSimbadViewportLayer';
-import { createCatalogMarker } from '../../catalogMarker';
-import { installCatalogPopupControls } from '../../catalogPopup';
+import { createCatalogMarker } from '../../utils/catalogMarker';
+import { installCatalogPopupControls } from '../../api/catalogPopup';
 import { useRgbComposite } from '../../hooks/useRgbComposite';
 import { RgbControls } from './RgbControls';
 import { SelectionActions, type SpectrumTarget } from './SelectionActions';
 import { RegionConfirmBar } from './RegionConfirmBar';
-import type { SpectrumOrigin } from '../../spectrumLabel';
+import type { SpectrumOrigin } from '../../services/spectrumLabel';
 import { NameSuggestion, type ResolvedTarget, type SubmitLookup } from './NameSuggestion';
-import { runEnterLookup } from '../../searchEnter';
-import { lookupView } from '../../lookupView';
+import { runEnterLookup } from '../../utils/searchEnter';
+import { lookupView } from '../../services/lookupView';
 import { AllSkyIcon, PanIcon, RegionIcon, SearchIcon, WarningIcon, ZoomInIcon, ZoomOutIcon } from '../SkyIcons';
-import { contextFovDeg, resolveSelectionView, saveSelectionView } from '../../selectionView';
-import type { AssistantAction, AssistantUiContext } from '../../assistant';
-import { ensureServiceWorkerControl } from '../../serviceWorkerControl';
+import { contextFovDeg, resolveSelectionView, saveSelectionView } from '../../services/selectionView';
+import type { AssistantAction, AssistantUiContext } from '../../services/assistant';
+import { ensureServiceWorkerControl } from '../../core/serviceWorkerControl';
 import {
   computeRegionFromPoints,
   moveRegion,
   REGION_EXCEEDS_LIMIT_MESSAGE,
   resizeRegion,
   validateCoordinates,
-} from '../../region';
-import type { CatalogObject, JobCreateRequest, JobSnapshot, JobView, RegionRequest } from '../../types';
-import type { NearbyCatalogId, NearbyCatalogSource } from '../../nearbyCatalogs';
+} from '../../services/region';
+import type { CatalogObject, JobCreateRequest, JobSnapshot, JobView, RegionRequest } from '../../types/types';
+import type { NearbyCatalogId, NearbyCatalogSource } from '../../api/nearbyCatalogs';
 import { SkyContextMenu, type SkyContextTarget } from './SkyContextMenu';
 
 interface SkyWorkspaceProps {

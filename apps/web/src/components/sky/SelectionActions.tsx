@@ -1,5 +1,5 @@
-import { spectrumLabel, type SpectrumOrigin } from '../../spectrumLabel';
-import type { RegionRequest } from '../../types';
+import { spectrumLabel, type SpectrumOrigin } from '../../services/spectrumLabel';
+import type { RegionRequest } from '../../types/types';
 
 export interface SpectrumTarget {
   ra_deg: number;

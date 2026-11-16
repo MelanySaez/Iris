@@ -12,11 +12,11 @@ interface TourProps {
 // everything else is the real App shell.
 const tour = vi.hoisted(() => ({ ready: true, props: null as TourProps | null }));
 
-vi.mock('./components/sky/SkyWorkspace', () => ({ SkyWorkspace: () => <div>sky workspace</div> }));
-vi.mock('./components/spectral/SpectralLab', () => ({ SpectralLab: () => <div>spectral lab</div> }));
-vi.mock('./components/landing/Landing', () => ({ Landing: () => <div>landing</div> }));
-vi.mock('./components/tour/GuidedTour', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('./components/tour/GuidedTour')>();
+vi.mock('../components/sky/SkyWorkspace', () => ({ SkyWorkspace: () => <div>sky workspace</div> }));
+vi.mock('../components/spectral/SpectralLab', () => ({ SpectralLab: () => <div>spectral lab</div> }));
+vi.mock('../components/landing/Landing', () => ({ Landing: () => <div>landing</div> }));
+vi.mock('../components/tour/GuidedTour', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../components/tour/GuidedTour')>();
   return {
     ...actual,
     tourAnchorsReady: () => tour.ready,
@@ -26,8 +26,8 @@ vi.mock('./components/tour/GuidedTour', async (importOriginal) => {
     },
   };
 });
-vi.mock('./api', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('./api')>();
+vi.mock('../api/api', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../api/api')>();
   return {
     ...actual,
     api: {
@@ -42,7 +42,7 @@ vi.mock('./api', async (importOriginal) => {
 });
 
 import { App } from './App';
-import { TOUR_SEEN_KEY } from './components/tour/GuidedTour';
+import { TOUR_SEEN_KEY } from '../components/tour/GuidedTour';
 
 const settle = async (ms: number) => {
   await act(async () => {

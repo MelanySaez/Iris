@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from 'react';
-import { api, ApiError } from '../api';
-import { MAX_CLAIMED_JOBS, readConsent, recordsEnabled, type ConsentLevel } from '../consent';
+import { api, ApiError } from '../api/api';
+import { MAX_CLAIMED_JOBS, readConsent, recordsEnabled, type ConsentLevel } from '../core/consent';
 
 export interface RecordsConsent {
   level: ConsentLevel | null;

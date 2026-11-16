@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { clearRgbComposite, RGB_OVERLAY_NAMES, showRgbComposite } from './aladinView';
-import type { SpectralChannel } from './hips';
+import { clearRgbComposite, RGB_OVERLAY_NAMES, showRgbComposite } from '../api/aladinView';
+import type { SpectralChannel } from '../api/hips';
 import { RGB_PRESETS, nearestAvailableChannel, presetChannels, validateRgb } from './rgb';
 
 // Wavelength grid like the DR1 cube: 0.75 µm + 0.05 µm steps, channels 50/51 blank.

@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef, useState } from 'react';
 import { DataNotesPopover } from './DataNotesPopover';
 import { IrisLogo } from './IrisLogo';
-import type { AppRoute } from '../router';
+import type { AppRoute } from '../core/router';
 
 interface TopBarProps {
   currentRoute: AppRoute;

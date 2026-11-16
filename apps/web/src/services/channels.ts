@@ -1,4 +1,4 @@
-import type { ChannelInfo } from './types';
+import type { ChannelInfo } from '../types/types';
 
 export const TOTAL_CHANNELS = 102;
 export const BLANK_CHANNELS = new Set<number>([50, 51]);

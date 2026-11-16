@@ -1,9 +1,9 @@
 /**
  * Pure helpers for the saved-selections (records) workspace.
  */
-import { formatRaDec } from './format';
+import { formatRaDec } from '../utils/format';
 import type { SelectionView } from './selectionView';
-import type { SelectionEvent, SelectionSummary } from './types';
+import type { SelectionEvent, SelectionSummary } from '../types/types';
 
 export const RECORDS_PAGE_SIZE = 25;
 

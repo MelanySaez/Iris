@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api, ApiError } from './api';
-import type { JobCreateRequest, RegionRequest } from './types';
+import type { JobCreateRequest, RegionRequest } from '../types/types';
 
 describe('api client', () => {
   beforeEach(() => {

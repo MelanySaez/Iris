@@ -5,7 +5,7 @@ const source = readFileSync(
   new URL('../src/components/sky/SkyWorkspace.tsx', import.meta.url),
   'utf8',
 );
-const css = readFileSync(new URL('../src/style.css', import.meta.url), 'utf8');
+const css = readFileSync(new URL('../src/styles/style.css', import.meta.url), 'utf8');
 
 describe('Sky region interactions', () => {
   it('disables the Aladin context menu', () => {

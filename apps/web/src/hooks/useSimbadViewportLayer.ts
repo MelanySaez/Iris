@@ -1,9 +1,9 @@
 import { useEffect, useRef } from 'react';
 import Aladin, { type AladinCatalog, type AladinViewer } from 'aladin-lite';
-import { HIPS_CATALOG_PROVIDERS, isDuplicateRemoteSource } from '../catalogs';
-import { createCatalogMarker } from '../catalogMarker';
-import { MAX_NEARBY_RESULTS, querySimbadCone } from '../nearbyCatalogs';
-import { simbadViewportCone } from '../simbadViewport';
+import { HIPS_CATALOG_PROVIDERS, isDuplicateRemoteSource } from '../services/catalogs';
+import { createCatalogMarker } from '../utils/catalogMarker';
+import { MAX_NEARBY_RESULTS, querySimbadCone } from '../api/nearbyCatalogs';
+import { simbadViewportCone } from '../api/simbadViewport';
 
 /** Wait for the map to stop moving before asking SIMBAD. */
 const SETTLE_MS = 500;

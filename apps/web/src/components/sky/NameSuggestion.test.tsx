@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ApiError } from '../../api';
-import type { ResolvedName } from '../../types';
+import { ApiError } from '../../api/api';
+import type { ResolvedName } from '../../types/types';
 import { NameSuggestion, type SubmitLookup } from './NameSuggestion';
 
 const m31: ResolvedName = {

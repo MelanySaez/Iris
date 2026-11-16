@@ -9,7 +9,7 @@ import {
   selectionError,
 } from './records';
 import type { SelectionView } from './selectionView';
-import type { SelectionSummary } from './types';
+import type { SelectionSummary } from '../types/types';
 
 function selection(overrides: Partial<SelectionSummary> = {}): SelectionSummary {
   return {

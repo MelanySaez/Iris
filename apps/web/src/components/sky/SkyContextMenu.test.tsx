@@ -2,10 +2,10 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { createRef } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { searchNearbyCatalogs } from '../../nearbyCatalogs';
+import { searchNearbyCatalogs } from '../../api/nearbyCatalogs';
 import { chooseNearbyMenuPosition, SkyContextMenu } from './SkyContextMenu';
 
-vi.mock('../../nearbyCatalogs', () => ({
+vi.mock('../../api/nearbyCatalogs', () => ({
   DEFAULT_NEARBY_RADIUS_DEG: 0.1,
   searchNearbyCatalogs: vi.fn(),
 }));

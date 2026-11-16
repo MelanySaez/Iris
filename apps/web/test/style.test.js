@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 // Browsers drop every rule after a CSS syntax error without failing the build,
 // so a bad merge silently unstyles whole workspaces. Guard the stylesheet here.
-const css = readFileSync(new URL('../src/style.css', import.meta.url), 'utf8');
+const css = readFileSync(new URL('../src/styles/style.css', import.meta.url), 'utf8');
 const code = css.replace(/\/\*[\s\S]*?\*\//g, '');
 
 describe('style.css', () => {

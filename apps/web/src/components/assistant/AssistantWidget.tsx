@@ -1,13 +1,13 @@
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { api, ApiError, type AssistantLogEntry } from '../../api';
+import { api, ApiError, type AssistantLogEntry } from '../../api/api';
 import {
   describeAssistantAction,
   validateAssistantAction,
   type AssistantAction,
   type AssistantUiContext,
-} from '../../assistant';
+} from '../../services/assistant';
 
 /** Same limits the backend enforces. */
 const MAX_MESSAGE_CHARS = 2000;
