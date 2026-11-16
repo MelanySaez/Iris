@@ -1332,56 +1332,78 @@ button:disabled {
   overflow: hidden;
 }
 
-/* Collapsible sidebars: the column shrinks to 0 and the stage takes the room. */
+/* Collapsible sidebars: a collapsed sidebar shrinks to a 28px strip that
+   keeps only its toggle, so the control always sits on the sidebar. */
 .plate-columns-layout {
   transition: grid-template-columns 0.2s ease;
 }
 
 .plate-columns-layout.sheet-collapsed {
-  grid-template-columns: 0 1fr 300px;
+  grid-template-columns: 28px 1fr 300px;
 }
 
 .plate-columns-layout.rail-collapsed {
-  grid-template-columns: 260px 1fr 0;
+  grid-template-columns: 260px 1fr 28px;
 }
 
 .plate-columns-layout.sheet-collapsed.rail-collapsed {
-  grid-template-columns: 0 1fr 0;
+  grid-template-columns: 28px 1fr 28px;
 }
 
 .plate-columns-layout.sheet-collapsed > .plate-sheet,
 .plate-columns-layout.rail-collapsed > .spectral-rail {
-  width: 0;
+  width: 28px;
   min-width: 0;
-  padding: 0;
-  border: 0;
+  padding: 6px 0 0;
   overflow: hidden;
-  visibility: hidden;
+  align-items: center;
+}
+
+/* Collapsed content leaves the layout and the tab order; the toggle stays. */
+.plate-columns-layout.sheet-collapsed > .plate-sheet > :not(.panel-toggle),
+.plate-columns-layout.rail-collapsed > .spectral-rail > :not(.panel-toggle) {
+  display: none;
 }
 
 .panel-toggle {
   flex: none;
-  width: 28px;
-  height: 28px;
+  width: 24px;
+  height: 24px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid #3f3f46;
+  border: 1px solid var(--plate-rule-strong);
   border-radius: var(--radius-sm);
-  background: #1c1c1f;
-  color: #e4e4e7; /* 13.4:1 on #1c1c1f */
+  background: var(--plate-panel);
+  color: var(--plate-ink); /* 17.7:1 on white */
   cursor: pointer;
+}
+
+.plate-sheet > .panel-toggle {
+  align-self: flex-end;
+  margin-bottom: -6px; /* sits in the sheet's top padding, beside the header */
+}
+
+.spectral-rail > .panel-toggle {
+  align-self: flex-start;
+  margin: 6px 0 4px 8px;
+}
+
+.plate-columns-layout.sheet-collapsed > .plate-sheet > .panel-toggle,
+.plate-columns-layout.rail-collapsed > .spectral-rail > .panel-toggle {
+  align-self: center;
+  margin: 0;
 }
 
 .panel-toggle:hover,
 .panel-toggle:focus-visible {
-  border-color: #a1a1aa;
-  background: #2a2a2f;
+  border-color: var(--plate-ink);
+  background: var(--plate-paper);
 }
 
 .panel-toggle[aria-expanded='false'] {
-  border-color: var(--sky-warm);
-  color: var(--sky-warm);
+  border-color: var(--plate-rust);
+  color: var(--plate-rust); /* 4.7:1 on white */
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -2337,9 +2359,12 @@ button:disabled {
     overflow-y: auto;
   }
 
+  /* Stacked: a collapsed panel becomes a full-width row holding its toggle. */
   .plate-columns-layout.sheet-collapsed > .plate-sheet,
   .plate-columns-layout.rail-collapsed > .spectral-rail {
-    display: none;
+    width: auto;
+    padding: 6px 12px;
+    align-items: flex-start;
   }
 
   .plate-stage {

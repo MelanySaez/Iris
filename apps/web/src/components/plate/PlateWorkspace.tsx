@@ -448,8 +448,10 @@ export function PlateWorkspace({
         className={`plate-columns-layout${panels.sheetOpen ? '' : ' sheet-collapsed'}${panels.railOpen ? '' : ' rail-collapsed'}`}
       >
         {/* Column 1: Plate Sheet (260 px, collapsible) */}
-        <aside className="plate-sheet" aria-label="Plate Metadata Sheet"
-          aria-hidden={!panels.sheetOpen} inert={!panels.sheetOpen}>
+        <aside className="plate-sheet" aria-label="Plate Metadata Sheet">
+          {/* Stays visible when collapsed: the panel shrinks to this button. */}
+          <PanelToggle side="left" label="plate record" open={panels.sheetOpen}
+            onToggle={panels.toggleSheet} />
           <div className="sheet-header">
             <h2 className="sheet-title">Plate Record</h2>
             <span className="sheet-badge num">{currentDetectorStr}</span>
@@ -605,8 +607,6 @@ export function PlateWorkspace({
           <CubeFallbackNotice job={job} />
           {/* Controls Bar */}
           <div className="stage-controls-bar">
-            <PanelToggle side="left" label="plate record" open={panels.sheetOpen}
-              onToggle={panels.toggleSheet} />
             {/* Left: Product tabs (underlined text tabs) */}
             <div className="stage-product-tabs" role="tablist" aria-label="Cutout Products">
               <button
@@ -732,8 +732,6 @@ export function PlateWorkspace({
                 Reset
               </button>
             </div>
-            <PanelToggle side="right" label="spectral channels" open={panels.railOpen}
-              onToggle={panels.toggleRail} />
           </div>
 
           {/* Charcoal Matte Viewport */}
@@ -917,12 +915,12 @@ export function PlateWorkspace({
         <aside
           ref={railContainerRef}
           className="spectral-rail"
-          aria-hidden={!panels.railOpen}
-          inert={!panels.railOpen}
           tabIndex={panels.railOpen ? 0 : -1}
           onKeyDown={handleRailKeyDown}
           aria-label="102-channel spectral rail"
         >
+          <PanelToggle side="right" label="spectral channels" open={panels.railOpen}
+            onToggle={panels.toggleRail} />
           {pollError && (
             <div className="plate-poll-alert" role="alert">
               <strong>Job updates interrupted</strong>
