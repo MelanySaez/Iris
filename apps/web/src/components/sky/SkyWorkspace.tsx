@@ -804,6 +804,11 @@ export function SkyWorkspace({
   // Pointer drag for region selection
   const handlePointerDown = (e: React.PointerEvent) => {
     if (mode !== 'region') return;
+    // Only a press on the sky itself starts a rectangle. The toolbar, docks,
+    // cards and other floating controls live inside the map shell too, and a
+    // press on them must keep doing what that control does.
+    const sky = mapRef.current?.querySelector('#aladin-view');
+    if (!sky || !(e.target instanceof Node) || !sky.contains(e.target)) return;
     e.preventDefault();
     const world = toWorld(e);
     if (!world) return;
