@@ -1,0 +1,327 @@
+{
+  "observed_on": "2026-11-15",
+  "access": "Anonymous HTTPS S3 Range via custom fsspec adapter (httpx); no AWS credentials",
+  "full_download_baseline": "HEAD Content-Length, not an actual full download timing benchmark",
+  "samples": {
+    "dr1": {
+      "uri": "s3://nasa-irsa-spherex/dr1/level2/2025W17_4B/l2b-v27-2026-196/1/level2_2025W17_4B_0001_1D1_spx_l2b-v27-2026-196.fits",
+      "release": "dr1",
+      "processing": "l2b-v27-2026-196",
+      "center": [
+        160.61699069788853,
+        30.670454926168155
+      ],
+      "headers_transfer": {
+        "object_bytes": 65393280,
+        "body_bytes": 89600,
+        "range_gets": 15,
+        "head_requests": 1,
+        "fraction": 0.0013701713692905449
+      },
+      "headers_seconds": 2.256861858000775,
+      "hdus": [
+        {
+          "name": "PRIMARY",
+          "kind": "PrimaryHDU",
+          "shape": [],
+          "metadata": {
+            "VERSION": "7.0.5"
+          }
+        },
+        {
+          "name": "IMAGE",
+          "kind": "ImageHDU",
+          "shape": [
+            2040,
+            2040
+          ],
+          "metadata": {
+            "OBSID": "2025W17_4B_0001_1",
+            "DATE-OBS": "2025-04-24T18:01:05.843",
+            "DATE-BEG": "2025-04-24T18:01:05.843",
+            "DATE-END": "2025-04-24T18:03:00.961",
+            "MJD-OBS": 60789.750762072,
+            "MJD-BEG": 60789.750762072,
+            "MJD-END": 60789.75209445,
+            "DETECTOR": 1
+          }
+        },
+        {
+          "name": "FLAGS",
+          "kind": "CompImageHDU",
+          "shape": [
+            2040,
+            2040
+          ],
+          "metadata": {
+            "DATE-OBS": "2025-04-24T18:01:05.843",
+            "DATE-BEG": "2025-04-24T18:01:05.843",
+            "DATE-END": "2025-04-24T18:03:00.961",
+            "MJD-OBS": 60789.750762072,
+            "MJD-BEG": 60789.750762072,
+            "MJD-END": 60789.75209445
+          }
+        },
+        {
+          "name": "VARIANCE",
+          "kind": "ImageHDU",
+          "shape": [
+            2040,
+            2040
+          ],
+          "metadata": {
+            "DATE-OBS": "2025-04-24T18:01:05.843",
+            "DATE-BEG": "2025-04-24T18:01:05.843",
+            "DATE-END": "2025-04-24T18:03:00.961",
+            "MJD-OBS": 60789.750762072,
+            "MJD-BEG": 60789.750762072,
+            "MJD-END": 60789.75209445
+          }
+        },
+        {
+          "name": "ZODI",
+          "kind": "ImageHDU",
+          "shape": [
+            2040,
+            2040
+          ],
+          "metadata": {
+            "DATE-OBS": "2025-04-24T18:01:05.843",
+            "DATE-BEG": "2025-04-24T18:01:05.843",
+            "DATE-END": "2025-04-24T18:03:00.961",
+            "MJD-OBS": 60789.750762072,
+            "MJD-BEG": 60789.750762072,
+            "MJD-END": 60789.75209445
+          }
+        },
+        {
+          "name": "EPSF",
+          "kind": "BinTableHDU",
+          "shape": null,
+          "metadata": {
+            "DETECTOR": "1"
+          }
+        },
+        {
+          "name": "WCS-WAVE",
+          "kind": "BinTableHDU",
+          "shape": null,
+          "metadata": {
+            "DETECTOR": "1"
+          }
+        }
+      ],
+      "cutout": {
+        "verification": {
+          "spatial_error_arcsec": 0.0,
+          "spectral_wcs_matches": true
+        },
+        "shape": [
+          10,
+          10
+        ],
+        "origin_xy": [
+          1015,
+          1015
+        ],
+        "requested_center": [
+          160.61699069788853,
+          30.670454926168155
+        ],
+        "transfer": {
+          "object_bytes": 65393280,
+          "body_bytes": 4163133,
+          "range_gets": 58,
+          "head_requests": 1,
+          "fraction": 0.06366300941014122
+        },
+        "elapsed_seconds": 12.64643873499881
+      },
+      "pipeline_extractor": {
+        "passed": true,
+        "arrays": [
+          "image",
+          "variance",
+          "flags",
+          "wavelength",
+          "bandwidth"
+        ],
+        "all_finite": true,
+        "shape": [
+          10,
+          10
+        ],
+        "fits_checksums_valid": true
+      }
+    },
+    "qr3": {
+      "uri": "s3://nasa-irsa-spherex/qr3/level2/2026W20_2A/l2b-v27-2026-267/1/level2_2026W20_2A_0001_1D1_spx_l2b-v27-2026-267.fits",
+      "release": "qr3",
+      "processing": "l2b-v27-2026-267",
+      "center": [
+        327.9851231538639,
+        -48.703782805262996
+      ],
+      "headers_transfer": {
+        "object_bytes": 65977920,
+        "body_bytes": 89600,
+        "range_gets": 15,
+        "head_requests": 1,
+        "fraction": 0.0013580300803662801
+      },
+      "headers_seconds": 1.9688632239995059,
+      "hdus": [
+        {
+          "name": "PRIMARY",
+          "kind": "PrimaryHDU",
+          "shape": [],
+          "metadata": {
+            "VERSION": "7.0.5"
+          }
+        },
+        {
+          "name": "IMAGE",
+          "kind": "ImageHDU",
+          "shape": [
+            2040,
+            2040
+          ],
+          "metadata": {
+            "OBSID": "2026W20_2A_0001_1",
+            "DATE-OBS": "2026-05-14T12:08:39.329",
+            "DATE-BEG": "2026-05-14T12:08:39.329",
+            "DATE-END": "2026-05-14T12:10:34.446",
+            "MJD-OBS": 61174.506010752,
+            "MJD-BEG": 61174.506010752,
+            "MJD-END": 61174.507343131,
+            "DETECTOR": 1
+          }
+        },
+        {
+          "name": "FLAGS",
+          "kind": "CompImageHDU",
+          "shape": [
+            2040,
+            2040
+          ],
+          "metadata": {
+            "DATE-OBS": "2026-05-14T12:08:39.329",
+            "DATE-BEG": "2026-05-14T12:08:39.329",
+            "DATE-END": "2026-05-14T12:10:34.446",
+            "MJD-OBS": 61174.506010752,
+            "MJD-BEG": 61174.506010752,
+            "MJD-END": 61174.507343131
+          }
+        },
+        {
+          "name": "VARIANCE",
+          "kind": "ImageHDU",
+          "shape": [
+            2040,
+            2040
+          ],
+          "metadata": {
+            "DATE-OBS": "2026-05-14T12:08:39.329",
+            "DATE-BEG": "2026-05-14T12:08:39.329",
+            "DATE-END": "2026-05-14T12:10:34.446",
+            "MJD-OBS": 61174.506010752,
+            "MJD-BEG": 61174.506010752,
+            "MJD-END": 61174.507343131
+          }
+        },
+        {
+          "name": "ZODI",
+          "kind": "ImageHDU",
+          "shape": [
+            2040,
+            2040
+          ],
+          "metadata": {
+            "DATE-OBS": "2026-05-14T12:08:39.329",
+            "DATE-BEG": "2026-05-14T12:08:39.329",
+            "DATE-END": "2026-05-14T12:10:34.446",
+            "MJD-OBS": 61174.506010752,
+            "MJD-BEG": 61174.506010752,
+            "MJD-END": 61174.507343131
+          }
+        },
+        {
+          "name": "EPSF",
+          "kind": "BinTableHDU",
+          "shape": null,
+          "metadata": {
+            "DETECTOR": "1"
+          }
+        },
+        {
+          "name": "WCS-WAVE",
+          "kind": "BinTableHDU",
+          "shape": null,
+          "metadata": {
+            "DETECTOR": "1"
+          }
+        }
+      ],
+      "cutout": {
+        "verification": {
+          "spatial_error_arcsec": 0.0,
+          "spectral_wcs_matches": true
+        },
+        "shape": [
+          10,
+          10
+        ],
+        "origin_xy": [
+          1015,
+          1015
+        ],
+        "requested_center": [
+          327.9851231538639,
+          -48.703782805262996
+        ],
+        "transfer": {
+          "object_bytes": 65977920,
+          "body_bytes": 4166032,
+          "range_gets": 58,
+          "head_requests": 1,
+          "fraction": 0.06314282111348767
+        },
+        "elapsed_seconds": 7.771504058000573
+      },
+      "pipeline_extractor": {
+        "passed": true,
+        "arrays": [
+          "image",
+          "variance",
+          "flags",
+          "wavelength",
+          "bandwidth"
+        ],
+        "all_finite": true,
+        "shape": [
+          10,
+          10
+        ],
+        "fits_checksums_valid": true
+      }
+    }
+  },
+  "off_center_live_tests": {
+    "passed": 2,
+    "seconds": 22.55,
+    "dr1_body_bytes": 4347722,
+    "qr3_body_bytes": 4354492,
+    "range_gets_each": 98,
+    "includes_extra_reference_reads": true
+  },
+  "index": {
+    "rows": 2,
+    "matching_dr1_center": 1,
+    "unindexed_coordinate": [
+      0,
+      0
+    ],
+    "unindexed_result": "unknown_not_indexed",
+    "complete": false
+  }
+}

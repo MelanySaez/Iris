@@ -1141,7 +1141,7 @@ export function SkyWorkspace({
                 />
               </label>
               <label className="span-2">
-                <span>Size (arcmin, 1..60)</span>
+                <span>Size (arcmin, 1..180)</span>
                 <input
                   type="text"
                   className="rail-input num"
@@ -1462,7 +1462,7 @@ export function SkyWorkspace({
                 className={`tool-btn ${mode === 'region' ? 'active' : ''}`}
                 aria-pressed={mode === 'region'}
                 disabled={!aladinReady}
-                title="Drag rectangle to select region (1..60 arcmin)"
+                title="Drag rectangle to select region (1..180 arcmin)"
                 data-tour="region-tool"
                 onClick={() => setMode('region')}
               >

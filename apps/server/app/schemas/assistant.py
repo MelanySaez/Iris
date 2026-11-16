@@ -38,7 +38,7 @@ class Region(BaseModel):
 
     ra_deg: float = Field(ge=0, lt=360)
     dec_deg: float = Field(ge=-90, le=90)
-    size_arcmin: float = Field(ge=1, le=60)
+    size_arcmin: float = Field(ge=1, le=180)
 
 
 class UiContext(BaseModel):

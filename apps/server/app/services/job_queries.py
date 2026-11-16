@@ -14,7 +14,6 @@ import numpy as np
 
 from app.core.config import (
     CALIBRATED,
-    MULTI_PRODUCT_MOSAIC,
     WAVELENGTH_STATUS,
 )
 from app.exceptions.domain import (
@@ -30,7 +29,15 @@ from app.services.jobs import JobState, job_manager, resolve_cutout
 from app.services.rendering import compute_cutout_percentiles, render_frame_product
 
 PNG_PRODUCTS = ("image", "variance", "flags")
-NPY_PRODUCTS = ("image", "variance", "flags", "wavelengths", "bandwidths")
+NPY_PRODUCTS = (
+    "image",
+    "variance",
+    "flags",
+    "wavelengths",
+    "bandwidths",
+    "coverage",
+    "nhits",
+)
 
 
 def _ready_job(job_id: str) -> JobState:
@@ -64,13 +71,11 @@ def render_frame_png(
     if mode not in ("full", "slice"):
         raise FrameOptionError(f"mode must be 'full' or 'slice', got '{mode}'.")
     if stretch is not None and stretch not in ("asinh", "linear"):
-        raise FrameOptionError(
-            f"stretch must be 'asinh' or 'linear', got '{stretch}'."
-        )
+        raise FrameOptionError(f"stretch must be 'asinh' or 'linear', got '{stretch}'.")
 
     ch_info = get_channel(channel)
     det = (channel // 17) + 1
-    cutout = resolve_cutout(job, det, epoch)
+    cutout = resolve_cutout(job, det, epoch, channel)
     if cutout is None:
         raise CutoutUnavailableError(
             f"No cutout available for channel {channel} "
@@ -80,11 +85,34 @@ def render_frame_png(
 
     active_stretch = stretch or job.request.stretch
     target_prod = product if product in ("image", "variance") else "image"
-    percentiles = job.percentiles.get((det, epoch, target_prod))
+    if cutout.metadata.get("calibrated"):
+        percentile_key = (channel, -1, target_prod)
+    elif cutout.metadata.get("source") == "cube":
+        # Cube cutouts are per channel: a per-detector key would share one
+        # stretch across every channel of the detector.
+        percentile_key = ("cube", channel, target_prod)
+    else:
+        percentile_key = (det, epoch, target_prod)
+    percentiles = job.percentiles.get(percentile_key)
     if percentiles is None:
-        arr = getattr(cutout, target_prod)
-        percentiles = compute_cutout_percentiles(arr, is_variance=(product == "variance"))
-        job.percentiles[(det, epoch, target_prod)] = percentiles
+        if cutout.metadata.get("calibrated"):
+            from app.services.mosaics import shared_percentiles
+
+            samples = []
+            for metadata in job.cutouts:
+                if metadata.get("channel") != channel:
+                    continue
+                other = resolve_cutout(job, det, metadata["epoch"], channel)
+                if other is not None:
+                    arr = getattr(other, target_prod).ravel()
+                    samples.append(arr[:: max(1, int(np.ceil(arr.size / 100_000)))])
+            percentiles = shared_percentiles(samples)
+        else:
+            arr = getattr(cutout, target_prod)
+            percentiles = compute_cutout_percentiles(
+                arr, is_variance=(product == "variance")
+            )
+        job.percentiles[percentile_key] = percentiles
 
     win_min, win_max = get_channel_window(channel)
     half_window = (win_max - win_min) / 2.0
@@ -123,7 +151,7 @@ def get_frame_npy(job_id: str, channel: int, product: str, epoch: int = 0) -> by
         )
 
     det = (channel // 17) + 1
-    cutout = resolve_cutout(job, det, epoch)
+    cutout = resolve_cutout(job, det, epoch, channel)
     if cutout is None:
         raise CutoutUnavailableError(
             f"No cutout loaded for channel {channel} "
@@ -141,6 +169,12 @@ def get_frame_npy(job_id: str, channel: int, product: str, epoch: int = 0) -> by
         arr = cutout.wavelength
     elif product == "bandwidths":
         arr = cutout.bandwidth
+    elif product in ("coverage", "nhits"):
+        arr = getattr(cutout, product, None)
+        if arr is None:
+            raise CutoutUnavailableError(
+                "Coverage is available only for calibrated mosaics"
+            )
     else:  # pragma: no cover - guarded by NPY_PRODUCTS above
         raise UnknownProductError("Invalid product")
 
@@ -160,7 +194,7 @@ def get_pixel_probe(
     job = _ready_job(job_id)
 
     det = (channel // 17) + 1
-    cutout = resolve_cutout(job, det, epoch)
+    cutout = resolve_cutout(job, det, epoch, channel)
     if cutout is None:
         raise CutoutUnavailableError(
             f"Cutout for channel {channel} (detector {det}) epoch {epoch} "
@@ -209,8 +243,8 @@ def get_pixel_probe(
         "variance": var_val,
         "flags": raw_flags,
         "flag_bits": set_flag_bits,
-        "wavelength_status": WAVELENGTH_STATUS,
-        "calibrated": CALIBRATED,
+        "wavelength_status": cutout.metadata.get("wavelength_status", WAVELENGTH_STATUS),
+        "calibrated": bool(cutout.metadata.get("calibrated", CALIBRATED)),
     }
 
 
@@ -227,7 +261,7 @@ def get_job_manifest(job_id: str) -> dict[str, Any]:
     for c in job.cutouts:
         det = c["detector"]
         epoch = c["epoch"]
-        cutout = resolve_cutout(job, det, epoch)
+        cutout = resolve_cutout(job, det, epoch, c.get("channel"))
         uri = c.get("uri", "") or (cutout.uri if cutout else "")
         version = c.get("version", "") or (
             cutout.metadata.get("version", "") if cutout else ""
@@ -256,6 +290,11 @@ def get_job_manifest(job_id: str) -> dict[str, Any]:
         manifest_cutouts.append(
             {
                 "detector": det,
+                "channel": c.get("channel"),
+                "calibrated": c.get("calibrated", False),
+                "wavelength_status": c.get("wavelength_status", WAVELENGTH_STATUS),
+                "epoch_id": c.get("epoch_id", ""),
+                "provenance": c.get("provenance", []),
                 "epoch": epoch,
                 "obs_id": c.get("obs_id", ""),
                 "source": c.get("source", "remote"),
@@ -273,10 +312,11 @@ def get_job_manifest(job_id: str) -> dict[str, Any]:
             }
         )
 
-    release = "SPHEREx DR1 level-2"
+    release = "SPHEREx Level-2"
     if versions:
-        release = f"SPHEREx DR1 level-2 ({', '.join(sorted(versions))})"
+        release = f"SPHEREx Level-2 ({', '.join(sorted(versions))})"
 
+    status = job.to_snapshot()
     return {
         "job_id": job.id,
         "request": job.request.model_dump(),
@@ -290,19 +330,51 @@ def get_job_manifest(job_id: str) -> dict[str, Any]:
         "release": release,
         "dates": sorted(dates),
         "units": units or {"image": "MJy / sr", "variance": "MJy2 / sr2"},
-        "lvf_status": WAVELENGTH_STATUS,
-        "wavelength_status": WAVELENGTH_STATUS,
-        "calibrated": CALIBRATED,
+        "lvf_status": status["wavelength_status"],
+        "wavelength_status": status["wavelength_status"],
+        "calibrated": status["calibrated"],
         "flag_definitions": [flag_definitions[b] for b in sorted(flag_definitions)],
         "cache": {"hit": job.cache_hit},
-        "multi_product_mosaic": MULTI_PRODUCT_MOSAIC,
-        "collection": "SPHEREx DR1 Level-2 spectral image cutouts",
+        "multi_product_mosaic": status["multi_product_mosaic"],
+        "collection": "SPHEREx Level-2 spectral image cutouts",
         "cutouts": manifest_cutouts,
-        "notes": [
-            (
-                "WCS-WAVE is approximate visualization-grade; "
-                "calibrated CWAVE/CBAND unavailable in this release."
-            ),
-            "Multi-product mosaicking is pending; cutouts are single-detector products.",
-        ],
+        "notes": (
+            [
+                "CWAVE/CBAND verified per product; "
+                "inverse-variance nearest-sampled mosaics.",
+                "Epochs remain separate. Output-pixel covariance is not modeled; "
+                "ZODI is not subtracted.",
+                "Coverage and hit counts are cached; "
+                "provider/algorithm/calibration provenance is retained.",
+            ]
+            if status["calibrated"]
+            else [
+                "WCS-WAVE is approximate visualization-grade; no verified calibration.",
+                "This is a single detector cutout, not a calibrated temporal mosaic.",
+            ]
+        ),
     }
+
+
+def render_animation_gif(job_id: str, channel: int) -> bytes:
+    """Export only verified same-channel epochs, using the PNG shared stretch."""
+    from app.services.mosaics import encode_gif
+
+    job = _ready_job(job_id)
+    if channel not in job.request.channels:
+        raise FrameOptionError("Channel was not requested in this job")
+    metadata = sorted(
+        (c for c in job.cutouts if c.get("channel") == channel and c.get("calibrated")),
+        key=lambda c: (c["date_iso"], c["epoch"]),
+    )
+    if not 2 <= len(metadata) <= 12:
+        raise FrameOptionError("Animation requires 2–12 verified calibrated epochs")
+    images = []
+    for item in metadata:
+        cutout = resolve_cutout(job, (channel // 17) + 1, item["epoch"], channel)
+        if cutout is None or not cutout.metadata.get("calibrated"):
+            raise CutoutUnavailableError(
+                "A calibrated animation epoch is no longer cached"
+            )
+        images.append(cutout.image)
+    return encode_gif(images, job.request.stretch)

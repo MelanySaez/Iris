@@ -2,6 +2,14 @@ import { describe, expect, it } from 'vitest';
 import { describeAssistantAction, guideCueFor, validateAssistantAction } from './assistant';
 
 describe('validateAssistantAction', () => {
+  it('accepts 180-arcmin mosaics and rejects larger assistant regions', () => {
+    for (const size_arcmin of [1, 60, 180]) {
+      expect(validateAssistantAction({ type: 'show_region', ra_deg: 10, dec_deg: 0, size_arcmin }))
+        .toEqual({ action: { type: 'show_region', ra_deg: 10, dec_deg: 0, size_arcmin } });
+    }
+    expect(validateAssistantAction({ type: 'show_region', ra_deg: 10, dec_deg: 0, size_arcmin: 181 }))
+      .toEqual({ error: 'size_arcmin must be in [1, 180]' });
+  });
   it('accepts every action the backend can return', () => {
     expect(validateAssistantAction({ type: 'navigate', workspace: 'records' })).toEqual({
       action: { type: 'navigate', workspace: 'records' },

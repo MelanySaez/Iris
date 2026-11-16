@@ -34,7 +34,7 @@ class JobView(BaseModel):
 class JobRequest(BaseModel):
     ra_deg: float
     dec_deg: float = Field(ge=-90.0, le=90.0)
-    size_arcmin: float = Field(default=6.0, ge=1.0, le=60.0)
+    size_arcmin: float = Field(default=6.0, ge=1.0, le=180.0)
     channels: list[int] = Field(default_factory=lambda: [44], min_length=1, max_length=8)
     products: list[Literal["image", "variance", "flags"]] = Field(
         default_factory=lambda: ["image"]
@@ -56,7 +56,12 @@ class CutoutMetadata(BaseModel):
     epoch: int
     obs_id: str
     date_iso: str
-    source: Literal["remote"]
+    source: Literal["remote", "s3", "mixed", "cube"]
+    channel: int | None = None
+    calibrated: bool = False
+    wavelength_status: str = "wcs_wave_approximate"
+    provenance: list[dict[str, Any]] = Field(default_factory=list)
+    epoch_id: str = ""
     uri: str = ""
     version: str = ""
     shape: list[int]
@@ -77,7 +82,11 @@ class FrameDescriptor(BaseModel):
     epoch: int
     obs_id: str
     date_iso: str
-    source: Literal["remote"]
+    source: Literal["remote", "s3", "mixed", "cube"]
+    calibrated: bool = False
+    wavelength_status: str = "wcs_wave_approximate"
+    provenance: list[dict[str, Any]] = Field(default_factory=list)
+    epoch_id: str = ""
     width: int
     height: int
     url: str
@@ -111,6 +120,9 @@ class JobSnapshot(BaseModel):
     products: list[str]
     frames: list[FrameDescriptor] = Field(default_factory=list)
     cutouts: list[CutoutMetadata] = Field(default_factory=list)
+    animation_reason: str | None = None
+    activity: dict[str, Any] | None = None
+    discovery: dict[str, Any] = Field(default_factory=dict)
     cache: dict[str, bool] = Field(default_factory=lambda: {"hit": False})
     wavelength_status: str = "wcs_wave_approximate"
     calibrated: bool = False
@@ -138,7 +150,12 @@ class ManifestCutout(BaseModel):
     detector: int
     epoch: int
     obs_id: str
-    source: Literal["remote"]
+    source: Literal["remote", "s3", "mixed", "cube"]
+    channel: int | None = None
+    calibrated: bool = False
+    wavelength_status: str = "wcs_wave_approximate"
+    provenance: list[dict[str, Any]] = Field(default_factory=list)
+    epoch_id: str = ""
     uri: str
     version: str = ""
     date_obs: str

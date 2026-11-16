@@ -14,17 +14,17 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.api.deps import get_assistant
+from app.main import app
+from app.repositories.assistant_log import AssistantLog
 from app.services.assistant.cache import ResponseCache, normalize_query
 from app.services.assistant.guardrails import (
     RateLimiter,
     detect_injection,
     sanitize_untrusted,
 )
-from app.repositories.assistant_log import AssistantLog
 from app.services.assistant.prompt import CANARY, SYSTEM_PROMPT
 from app.services.assistant.service import Assistant
 from app.services.assistant.tools import ToolInputError, validate_ui_tool
-from app.main import app
 
 CONVERSATION = "3f1c2a4e-0b7d-4c55-9a6e-1d2f3a4b5c6d"
 CONTEXT = {"workspace": "sky", "channel": 44, "color_mode": "single"}
@@ -283,9 +283,7 @@ def test_malformed_tool_arguments_are_rejected(api):
 def test_server_tool_results_are_wrapped_as_untrusted_data(api):
     client, _, fake = api(
         [
-            reply(
-                tool_block("search_catalog", {"query": "M101"}, "t1"), stop="tool_use"
-            ),
+            reply(tool_block("search_catalog", {"query": "M101"}, "t1"), stop="tool_use"),
             reply(text_block("Found M101.")),
         ]
     )
@@ -761,7 +759,7 @@ def test_untrusted_text_is_sanitized():
     [
         ("show_region", {"ra_deg": 400, "dec_deg": 0, "size_arcmin": 6}, "ra_deg"),
         ("show_region", {"ra_deg": 10, "dec_deg": 95, "size_arcmin": 6}, "dec_deg"),
-        ("show_region", {"ra_deg": 10, "dec_deg": 0, "size_arcmin": 90}, "size_arcmin"),
+        ("show_region", {"ra_deg": 10, "dec_deg": 0, "size_arcmin": 181}, "size_arcmin"),
         ("set_channel", {"channel": 102}, "channel"),
         ("set_color_mode", {"mode": "rgb", "rgb": None}, "rgb"),
         ("set_color_mode", {"mode": "single", "rgb": [1, 2, 3]}, "rgb"),

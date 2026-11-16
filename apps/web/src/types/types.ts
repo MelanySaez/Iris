@@ -74,7 +74,7 @@ export interface RegionResolveResponse {
   warning: string | null;
   products: Array<{
     id: string;
-    source: 'remote';
+    source: 'remote' | 's3' | 'mixed' | 'cube';
     detector: number;
     band: string;
     obs_id: string;
@@ -116,11 +116,16 @@ export interface FlagBit {
 }
 
 export interface JobCutout {
+  channel?: number;
+  calibrated?: boolean;
+  wavelength_status?: string;
+  provenance?: Array<Record<string, unknown>>;
+  epoch_id?: string;
   detector: number;
   epoch: number;
   obs_id: string;
   date_iso: string;
-  source: 'remote';
+  source: 'remote' | 's3' | 'mixed' | 'cube';
   uri?: string;
   version?: string;
   shape: [number, number];
@@ -135,13 +140,17 @@ export interface JobCutout {
 }
 
 export interface JobFrame {
+  calibrated?: boolean;
+  wavelength_status?: string;
+  provenance?: Array<Record<string, unknown>>;
+  epoch_id?: string;
   channel: number;
   product: ProductType;
   detector: number;
   epoch: number;
   obs_id: string;
   date_iso: string;
-  source: 'remote';
+  source: 'remote' | 's3' | 'mixed' | 'cube';
   width: number;
   height: number;
   url: string;
@@ -182,16 +191,41 @@ export interface JobSnapshot {
   wavelength_status: string;
   calibrated: boolean;
   multi_product_mosaic: string;
+  discovery?: Record<string, unknown>;
+  animation_reason?: string | null;
+  /** What the worker is doing right now; null between steps and when finished. */
+  activity?: JobActivity | null;
+}
+
+export interface JobActivity {
+  kind: 'discovery_attempt' | 'retry_wait' | 'fallback' | 'cube_read';
+  provider?: string;
+  attempt?: number;
+  max_attempts?: number;
+  /** Time budget of this step in seconds (attempt deadline or retry wait). */
+  budget_seconds?: number | null;
+  /** Seconds since the step started, measured by the server at snapshot time. */
+  elapsed_seconds?: number;
+  channel?: number;
+  channel_index?: number;
+  channels?: number;
+  tiles_done?: number;
+  tiles_total?: number | null;
 }
 
 export interface JobEvent {
+  message?: string;
+  error_kind?: string;
+  fallback?: boolean;
+  coverage_state?: string;
   stage: string;
   at: number;
   event_type?: string;
   provider?: string;
   attempt?: number;
   max_attempts?: number;
-  outcome?: 'started' | 'succeeded' | 'failed';
+  outcome?: 'started' | 'succeeded' | 'failed' | 'unavailable';
+  temporal_available?: boolean;
   will_retry?: boolean;
   retry_after_seconds?: number | null;
   detail?: string;

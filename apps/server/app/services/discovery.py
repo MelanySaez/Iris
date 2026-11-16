@@ -2,13 +2,18 @@
 
 from __future__ import annotations
 
+import copy
 import hashlib
 import io
 import json
 import logging
+import math
 import re
+import threading
 import time
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
+from urllib.parse import urljoin
 
 import httpx
 from astropy.table import Table
@@ -17,15 +22,27 @@ from astropy.time import Time
 from app.core.config import (
     DISCOVERY_CACHE_DIR,
     DISCOVERY_TTL_SECONDS,
+    FALLBACK_REUSE_SECONDS,
     MAX_REGION_SIZE_ARCMIN,
     MIN_REGION_SIZE_ARCMIN,
+    TAP_ATTEMPT_DEADLINE_SECONDS,
     TAP_QUERY_RETRIES,
     TAP_QUERY_TIMEOUT,
     TAP_SYNC_URL,
 )
 from app.exceptions.domain import RegionRequestError
+from app.services.cube_fallback import (
+    CUBE_COVERAGE_STATE,
+    CUBE_PROVIDER,
+    CubeUpstreamError,
+    discover_cube,
+)
+from app.services.spherex_provider import query_index
 
 logger = logging.getLogger(__name__)
+TAP_PAGE_SIZE = 400
+TAP_MAX_PAGES = 10
+
 DiscoveryAttemptObserver = Callable[[dict[str, Any]], None]
 
 
@@ -43,8 +60,21 @@ def _notify_discovery_attempt(
 
 def discovery_cache_key(ra_deg: float, dec_deg: float, size_arcmin: float) -> str:
     """Generate deterministic SHA-1 cache key for discovery results."""
-    token = f"{ra_deg:.5f}:{dec_deg:.5f}:{size_arcmin:.3f}"
+    token = f"area-v2:{ra_deg:.5f}:{dec_deg:.5f}:{size_arcmin:.3f}"
     return hashlib.sha1(token.encode("utf-8")).hexdigest()
+
+
+class TapServiceError(ValueError):
+    """IRSA TAP answered without a result table (QUERY_STATUS=ERROR or no TABLE).
+
+    The query is fixed and server-built, so this is a provider failure, not
+    invalid user input: it is treated as an outage and may fall back.
+    """
+
+
+_QUERY_STATUS_ERROR = re.compile(
+    rb'<INFO[^>]*name="QUERY_STATUS"[^>]*value="ERROR"[^>]*>(.*?)</INFO>', re.S
+)
 
 
 def parse_tap_votable(
@@ -54,7 +84,16 @@ def parse_tap_votable(
     size_arcmin: float,
 ) -> list[dict[str, Any]]:
     """Parse TAP sync votable output into product descriptors."""
-    table = Table.read(io.BytesIO(xml_bytes), format="votable", use_names_over_ids=True)
+    status = _QUERY_STATUS_ERROR.search(xml_bytes)
+    if status:
+        message = status.group(1).decode("utf-8", "replace").strip()
+        raise TapServiceError(message[:200] or "QUERY_STATUS=ERROR")
+    try:
+        table = Table.read(
+            io.BytesIO(xml_bytes), format="votable", use_names_over_ids=True
+        )
+    except ValueError as exc:
+        raise TapServiceError(f"IRSA TAP returned no result table ({exc})") from None
     products: list[dict[str, Any]] = []
 
     # Map column names
@@ -88,12 +127,51 @@ def parse_tap_votable(
                 "band": band_name,
                 "obs_id": obs_id,
                 "uri": uri,
+                "original_product_uri": urljoin(
+                    "https://irsa.ipac.caltech.edu/", str(row["source_uri"])
+                )
+                if "source_uri" in table.colnames
+                else uri.split("?")[0],
+                "artifact_uri": str(row["source_uri"])
+                if "source_uri" in table.colnames
+                else uri.split("?")[0],
                 "date_mjd": round(mjd, 6),
                 "date_iso": date_iso,
             }
         )
 
     return products
+
+
+class DeadlineExceeded(Exception):
+    """One TAP attempt used up its wall-clock budget (an outage, not bad input)."""
+
+
+_recent_fallbacks: dict[str, tuple[float, dict[str, Any]]] = {}
+_recent_fallbacks_lock = threading.Lock()
+
+
+def _remember_fallback(key: str, result: dict[str, Any]) -> None:
+    with _recent_fallbacks_lock:
+        _recent_fallbacks[key] = (time.time(), copy.deepcopy(result))
+
+
+def _recent_fallback(key: str) -> tuple[float, dict[str, Any]] | None:
+    """A fallback result for this region younger than FALLBACK_REUSE_SECONDS."""
+    with _recent_fallbacks_lock:
+        entry = _recent_fallbacks.get(key)
+        if entry is None:
+            return None
+        if time.time() - entry[0] > FALLBACK_REUSE_SECONDS:
+            del _recent_fallbacks[key]
+            return None
+        return entry[0], copy.deepcopy(entry[1])
+
+
+def forget_recent_fallbacks() -> None:
+    """Drop every remembered fallback (tests and explicit refreshes)."""
+    with _recent_fallbacks_lock:
+        _recent_fallbacks.clear()
 
 
 def query_irsa_tap(
@@ -108,17 +186,21 @@ def query_irsa_tap(
         "'https://irsa.ipac.caltech.edu/' || a.uri || "
         f"'?center={ra_deg:.6f},{dec_deg:.6f}d&size={size_deg:.4f}' AS uri"
     )
-    query = f"""
-SELECT TOP 400
+    query_template = f"""
+SELECT TOP {TAP_PAGE_SIZE}
     {uri_template},
     p.time_bounds_lower,
     p.energy_bandpassname,
-    p.planeid
+    p.planeid,
+    a.uri AS source_uri
 FROM spherex.artifact a
 JOIN spherex.plane p ON a.planeid = p.planeid
-WHERE 1 = CONTAINS(POINT('ICRS', {ra_deg:.6f}, {dec_deg:.6f}), p.poly)
-ORDER BY p.time_bounds_lower
+WHERE 1 = INTERSECTS(BOX('ICRS', {ra_deg:.6f}, {dec_deg:.6f},
+    {size_deg:.6f}, {size_deg:.6f}), p.poly)
+{{cursor}}
+ORDER BY a.uri
 """
+    query = query_template.format(cursor="")
     data = {
         "REQUEST": "doQuery",
         "LANG": "ADQL",
@@ -129,21 +211,62 @@ ORDER BY p.time_bounds_lower
     last_err: str | None = None
     max_attempts = TAP_QUERY_RETRIES + 1
     for attempt in range(1, max_attempts + 1):
+        data["QUERY"] = query
         attempt_info = {
             "event_type": "discovery_attempt",
             "provider": "IRSA TAP",
             "attempt": attempt,
             "max_attempts": max_attempts,
         }
-        _notify_discovery_attempt(on_attempt, {**attempt_info, "outcome": "started"})
+        _notify_discovery_attempt(
+            on_attempt,
+            {
+                **attempt_info,
+                "outcome": "started",
+                "deadline_seconds": TAP_ATTEMPT_DEADLINE_SECONDS,
+            },
+        )
         detail: str | None = None
+        deadline = time.monotonic() + TAP_ATTEMPT_DEADLINE_SECONDS
+
+        def remaining() -> float:
+            left = deadline - time.monotonic()
+            if left <= 0:
+                raise DeadlineExceeded(
+                    f"attempt took longer than {TAP_ATTEMPT_DEADLINE_SECONDS:g} s"
+                )
+            return min(TAP_QUERY_TIMEOUT, left)
+
         try:
             with httpx.Client(timeout=TAP_QUERY_TIMEOUT) as client:
-                resp = client.post(TAP_SYNC_URL, data=data)
+                resp = client.post(TAP_SYNC_URL, data=data, timeout=remaining())
                 if resp.status_code == 200:
-                    products = parse_tap_votable(
-                        resp.content, ra_deg, dec_deg, size_arcmin
-                    )
+                    products = []
+                    seen = set()
+                    complete = False
+                    for page in range(TAP_MAX_PAGES):
+                        if page:
+                            resp = client.post(
+                                TAP_SYNC_URL, data=data, timeout=remaining()
+                            )
+                            resp.raise_for_status()
+                        batch = parse_tap_votable(
+                            resp.content, ra_deg, dec_deg, size_arcmin
+                        )
+                        fresh = [p for p in batch if p["id"] not in seen]
+                        products.extend(fresh)
+                        seen.update(p["id"] for p in fresh)
+                        overflow = b"OVERFLOW" in resp.content
+                        if len(batch) < TAP_PAGE_SIZE and not overflow:
+                            complete = True
+                            break
+                        if not fresh:
+                            break
+                        cursor = batch[-1]["artifact_uri"].replace("'", "''")
+                        data["QUERY"] = query_template.format(
+                            cursor=f"AND a.uri > '{cursor}'"
+                        )
+                    products.sort(key=lambda p: (p["date_mjd"], p["id"]))
                     _notify_discovery_attempt(
                         on_attempt,
                         {
@@ -151,6 +274,7 @@ ORDER BY p.time_bounds_lower
                             "outcome": "succeeded",
                             "will_retry": False,
                             "result_count": len(products),
+                            "coverage_complete": complete,
                         },
                     )
                     return products, None
@@ -177,12 +301,68 @@ ORDER BY p.time_bounds_lower
     return [], last_err
 
 
+def _try_cube_fallback(
+    ra_deg: float,
+    dec_deg: float,
+    size_arcmin: float,
+    observe: Callable[[dict[str, Any]], None],
+) -> dict[str, Any] | None:
+    """Last resort after IRSA TAP and the S3 L2 index: the DR1 All-Sky Cube.
+
+    Returns the cube discovery (products and user notice), or None when the
+    cube tiles cannot be read either. Both outcomes are recorded as events.
+    """
+    observe(
+        {
+            "event_type": "provider_fallback",
+            "provider": CUBE_PROVIDER,
+            "fallback": True,
+            "outcome": "started",
+            "detail": "Checking the DR1 All-Sky Cube tiles on S3.",
+        }
+    )
+    try:
+        found = discover_cube(ra_deg, dec_deg, size_arcmin)
+    except CubeUpstreamError as exc:
+        observe(
+            {
+                "event_type": "provider_fallback",
+                "provider": CUBE_PROVIDER,
+                "fallback": True,
+                "outcome": "unavailable",
+                "coverage_state": "unknown_not_indexed",
+                "coverage_complete": False,
+                "temporal_available": False,
+                "detail": str(exc),
+                "result_count": 0,
+            }
+        )
+        return None
+    observe(
+        {
+            "event_type": "provider_fallback",
+            "provider": CUBE_PROVIDER,
+            "fallback": True,
+            "outcome": "succeeded",
+            "coverage_state": CUBE_COVERAGE_STATE,
+            "coverage_complete": False,
+            "temporal_available": False,
+            "detail": found["notice"],
+            "result_count": len(found["products"]),
+            "tiles": found["tiles"],
+        }
+    )
+    return found
+
+
 def validate_region_size(size_arcmin: float) -> None:
     """Enforce the region-size contract shared by discovery and jobs."""
+    if not math.isfinite(size_arcmin):
+        raise RegionRequestError("Region size must be finite.")
     if size_arcmin > MAX_REGION_SIZE_ARCMIN:
         raise RegionRequestError(
             f"Region size {size_arcmin} arcmin exceeds limit of "
-            f"{MAX_REGION_SIZE_ARCMIN} arcmin; multi-product mosaicking is pending."
+            f"{MAX_REGION_SIZE_ARCMIN} arcmin."
         )
     if size_arcmin < MIN_REGION_SIZE_ARCMIN:
         raise RegionRequestError(
@@ -199,6 +379,16 @@ def resolve_region(
     on_attempt: DiscoveryAttemptObserver | None = None,
 ) -> dict[str, Any]:
     """Discover available spectral image products from remote TAP."""
+    validate_region_size(size_arcmin)
+    if (
+        not math.isfinite(ra_deg)
+        or not math.isfinite(dec_deg)
+        or not -90 <= dec_deg <= 90
+    ):
+        raise RegionRequestError(
+            "Coordinates must be finite; declination must be in [-90, 90]."
+        )
+    ra_deg %= 360
     start_time = time.time()
     cache_key = discovery_cache_key(ra_deg, dec_deg, size_arcmin)
     cache_path = DISCOVERY_CACHE_DIR / f"{cache_key}.json"
@@ -218,15 +408,85 @@ def resolve_region(
         except Exception:
             pass
 
-    # Query remote TAP
-    if on_attempt is None:
-        remote_products, warning = query_irsa_tap(ra_deg, dec_deg, size_arcmin)
-    else:
-        remote_products, warning = query_irsa_tap(
-            ra_deg, dec_deg, size_arcmin, on_attempt=on_attempt
+    if not force_refresh and (recent := _recent_fallback(cache_key)) is not None:
+        failed_at, reused = recent
+        provider = (
+            CUBE_PROVIDER if reused.get("coverage_state") == CUBE_COVERAGE_STATE else "S3"
         )
+        age = max(0, int(start_time - failed_at))
+        event = {
+            "event_type": "provider_reuse",
+            "provider": provider,
+            "fallback": True,
+            "outcome": "succeeded",
+            "coverage_state": reused.get("coverage_state"),
+            "coverage_complete": False,
+            "temporal_available": reused.get("temporal_available", True),
+            "result_count": len(reused.get("products", [])),
+            "detail": (
+                f"IRSA TAP failed {age} s ago for this region; reusing the {provider} "
+                "result instead of retrying TAP and its fallbacks."
+            ),
+        }
+        _notify_discovery_attempt(on_attempt, event)
+        reused["provider_trace"] = [event]
+        reused["reused"] = True
+        reused["query_ms"] = int((time.time() - start_time) * 1000)
+        return reused
 
+    provider_trace: list[dict[str, Any]] = []
+    fallback_notice: str | None = None
+
+    def observe(event: dict[str, Any]) -> None:
+        provider_trace.append(event)
+        _notify_discovery_attempt(on_attempt, event)
+
+    remote_products, warning = query_irsa_tap(
+        ra_deg, dec_deg, size_arcmin, on_attempt=observe
+    )
     products = remote_products
+    complete = warning is None and all(
+        e.get("coverage_complete", True)
+        for e in provider_trace
+        if e.get("outcome") == "succeeded"
+    )
+    coverage_state = "complete" if complete else "incomplete"
+    # query_irsa_tap's public two-tuple contract is retained. Its bounded error
+    # text is classified conservatively: 4xx and invalid user input never fall back;
+    # a table-less TAP answer (TapServiceError) or a spent attempt budget does.
+    unavailable = bool(
+        warning
+        and re.search(
+            r"HTTP 5\d\d|(?:Read|Connect|Write|Pool)Timeout|"
+            r"ConnectError|ReadError|RemoteProtocolError|DeadlineExceeded|"
+            r"TapServiceError",
+            warning,
+        )
+    )
+    if unavailable:
+        fallback = query_index(ra_deg, dec_deg, size_arcmin)
+        products = fallback["products"]
+        complete = bool(fallback.get("coverage_complete", False))
+        coverage_state = fallback["coverage_state"]
+        observe(
+            {
+                "event_type": "provider_fallback",
+                "provider": "S3",
+                "fallback": True,
+                "outcome": "succeeded" if products else "unavailable",
+                "coverage_state": coverage_state,
+                "coverage_complete": complete,
+                "detail": re.sub(r":\s*<.*", "", warning or "", flags=re.S)[:240],
+                "result_count": len(products),
+            }
+        )
+        if not products:
+            cube = _try_cube_fallback(ra_deg, dec_deg, size_arcmin, observe)
+            if cube is not None:
+                products = cube["products"]
+                complete = False
+                coverage_state = CUBE_COVERAGE_STATE
+                fallback_notice = cube["notice"]
 
     # Group into detectors summary
     det_map: dict[int, list[dict[str, Any]]] = {}
@@ -256,7 +516,7 @@ def resolve_region(
 
     if products:
         coverage = "available"
-    elif warning is not None:
+    elif warning is not None or not complete:
         coverage = "unknown"
     else:
         coverage = "none"
@@ -273,14 +533,25 @@ def resolve_region(
         "cached": False,
         "query_ms": query_ms,
         "warning": warning,
+        "coverage_complete": complete,
+        "coverage_state": coverage_state,
+        "temporal_available": coverage_state != CUBE_COVERAGE_STATE,
+        "fallback_notice": fallback_notice,
+        "provider_trace": provider_trace,
         "products": products,
         "detectors": detectors,
-        "notes": ["Discovery via IRSA TAP; individual detector products, not a mosaic."],
+        "notes": [
+            "IRSA primary; S3 fallback is experimental and only "
+            "positively indexed footprints are known."
+        ],
     }
+
+    if unavailable and products:
+        _remember_fallback(cache_key, result)
 
     # Save to disk cache. Only definitive outcomes are cached: a transient TAP
     # failure ("unknown") must not poison the region for the whole TTL.
-    if coverage != "unknown":
+    if coverage != "unknown" and complete:
         try:
             to_cache = dict(result)
             to_cache["cached_at"] = time.time()

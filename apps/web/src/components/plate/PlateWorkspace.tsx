@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, ApiError } from '../../api/api';
 import { PreparingPlateCard } from '../PreparingPlateCard';
+import { EpochTimeline, ProviderTrace } from './EpochTimeline';
+import { CubeFallbackNotice, isCubeFallback, sourceLabel } from './SourceNotice';
+import { StageProgress, StageStatusChip } from './StageProgress';
+import { PanelToggle, useCollapsiblePanels } from './PanelToggle';
+import { ChevronDownIcon } from '../SkyIcons';
 import {
   BLANK_CHANNELS,
   channelToBand,
@@ -68,9 +73,6 @@ export function PlateWorkspace({
 
   // Multi-epoch state
   const [epochA, setEpochA] = useState<number>(0);
-  const [epochB] = useState<number>(1);
-  const [isBlinking, setIsBlinking] = useState(false);
-  const [blinkActiveEpoch, setBlinkActiveEpoch] = useState<number>(0);
   const [isSplit, setIsSplit] = useState(false);
   const [splitPos, setSplitPos] = useState<number>(50); // percentage 0..100
 
@@ -97,15 +99,21 @@ export function PlateWorkspace({
 
   // Cutouts for the current detector only. Never fall back to another
   // detector's cutout, which would mislabel the plate.
-  const detectorCutouts = job.cutouts?.filter((c) => c.detector === currentDetectorNum) ?? [];
+  const detectorCutouts = job.cutouts?.filter((c) => c.detector === currentDetectorNum && (c.channel === undefined || c.channel === selectedChannel)) ?? [];
   const hasCutout = detectorCutouts.length > 0;
+  // The DR1 All-Sky Cube fallback: one combined image, no VARIANCE layer.
+  const cubeFallback = isCubeFallback(job);
+  const panels = useCollapsiblePanels();
   const activeCutout =
     detectorCutouts.find((c) => c.epoch === epochA) ?? detectorCutouts[0] ?? null;
 
   // Available epochs for current detector
-  const availableEpochs = detectorCutouts.map((c) => c.epoch);
-  const currentEpoch =
-    isBlinking && availableEpochs.length >= 2 ? blinkActiveEpoch : epochA;
+  const channelFrames = job.frames?.filter(f => f.channel === selectedChannel && f.product === activeProduct) ?? [];
+  const imageFrames = job.frames?.filter(f => f.channel === selectedChannel && f.product === 'image') ?? [];
+  const timelineFrames = imageFrames.length ? imageFrames : channelFrames;
+  const availableEpochs = [...new Set(channelFrames.map(f => f.epoch))];
+  const currentEpoch = availableEpochs.includes(epochA) ? epochA : availableEpochs[0] ?? 0;
+  const epochB = availableEpochs.find(epoch => epoch !== currentEpoch) ?? currentEpoch;
 
   // Frame descriptor behind the rendered image, used for exact dimensions and
   // the LVF channel window.
@@ -121,14 +129,27 @@ export function PlateWorkspace({
   // LVF overlap diagnostics: an empty channel window means the slice render is
   // legitimately all-dim, not a rendering failure.
   const selectedWindow = activeFrame?.window_um ?? null;
+  // A cube cutout has one nominal wavelength (min == max): it is known, and it
+  // overlaps the channel when it falls inside the window.
+  const cubeCutout = activeCutout?.source === 'cube';
   const lvfKnown =
-    !!activeCutout && activeCutout.wavelength_max_um > activeCutout.wavelength_min_um;
+    !!activeCutout &&
+    (cubeCutout
+      ? activeCutout.wavelength_min_um > 0
+      : activeCutout.wavelength_max_um > activeCutout.wavelength_min_um);
   const noChannelOverlap =
     !!activeCutout &&
     !!selectedWindow &&
     lvfKnown &&
-    Math.min(selectedWindow[1], activeCutout.wavelength_max_um) <=
-      Math.max(selectedWindow[0], activeCutout.wavelength_min_um);
+    (cubeCutout
+      ? activeCutout.wavelength_min_um < selectedWindow[0] ||
+        activeCutout.wavelength_min_um > selectedWindow[1]
+      : Math.min(selectedWindow[1], activeCutout.wavelength_max_um) <=
+        Math.max(selectedWindow[0], activeCutout.wavelength_min_um));
+  // Stage warnings the user closed, per job and channel.
+  const warningKey = `${job.id}:${selectedChannel}`;
+  const [dismissedWarning, setDismissedWarning] = useState<string | null>(null);
+  const showLvfWarnings = dismissedWarning !== warningKey;
 
   // Fetch the authoritative channel table for the rail.
   useEffect(() => {
@@ -160,20 +181,16 @@ export function PlateWorkspace({
     setHoverPixel(null);
     setChannelError(null);
     setEpochA(0);
-    setIsBlinking(false);
     setIsSplit(false);
     const first = job.channels?.[0]?.index;
     if (first !== undefined) setSelectedChannel(first);
   }, [job.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Blink timer
+  // Epoch ids belong to the selected channel; never request a nonexistent epoch 1.
   useEffect(() => {
-    if (!isBlinking || availableEpochs.length < 2) return;
-    const interval = window.setInterval(() => {
-      setBlinkActiveEpoch((curr) => (curr === epochA ? epochB : epochA));
-    }, 900);
-    return () => window.clearInterval(interval);
-  }, [isBlinking, epochA, epochB, availableEpochs.length]);
+    setEpochA(availableEpochs[0] ?? 0);
+    setIsSplit(false);
+  }, [selectedChannel, job.id]);
 
   // Load manifest when accordion opens
   useEffect(() => {
@@ -417,19 +434,24 @@ export function PlateWorkspace({
           <span className="ribbon-plate-id num">PLATE // {job.id}</span>
         </div>
         <div className="ribbon-center">
-          <span className="ribbon-collection">SPHEREx DR1 Level-2 Spectral Image</span>
-        </div>
-        <div className="ribbon-right">
-          <span className="ribbon-status-badge">
-            {job.status === 'ready' ? 'Ready' : job.stage || job.status}
+          <span className="ribbon-collection">
+            {cubeFallback
+              ? 'SPHEREx DR1 All-Sky Cube · fallback (no epochs)'
+              : 'SPHEREx DR1 Level-2 Spectral Image'}
           </span>
         </div>
+        {/* Job status lives inside the plate stage (StageProgress / StageStatusChip). */}
+        <div className="ribbon-right" />
       </nav>
 
       {/* Main 3-column Grid */}
-      <div className="plate-columns-layout">
-        {/* Column 1: Plate Sheet (260 px) */}
-        <aside className="plate-sheet" aria-label="Plate Metadata Sheet" data-tour="plate-record">
+      <div
+        className={`plate-columns-layout${panels.sheetOpen ? '' : ' sheet-collapsed'}${panels.railOpen ? '' : ' rail-collapsed'}`}
+      >
+        {/* Column 1: Plate Sheet (260 px, collapsible) */}
+        <aside id="plate-sheet" className="plate-sheet" aria-label="Plate Metadata Sheet"
+          data-tour="plate-record"
+          aria-hidden={!panels.sheetOpen} inert={!panels.sheetOpen}>
           <div className="sheet-header">
             <h2 className="sheet-title">Plate Record</h2>
             <span className="sheet-badge num">{currentDetectorStr}</span>
@@ -469,7 +491,9 @@ export function PlateWorkspace({
             </div>
             <div className="meta-pair">
               <span className="meta-key">Source</span>
-              <span className="meta-val chip-source">{activeCutout?.source ?? '—'}</span>
+              <span className="meta-val chip-source">
+                {activeCutout?.source === 'cube' ? sourceLabel('cube') : activeCutout?.source ?? '—'}
+              </span>
             </div>
             <div className="meta-pair">
               <span className="meta-key">Pixel Scale</span>
@@ -483,7 +507,9 @@ export function PlateWorkspace({
               <span className="meta-key">Units</span>
               <span className="meta-val num">
                 {activeCutout
-                  ? `${activeCutout.image_unit} / ${activeCutout.variance_unit}`
+                  ? activeCutout.variance_unit
+                    ? `${activeCutout.image_unit} / ${activeCutout.variance_unit}`
+                    : activeCutout.image_unit
                   : '—'}
               </span>
             </div>
@@ -492,7 +518,17 @@ export function PlateWorkspace({
           {/* Explicit WCS-WAVE statement */}
           <div className="sheet-notice-box">
             <p className="notice-text">
-              <strong>WCS-WAVE approximate:</strong> Level-2 spectral images exhibit position-dependent LVF wavelength. Calibrated CWAVE/CBAND maps are not loaded in this visualization.
+              {cubeFallback ? (
+                <>
+                  <strong>DR1 All-Sky Cube:</strong> one combined image per channel. Its
+                  wavelength is the nominal channel centre, not a calibrated value, and it
+                  has no VARIANCE layer or individual epochs.
+                </>
+              ) : (
+                <>
+                  <strong>WCS-WAVE approximate:</strong> Level-2 spectral images exhibit position-dependent LVF wavelength. Calibrated CWAVE/CBAND maps are not loaded in this visualization.
+                </>
+              )}
             </p>
           </div>
 
@@ -516,20 +552,28 @@ export function PlateWorkspace({
                 ))
               ) : (
                 <p className="muted-text">
-                  Flag definitions are not available for this cutout. Re-run the job to
-                  parse the FITS flag headers.
+                  {cubeFallback
+                    ? 'The DR1 All-Sky Cube does not publish flag bit definitions; nonzero FLAGS values are shown as counts of set bits.'
+                    : 'Flag definitions are not available for this cutout. Re-run the job to parse the FITS flag headers.'}
                 </p>
               )}
             </div>
           </div>
 
           {/* Collapsible Provenance block */}
+          {/* Same disclosure as Spectral Lab's "Featured objects" card. */}
           <details
-            className="sheet-provenance-details"
+            className="sheet-provenance-details plate-disclosure"
             open={isManifestOpen}
             onToggle={(e) => setIsManifestOpen(e.currentTarget.open)}
           >
-            <summary className="provenance-summary">Provenance & Manifest</summary>
+            <summary className="provenance-summary">
+              <span className="plate-disclosure-title">Provenance &amp; Manifest</span>
+              <span className="plate-disclosure-note">Release, cache and source products</span>
+              <span className="plate-disclosure-toggle" aria-hidden="true">
+                <ChevronDownIcon />
+              </span>
+            </summary>
             <div className="provenance-content">
               {manifestLoading ? (
                 <p className="loading-text">Loading DR1 manifest...</p>
@@ -566,7 +610,10 @@ export function PlateWorkspace({
         </aside>
 
         {/* Column 2: Plate Stage (Center) */}
+        <PanelToggle side="left" label="plate record" controls="plate-sheet"
+          open={panels.sheetOpen} onToggle={panels.toggleSheet} />
         <main className="plate-stage" aria-label="Plate Viewport">
+          <CubeFallbackNotice job={job} />
           {/* Controls Bar */}
           <div className="stage-controls-bar" data-tour="plate-image">
             {/* Left: Product tabs (underlined text tabs) */}
@@ -580,7 +627,16 @@ export function PlateWorkspace({
               >
                 IMAGE
               </button>
-              {job.products.includes('variance') ? (
+              {cubeFallback ? (
+                <button
+                  type="button"
+                  className="product-tab tab-action"
+                  disabled
+                  title="The DR1 All-Sky Cube has no VARIANCE layer."
+                >
+                  VARIANCE · n/a
+                </button>
+              ) : job.products.includes('variance') ? (
                 <button
                   type="button"
                   role="tab"
@@ -699,6 +755,11 @@ export function PlateWorkspace({
             <div className="viewport-fov-label num">
               {job.region.size_arcmin.toFixed(1)}′ × {job.region.size_arcmin.toFixed(1)}′
             </div>
+            {(hasCutout || job.status === 'ready' || job.status === 'failed') && (
+              <div className="viewport-status">
+                <StageStatusChip job={job} />
+              </div>
+            )}
 
             {/* Switching / Loading Skeleton */}
             {switchingChannel && (
@@ -723,14 +784,20 @@ export function PlateWorkspace({
             )}
 
             {/* LVF overlap diagnostics */}
-            {hasCutout && selectedWindow && !lvfKnown && (
+            {showLvfWarnings && hasCutout && selectedWindow && !lvfKnown && (
               <div className="plate-lvf-warning" role="note">
+                <button type="button" className="notice-close-btn" aria-label="Dismiss wavelength warning"
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onClick={() => setDismissedWarning(warningKey)}>×</button>
                 LVF wavelength coverage is unavailable for this cutout, so the channel
                 slice cannot be validated. The full detector image remains valid.
               </div>
             )}
-            {hasCutout && selectedWindow && noChannelOverlap && activeCutout && (
+            {showLvfWarnings && hasCutout && selectedWindow && noChannelOverlap && activeCutout && (
               <div className="plate-lvf-warning" role="note">
+                <button type="button" className="notice-close-btn" aria-label="Dismiss wavelength warning"
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onClick={() => setDismissedWarning(warningKey)}>×</button>
                 <strong>No channel overlap.</strong> Channel {selectedChannel} covers{' '}
                 {selectedWindow[0].toFixed(4)}–{selectedWindow[1].toFixed(4)} µm, but this
                 cutout&apos;s LVF spans {activeCutout.wavelength_min_um.toFixed(4)}–
@@ -797,9 +864,10 @@ export function PlateWorkspace({
                 )}
               </div>
             ) : job.status !== 'ready' && job.status !== 'failed' ? (
-              <div className="plate-loading-skeleton" role="status" aria-label="Preparing spectral cutout">
-                <div className="skeleton-box" aria-hidden="true" />
-                <span className="skeleton-label">{job.stage || 'Preparing spectral cutout…'}</span>
+              <div className="plate-loading-skeleton" aria-label="Preparing spectral cutout">
+                <div className="skeleton-box progress-box">
+                  <StageProgress job={job} />
+                </div>
               </div>
             ) : job.status === 'failed' ? (
               <div className="plate-cutout-missing">
@@ -841,77 +909,28 @@ export function PlateWorkspace({
             )}
           </div>
 
-          {/* Epoch Strip (Bottom of center stage) */}
+          {/* Chronological, channel-specific comparison controls. */}
           <div className="stage-epoch-strip" data-tour="plate-epochs">
-            {!hasCutout ? (
-              <span className="epoch-single-note">
-                No epochs loaded for {currentDetectorStr}
-              </span>
-            ) : availableEpochs.length <= 1 ? (
-              <span className="epoch-single-note">
-                One epoch discovered — no comparison available
-              </span>
-            ) : (
-              <div className="epoch-multi-controls">
-                <span className="epoch-strip-label">Epochs:</span>
-                <div className="epoch-chips-list">
-                  {detectorCutouts.map((cutout) => (
-                    <button
-                      key={cutout.epoch}
-                      type="button"
-                      className={`epoch-chip num ${
-                        (isBlinking && blinkActiveEpoch === cutout.epoch) ||
-                        (!isBlinking && epochA === cutout.epoch)
-                          ? 'active'
-                          : ''
-                      }`}
-                      onClick={() => {
-                        setIsBlinking(false);
-                        setEpochA(cutout.epoch);
-                      }}
-                    >
-                      Epoch {cutout.epoch} · {formatDateIso(cutout.date_iso)}
-                    </button>
-                  ))}
-                </div>
-
-                <div className="epoch-actions">
-                  <button
-                    type="button"
-                    className={`btn-epoch-toggle ${isBlinking ? 'active' : ''}`}
-                    aria-pressed={isBlinking}
-                    title="Alternate two epochs every 900 ms"
-                    onClick={() => {
-                      setIsSplit(false);
-                      setIsBlinking((b) => !b);
-                    }}
-                  >
-                    Blink (900ms)
-                  </button>
-                  <button
-                    type="button"
-                    className={`btn-epoch-toggle ${isSplit ? 'active' : ''}`}
-                    aria-pressed={isSplit}
-                    title="Split view with divider between Epoch A and B"
-                    onClick={() => {
-                      setIsBlinking(false);
-                      setIsSplit((s) => !s);
-                    }}
-                  >
-                    Split View
-                  </button>
-                </div>
-              </div>
-            )}
+            <EpochTimeline jobId={job.id} channel={selectedChannel} frames={timelineFrames}
+              ready={job.status === 'ready'} epoch={currentEpoch} onSelect={setEpochA}
+              onPlaybackStart={() => setIsSplit(false)} reason={job.animation_reason} paused={isSplit} />
+            {availableEpochs.length >= 2 && <button type="button"
+              className={`btn-epoch-toggle ${isSplit ? 'active' : ''}`} aria-pressed={isSplit}
+              onClick={() => setIsSplit(s => !s)}>Split View</button>}
           </div>
         </main>
 
-        {/* Column 3: Spectral Rail (300 px) */}
+        {/* Column 3: Spectral Rail (300 px, collapsible) */}
+        <PanelToggle side="right" label="spectral channels" controls="plate-rail"
+          open={panels.railOpen} onToggle={panels.toggleRail} />
         <aside
+          id="plate-rail"
           ref={railContainerRef}
+          aria-hidden={!panels.railOpen}
+          inert={!panels.railOpen}
           className="spectral-rail"
           data-tour="plate-channels"
-          tabIndex={0}
+          tabIndex={panels.railOpen ? 0 : -1}
           onKeyDown={handleRailKeyDown}
           aria-label="102-channel spectral rail"
         >
@@ -931,6 +950,7 @@ export function PlateWorkspace({
               onRetry={() => void onRequestNewJob(job.request)}
             />
           )}
+          <ProviderTrace events={job.events ?? []} />
           <div className="rail-header">
             <h2 className="rail-title">Spectral Channels</h2>
             <span className="rail-instructions">Use ↑ / ↓ arrow keys</span>
@@ -1050,12 +1070,18 @@ export function PlateWorkspace({
               </div>
             ) : (
               <p className="readout-placeholder">
-                Move pointer over the cutout to inspect WCS-WAVE wavelength and flux. Click to pin.
+                {cubeFallback
+                  ? 'Move pointer over the cutout to inspect the cube flux and nominal channel wavelength. Click to pin.'
+                  : 'Move pointer over the cutout to inspect WCS-WAVE wavelength and flux. Click to pin.'}
               </p>
             )}
 
             <div className="readout-footer-note">
-              WCS-WAVE is approximate; calibrated CWAVE/CBAND is not loaded.
+              {activeFrame?.calibrated
+                ? 'Verified CWAVE/CBAND calibration · channel-specific mosaic.'
+                : cubeFallback
+                  ? 'DR1 All-Sky Cube: nominal channel wavelength, not calibrated · no VARIANCE layer.'
+                  : 'WCS-WAVE is approximate; calibrated CWAVE/CBAND is not loaded.'}
             </div>
           </div>
         </aside>

@@ -44,4 +44,12 @@ describe('style.css', () => {
       /@media \(prefers-reduced-motion: reduce\)\s*\{[^@]*\.spectral-featured\[open\] \.spectral-catalog\s*\{\s*animation:\s*none/,
     );
   });
+
+  it('gives the plate Provenance disclosure the same rules as Spectral Lab featured objects', () => {
+    // Shared selector lists, so both disclosures always look and animate alike.
+    expect(code).toMatch(/\.plate-disclosure,\s*\.spectral-featured\s*\{[^}]*background:[^}]*box-shadow:/);
+    expect(code).toMatch(/\.plate-disclosure::details-content,\s*\.spectral-featured::details-content\s*\{[^}]*transition:[^;]*block-size/);
+    expect(code).toMatch(/\.plate-disclosure\[open\] \.provenance-content,\s*\.spectral-featured\[open\] \.spectral-catalog\s*\{\s*animation:\s*spectral-featured-reveal/);
+    expect(code).toMatch(/\.plate-disclosure\[open\] \.plate-disclosure-toggle,\s*\.spectral-featured\[open\] \.spectral-featured-toggle\s*\{\s*transform:\s*rotate\(180deg\)/);
+  });
 });

@@ -36,12 +36,14 @@ describe('region module', () => {
       expect(res.error).toContain('smaller than 1 arcminute');
     });
 
-    it('rejects size exceeding 60 arcmin with the exact contract message', () => {
-      const res = validateCoordinates(100, 45, 65);
+    it('accepts the expanded region limit and rejects sizes above 180 arcmin', () => {
+      expect(validateCoordinates(100, 45, 60).valid).toBe(true);
+      expect(validateCoordinates(100, 45, 180).valid).toBe(true);
+      const res = validateCoordinates(100, 45, 181);
       expect(res.valid).toBe(false);
       expect(res.error).toBe(REGION_EXCEEDS_LIMIT_MESSAGE);
       expect(res.error).toBe(
-        'This region exceeds the 60-arcmin single-FITS limit; multi-file mosaicking is pending.',
+        'This region exceeds the 180-arcmin (3°) mosaic limit.',
       );
     });
   });
@@ -59,9 +61,9 @@ describe('region module', () => {
       expect(clampRegionSize(-5)).toBe(MIN_REGION_SIZE_ARCMIN);
     });
 
-    it('clamps sizes greater than 60 arcmin to 60', () => {
-      expect(clampRegionSize(75)).toBe(MAX_REGION_SIZE_ARCMIN);
-      expect(clampRegionSize(120)).toBe(MAX_REGION_SIZE_ARCMIN);
+    it('clamps sizes greater than 180 arcmin to 180', () => {
+      expect(clampRegionSize(181)).toBe(MAX_REGION_SIZE_ARCMIN);
+      expect(clampRegionSize(240)).toBe(MAX_REGION_SIZE_ARCMIN);
     });
 
     it('handles non-finite values by falling back to 1 arcmin', () => {
@@ -83,15 +85,15 @@ describe('region module', () => {
       expect(res.exceeds_limit).toBe(false);
     });
 
-    it('flags exceeds_limit when raw size > 60 arcmin', () => {
-      // 1.0 degree in Dec is 60 arcmin
+    it('flags exceeds_limit when raw size > 180 arcmin', () => {
+      // 4.0 degrees in Dec exceeds the 3-degree limit
       const p1: [number, number] = [0.0, 0.0];
-      const p2: [number, number] = [0.0, 2.0];
+      const p2: [number, number] = [0.0, 4.0];
 
       const res = computeRegionFromPoints(p1, p2);
-      expect(res.raw_size_arcmin).toBeCloseTo(120.0);
+      expect(res.raw_size_arcmin).toBeCloseTo(240.0);
       expect(res.exceeds_limit).toBe(true);
-      expect(res.clamped_size_arcmin).toBe(60.0);
+      expect(res.clamped_size_arcmin).toBe(180.0);
     });
 
     it('handles RA wrapping around the 0/360 boundary correctly', () => {

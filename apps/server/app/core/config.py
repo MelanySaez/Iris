@@ -98,6 +98,10 @@ HIPS_PROPERTIES_URL = (
 TAP_SYNC_URL = "https://irsa.ipac.caltech.edu/TAP/sync"
 CUBE_BASE_URL = "https://irsa.ipac.caltech.edu/data/hips/SPHEREx/spherex_allsky_cube"
 CUBE_ORDER = 5  # order of the published fits-cube tiles (custom_tile_format_order)
+# Public anonymous S3 mirror of the same DR1 cube tiles (fallback when IRSA is down).
+CUBE_S3_BASE_URL = (
+    "https://nasa-irsa-spherex.s3.us-east-1.amazonaws.com/dr1/hips5_cube/hips_20261026"
+)
 CUBE_FETCH_TIMEOUT = 30.0
 CUBE_CACHE_DIR = CACHE_DIR / "cube"
 CUBE_SPECTRUM_CACHE_DIR = CUBE_CACHE_DIR / "spectra"
@@ -117,7 +121,9 @@ MAX_RANGE_RESPONSE_BYTES = 1024 * 1024
 
 # Caps and constraints
 MIN_REGION_SIZE_ARCMIN = 1.0
-MAX_REGION_SIZE_ARCMIN = 60.0
+MAX_REGION_SIZE_ARCMIN = 180.0
+MAX_EPOCHS_PER_JOB = 12
+MAX_MOSAIC_INPUTS_PER_EPOCH = 24
 MAX_CHANNELS_PER_JOB = 8
 MAX_CUTOUT_DOWNLOADS_PER_JOB = 12
 MAX_DOWNLOAD_WORKERS = 4
@@ -128,6 +134,14 @@ JOB_SNAPSHOT_LRU_SIZE = 32
 HIPS_FETCH_TIMEOUT = 10.0
 TAP_QUERY_TIMEOUT = 30.0
 TAP_QUERY_RETRIES = 1
+# Wall-clock budget of one TAP attempt, all result pages included. Shown to
+# the user as the attempt's progress budget.
+TAP_ATTEMPT_DEADLINE_SECONDS = 45.0
+# A region whose TAP discovery failed and was served by a fallback reuses that
+# fallback result for this long instead of retrying TAP and its fallbacks.
+FALLBACK_REUSE_SECONDS = 600.0
+# Cube tiles read concurrently for one channel of a large region.
+CUBE_TILE_WORKERS = 4
 CUTOUT_CONNECT_TIMEOUT = 10.0
 CUTOUT_READ_TIMEOUT = 90.0
 CUTOUT_DOWNLOAD_RETRIES = 2

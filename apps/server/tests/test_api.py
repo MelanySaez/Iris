@@ -123,7 +123,9 @@ def test_trace_and_expanded_region_contract():
     assert health.headers["x-request-id"]
     assert "local_assets" not in health.json()
     assert JobRequest(**{**SAMPLE, "size_arcmin": 60}).size_arcmin == 60
-    assert client.post("/api/jobs", json={**SAMPLE, "size_arcmin": 61}).status_code == 422
+    assert (
+        client.post("/api/jobs", json={**SAMPLE, "size_arcmin": 181}).status_code == 422
+    )
 
 
 NO_COVERAGE = {"ra_deg": 10.25, "dec_deg": -30.0, "size_arcmin": 4.0}
@@ -138,9 +140,9 @@ def test_api_error_paths():
         client.get("/api/jobs/nonexistent-job-id/frames/20/image.png").status_code == 404
     )
 
-    # Region larger than 60 arcmin: 422
+    # Region larger than 180 arcmin: 422
     assert (
-        client.post("/api/jobs", json={**NO_COVERAGE, "size_arcmin": 75.0}).status_code
+        client.post("/api/jobs", json={**NO_COVERAGE, "size_arcmin": 180.1}).status_code
         == 422
     )
 
@@ -150,8 +152,8 @@ def test_api_error_paths():
 
 
 def test_failed_job_is_replaced_and_rerun_on_resubmit():
-    from app.services.jobs import JobState, job_manager
     from app.schemas.jobs import JobRequest
+    from app.services.jobs import JobState, job_manager
 
     req = JobRequest(**NO_COVERAGE, channels=[20], products=["image"])
     job_id = job_manager.compute_job_id(req)
@@ -268,7 +270,9 @@ def test_unexpected_error_keeps_stage_kind_and_traceback():
     client = TestClient(app)
     with (
         patch("app.services.jobs.resolve_region", return_value=discovery),
-        patch("app.services.jobs.download_cutout", side_effect=RuntimeError("No network")),
+        patch(
+            "app.services.jobs.download_cutout", side_effect=RuntimeError("No network")
+        ),
     ):
         _, snap = _submit_and_wait(
             client, {**NO_COVERAGE, "ra_deg": 13.25, "channels": [44]}
@@ -310,7 +314,9 @@ def _discovery_with(detector: int, source: str) -> dict:
 def test_channels_without_detector_coverage_are_classified():
     # Channel 44 needs detector 3; discovery only found detector 1.
     client = TestClient(app)
-    with patch("app.services.jobs.resolve_region", return_value=_discovery_with(1, "remote")):
+    with patch(
+        "app.services.jobs.resolve_region", return_value=_discovery_with(1, "remote")
+    ):
         _, snap = _submit_and_wait(
             client, {**NO_COVERAGE, "ra_deg": 15.25, "channels": [44]}
         )
@@ -321,7 +327,9 @@ def test_channels_without_detector_coverage_are_classified():
 
 def test_crash_during_discovery_falls_back_to_unexpected():
     client = TestClient(app)
-    with patch("app.services.jobs.resolve_region", side_effect=RuntimeError("TAP crashed")):
+    with patch(
+        "app.services.jobs.resolve_region", side_effect=RuntimeError("TAP crashed")
+    ):
         _, snap = _submit_and_wait(
             client, {**NO_COVERAGE, "ra_deg": 16.25, "channels": [44]}
         )
@@ -333,10 +341,14 @@ def test_crash_during_discovery_falls_back_to_unexpected():
 def test_extraction_crash_is_classified():
     client = TestClient(app)
     with (
-        patch("app.services.jobs.resolve_region", return_value=_discovery_with(3, "remote")),
+        patch(
+            "app.services.jobs.resolve_region", return_value=_discovery_with(3, "remote")
+        ),
         # Remote products are downloaded first; let that stage succeed.
         patch("app.services.jobs.download_cutout", return_value=None),
-        patch("app.services.jobs.get_or_extract_derived", side_effect=ValueError("bad WCS")),
+        patch(
+            "app.services.jobs.get_or_extract_derived", side_effect=ValueError("bad WCS")
+        ),
     ):
         _, snap = _submit_and_wait(
             client, {**NO_COVERAGE, "ra_deg": 17.25, "channels": [44]}
@@ -350,11 +362,14 @@ def test_render_crash_is_classified():
     cutout = MagicMock(detector=3)
     client = TestClient(app)
     with (
-        patch("app.services.jobs.resolve_region", return_value=_discovery_with(3, "remote")),
+        patch(
+            "app.services.jobs.resolve_region", return_value=_discovery_with(3, "remote")
+        ),
         patch("app.services.jobs.download_cutout", return_value=None),
         patch("app.services.jobs.get_or_extract_derived", return_value=cutout),
         patch(
-            "app.services.jobs.compute_cutout_percentiles", side_effect=RuntimeError("no pixels")
+            "app.services.jobs.compute_cutout_percentiles",
+            side_effect=RuntimeError("no pixels"),
         ),
     ):
         _, snap = _submit_and_wait(
@@ -369,8 +384,8 @@ def test_render_crash_is_classified():
 
 
 def test_view_does_not_change_the_job_id():
-    from app.services.jobs import job_manager
     from app.schemas.jobs import JobRequest
+    from app.services.jobs import job_manager
 
     base = {"ra_deg": 10.0, "dec_deg": 5.0, "size_arcmin": 6.0, "channels": [44]}
     single = {"mode": "single"}

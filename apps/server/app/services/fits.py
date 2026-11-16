@@ -118,6 +118,7 @@ def download_cutout(uri: str) -> Path:
         tmp_fits = CUTOUT_CACHE_DIR / f"{uri_hash}.fits.tmp.{pid}.{tid}"
 
         last_exc: Exception | None = None
+        received = 0
         for attempt in range(CUTOUT_DOWNLOAD_RETRIES + 1):
             try:
                 timeout = httpx.Timeout(
@@ -127,6 +128,9 @@ def download_cutout(uri: str) -> Path:
                     resp.raise_for_status()
                     with open(tmp_fits, "wb") as f:
                         for chunk in resp.iter_bytes(chunk_size=65536):
+                            received += len(chunk)
+                            if received > 128 * 1024 * 1024:
+                                raise ValueError("Cutout exceeds 128 MiB transfer budget")
                             f.write(chunk)
                 tmp_fits.replace(target_fits)
                 return target_fits
@@ -134,6 +138,10 @@ def download_cutout(uri: str) -> Path:
                 last_exc = exc
                 if tmp_fits.exists():
                     tmp_fits.unlink()
+                from app.services.spherex_provider import is_provider_unavailable
+
+                if not is_provider_unavailable(exc):
+                    break
                 if attempt < CUTOUT_DOWNLOAD_RETRIES:
                     time.sleep(0.5 * (2**attempt))
 
@@ -184,6 +192,8 @@ def extract_cutout_fits(
         flag_bits = extract_flag_bits(hdul["FLAGS"].header)
 
         metadata = {
+            "wcs_header": dict(spatial.to_header(relax=True)),
+            "spatial_header": dict(spatial.to_header(relax=True)),
             "detector": int(img_hdu.header.get("DETECTOR", 2)),
             "obs_id": obs_id,
             "date_mjd": mjd,
@@ -247,7 +257,23 @@ def load_derived_cutout(
     except Exception:
         return None
 
-    return DerivedCutout(
+    cutout_type = DerivedCutout
+    extra = {}
+    if metadata.get("source") == "cube":
+        from app.services.cube_fallback import CubeCutout
+
+        cutout_type = CubeCutout
+        with np.load(npz_path) as saved:
+            if "nhits" in saved:
+                extra = {"nhits": saved["nhits"]}
+    elif metadata.get("calibrated") and metadata.get("channel") is not None:
+        from app.services.mosaics import MosaicCutout
+
+        cutout_type = MosaicCutout
+        with np.load(npz_path) as saved:
+            extra = {"coverage": saved["coverage"], "nhits": saved["nhits"]}
+    return cutout_type(
+        **extra,
         detector=detector,
         epoch=epoch,
         obs_id=metadata.get("obs_id", ""),
@@ -274,7 +300,7 @@ def get_or_extract_derived(
     detector = product.get("detector", 2)
 
     cached = load_derived_cutout(uri, detector, epoch)
-    if cached is not None:
+    if cached is not None and cached.metadata.get("wcs_header"):
         if not cached.obs_id:
             cached.obs_id = product.get("obs_id", "")
         if not cached.date_iso:
@@ -284,11 +310,21 @@ def get_or_extract_derived(
     npz_path, meta_path = derived_cache_paths(uri)
 
     # Extract
-    fits_file = download_cutout(uri)
+    if product.get("source") == "s3":
+        from app.services.spherex_provider import download_s3_cutout
+
+        fits_file = download_s3_cutout(product, ra_deg, dec_deg, product["size_arcmin"])
+    else:
+        fits_file = download_cutout(uri)
     arrays, metadata = extract_cutout_fits(fits_file, ra_deg, dec_deg)
 
     metadata["detector"] = detector
     metadata["uri"] = uri
+    metadata["source"] = product.get("source", "remote")
+    metadata["original_product_uri"] = product.get(
+        "original_product_uri", uri.split("?")[0]
+    )
+    metadata["obs_publisher_did"] = product.get("obs_publisher_did", "")
     if not metadata.get("obs_id"):
         metadata["obs_id"] = product.get("obs_id", "")
     if not metadata.get("date_iso"):
@@ -314,7 +350,7 @@ def get_or_extract_derived(
         epoch=epoch,
         obs_id=metadata["obs_id"],
         date_iso=metadata["date_iso"],
-        source="remote",
+        source=metadata.get("source", "remote"),
         uri=uri,
         image=arrays["image"],
         variance=arrays["variance"],
@@ -323,3 +359,30 @@ def get_or_extract_derived(
         bandwidth=arrays["bandwidth"],
         metadata=metadata,
     )
+
+
+def save_derived_cutout(cutout: DerivedCutout) -> None:
+    """Persist channel-specific mosaics with their WCS, masks and provenance."""
+    npz_path, meta_path = derived_cache_paths(cutout.uri)
+    arrays = {
+        name: getattr(cutout, name)
+        for name in ("image", "variance", "flags", "wavelength", "bandwidth")
+    }
+    for name in ("coverage", "nhits"):
+        if hasattr(cutout, name):
+            arrays[name] = getattr(cutout, name)
+    # URI includes algorithm/calibration identities and is written under the
+    # existing per-URI lock, so a reader never sees partially replaced arrays.
+    with get_uri_lock(cutout.uri):
+        suffix = f".tmp.{os.getpid()}.{threading.get_ident()}"
+        temp_npz = npz_path.with_name(npz_path.name + suffix)
+        temp_meta = meta_path.with_name(meta_path.name + suffix)
+        try:
+            with temp_npz.open("wb") as stream:
+                np.savez_compressed(stream, **arrays)
+            temp_meta.write_text(json.dumps(cutout.metadata), encoding="utf-8")
+            temp_npz.replace(npz_path)
+            temp_meta.replace(meta_path)
+        finally:
+            temp_npz.unlink(missing_ok=True)
+            temp_meta.unlink(missing_ok=True)

@@ -20,12 +20,12 @@ from alembic.config import Config
 from fastapi.testclient import TestClient
 from sqlalchemy import make_url, text
 
-from app.services.jobs import job_manager
-from app.main import app
-from app.services.selections import configure_selections
-from app.core.database import get_database_url, get_engine
-from app.repositories.selection import normalize_region
 from app.api.routes.consent import CONSENT_COOKIE, OWNER_COOKIE
+from app.core.database import get_database_url, get_engine
+from app.main import app
+from app.repositories.selection import normalize_region
+from app.services.jobs import job_manager
+from app.services.selections import configure_selections
 
 DATABASE_URL = get_database_url()
 SERVER_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -48,8 +48,12 @@ def mock_external_network():
     """Never call IRSA TAP or download cutouts over the network."""
     with (
         patch("app.services.discovery.query_irsa_tap", return_value=([], None)),
-        patch("app.services.fits.download_cutout", side_effect=RuntimeError("No network")),
-        patch("app.services.jobs.download_cutout", side_effect=RuntimeError("No network")),
+        patch(
+            "app.services.fits.download_cutout", side_effect=RuntimeError("No network")
+        ),
+        patch(
+            "app.services.jobs.download_cutout", side_effect=RuntimeError("No network")
+        ),
     ):
         yield
 
@@ -499,8 +503,8 @@ def _fake_manifest(manifest):
 
 def test_cached_terminal_job_records_its_outcome_when_its_row_is_new():
     """A cache hit never runs again: a freshly created row needs the outcome now."""
-    from app.services.jobs import JobState
     from app.schemas.jobs import JobRequest
+    from app.services.jobs import JobState
     from app.services.selections import SelectionRecorder
 
     store = _FakeStore(inserted=True)
@@ -518,8 +522,8 @@ def test_cached_terminal_job_records_its_outcome_when_its_row_is_new():
 
 def test_repeated_cache_hit_does_not_rebuild_the_outcome():
     """An existing row already holds the outcome: only the hit is counted."""
-    from app.services.jobs import JobState
     from app.schemas.jobs import JobRequest
+    from app.services.jobs import JobState
     from app.services.selections import SelectionRecorder
 
     store = _FakeStore(inserted=False, stored_status="ready")
@@ -533,8 +537,8 @@ def test_repeated_cache_hit_does_not_rebuild_the_outcome():
 
 
 def test_new_attempt_is_submitted_as_a_reset():
-    from app.services.jobs import JobState
     from app.schemas.jobs import JobRequest
+    from app.services.jobs import JobState
     from app.services.selections import SelectionRecorder
 
     store = _FakeStore(inserted=False)
@@ -579,8 +583,8 @@ def test_invalid_database_url_is_never_logged_with_its_password(caplog):
 
 
 def test_failed_outcome_stores_the_job_error():
-    from app.services.jobs import JobState
     from app.schemas.jobs import JobRequest
+    from app.services.jobs import JobState
     from app.services.selections import SelectionRecorder
 
     calls: list[tuple] = []
@@ -669,8 +673,8 @@ def test_record_submission_reports_whether_the_row_was_created(client):
 
 def test_cache_hit_heals_a_row_stuck_in_an_intermediate_status():
     """If the outcome write was lost, a later cache hit stores it."""
-    from app.services.jobs import JobState
     from app.schemas.jobs import JobRequest
+    from app.services.jobs import JobState
     from app.services.selections import SelectionRecorder
 
     store = _FakeStore(inserted=False, stored_status="discovering")
@@ -695,10 +699,9 @@ def test_cache_hit_heals_a_row_stuck_in_an_intermediate_status():
 
 @requires_db
 def test_lost_outcome_is_recovered_on_the_next_cache_hit(client):
-    from app.services.jobs import JobState
     from app.schemas.jobs import JobRequest
-    from app.services.selections import get_selection_repository
-    from app.services.selections import SelectionRecorder
+    from app.services.jobs import JobState
+    from app.services.selections import SelectionRecorder, get_selection_repository
 
     req = JobRequest(**region(26.5), channels=[44])
     store = get_selection_repository()
@@ -721,8 +724,8 @@ def test_lost_outcome_is_recovered_on_the_next_cache_hit(client):
 
 
 def test_outcome_carries_stage_kind_trace_and_timeline():
-    from app.services.jobs import JobState
     from app.schemas.jobs import JobRequest
+    from app.services.jobs import JobState
     from app.services.selections import SelectionRecorder
 
     seen: dict = {}
@@ -970,7 +973,6 @@ def test_claims_are_limited_to_100_jobs(client):
     assert resp.status_code == 422
 
 
-
 # -- verifier advisories (L9, L10) ---------------------------------------------
 
 
@@ -1068,3 +1070,14 @@ def test_cookie_secure_follows_the_scheme_unless_configured(
     assert len(cookies) == 2
     for cookie in cookies:
         assert ("; Secure" in cookie) is secure
+
+
+@requires_db
+def test_large_region_survives_selection_persistence(client):
+    response = client.post(
+        "/api/jobs", json={**region(88.125, size=180), "channels": [44]}
+    )
+    assert response.status_code == 202
+    saved = find_by_job(client, response.json()["id"])
+    assert saved["region"]["size_arcmin"] == 180
+    assert saved["region"]["fov_deg"] == 3

@@ -14,7 +14,7 @@ SYSTEM_PROMPT = f"""You are the Planet X assistant, built into a web application
 
 <application>
 Planet X has four workspaces:
-- Sky: an all-sky map (Aladin Lite) of the SPHEREx DR1 All-Sky Cube. People pan and zoom, pick one of 102 spectral channels (0.75-5.00 µm; channels 50 and 51 do not exist) or an RGB composite of three channels, and draw a square region (1-60 arcmin) to prepare a spectral job. A drawn region is a draft until the person presses "Confirm region"; only then does a job start.
+- Sky: an all-sky map (Aladin Lite) of the SPHEREx DR1 All-Sky Cube. People pan and zoom, pick one of 102 spectral channels (0.75-5.00 µm; channels 50 and 51 do not exist) or an RGB composite of three channels, and draw a square region (1-180 arcmin) to prepare a spectral job. A drawn region is a draft until the person presses "Confirm region"; only then does a job start.
 - Plate: the Level-2 spectral image (FITS cutout) of the active job, with image, variance and flags products.
 - Spectral Lab: compares quick-look spectra taken from the All-Sky Cube at chosen positions.
 - Records: the saved selections, each with a name, region, evaluated channel, view mode (single or RGB), coverage, status and hits. People can show a record in Sky, open ready ones in Plate, rename and delete them.

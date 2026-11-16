@@ -1337,6 +1337,77 @@ button:disabled {
   overflow: hidden;
 }
 
+/* Collapsible sidebars, shaped and animated like the Spectral Lab sidebar
+   toggle: a full-height 34px strip sits between each sidebar and the stage;
+   the sidebar animates its own width to 0 (same timing as Spectral Lab). */
+.plate-columns-layout {
+  grid-template-columns: auto 34px minmax(0, 1fr) 34px auto;
+  background: #18181b; /* dark behind the panels: no light flash while they move */
+}
+
+.plate-columns-layout > .plate-sheet { grid-column: 1; grid-row: 1; }
+.plate-columns-layout > .panel-toggle-left { grid-column: 2; grid-row: 1; }
+.plate-columns-layout > .plate-stage { grid-column: 3; grid-row: 1; }
+.plate-columns-layout > .panel-toggle-right { grid-column: 4; grid-row: 1; }
+.plate-columns-layout > .spectral-rail { grid-column: 5; grid-row: 1; }
+
+.plate-columns-layout > .plate-sheet,
+.plate-columns-layout > .spectral-rail {
+  box-sizing: border-box;
+  transition:
+    width 220ms cubic-bezier(0.16, 1, 0.3, 1),
+    padding 220ms ease,
+    opacity 160ms ease;
+}
+
+.plate-columns-layout.sheet-collapsed > .plate-sheet,
+.plate-columns-layout.rail-collapsed > .spectral-rail {
+  width: 0;
+  min-width: 0;
+  padding-inline: 0;
+  border: 0;
+  overflow: hidden;
+  opacity: 0;
+  visibility: hidden;
+}
+
+.panel-toggle {
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  min-width: 0;
+  padding: 0.5rem 0.2rem;
+  border: 1px solid var(--sky-line);
+  border-top: 0;
+  border-bottom: 0;
+  background: var(--sky-raised);
+  color: var(--sky-muted); /* 7.7:1 on #222226 */
+  font-size: 0.62rem;
+  cursor: pointer;
+}
+
+.panel-toggle:hover,
+.panel-toggle:focus-visible {
+  background: var(--sky-hover);
+  color: var(--sky-ink);
+}
+
+.panel-toggle svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .plate-columns-layout > .plate-sheet,
+  .plate-columns-layout > .spectral-rail { transition: none; }
+}
+
 /* Column 1: Plate Sheet (Left, 260px) */
 .plate-sheet {
   width: 260px;
@@ -1850,14 +1921,89 @@ button:disabled {
 
 /* Epoch Strip (Bottom of center stage) */
 .stage-epoch-strip {
-  height: 48px;
   min-height: 48px;
+  flex-shrink: 0;
+  gap: 12px;
   background: #1b1b1e;
   border-top: 1px solid #2d2d32;
   display: flex;
   align-items: center;
-  padding: 0 16px;
+  padding: 12px 16px;
   z-index: 10;
+}
+
+.epoch-timeline {
+  flex: 1;
+  min-width: 0;
+}
+
+.epoch-timeline .epoch-multi-controls {
+  flex-wrap: wrap;
+}
+
+.epoch-timeline .epoch-chips-list {
+  overflow-x: auto;
+  padding-block: 2px;
+  min-width: 120px;
+}
+
+.epoch-timeline .epoch-chip {
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.epoch-timeline .epoch-actions {
+  flex-wrap: wrap;
+}
+
+.epoch-timeline .epoch-single-note {
+  margin: 8px 0 0;
+  color: #b4b4bd;
+}
+
+.stage-epoch-strip .btn-epoch-toggle:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.stage-epoch-strip .btn-epoch-toggle:focus-visible,
+.stage-epoch-strip .epoch-chip:focus-visible {
+  outline: 2px solid var(--sky-accent);
+  outline-offset: 2px;
+}
+
+.provider-trace {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--plate-rule);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--plate-ink); /* the rail is white: dark text */
+  background: var(--plate-panel);
+  overflow-wrap: anywhere;
+}
+
+.provider-trace summary {
+  cursor: pointer;
+  color: var(--plate-ink);
+  font-weight: 600;
+}
+
+.provider-trace strong {
+  color: var(--plate-ink);
+}
+
+.provider-trace li {
+  color: var(--plate-muted); /* 7.7:1 on white */
+}
+
+.provider-trace ul {
+  padding-left: 16px;
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.provider-trace li + li {
+  margin-top: 8px;
 }
 
 .epoch-single-note {
@@ -2202,10 +2348,41 @@ button:disabled {
   }
 
   /* Plate Workspace: Stacks vertically (Stage first, then Sheet, then Rail) */
-  .plate-columns-layout {
+  .plate-columns-layout,
+  .plate-columns-layout.sheet-collapsed,
+  .plate-columns-layout.rail-collapsed,
+  .plate-columns-layout.sheet-collapsed.rail-collapsed {
     grid-template-columns: 1fr;
     grid-template-rows: auto auto auto;
     overflow-y: auto;
+  }
+
+  /* Stacked: the strips become full-width rows above their panels. */
+  .plate-columns-layout > .plate-sheet,
+  .plate-columns-layout > .panel-toggle,
+  .plate-columns-layout > .plate-stage,
+  .plate-columns-layout > .spectral-rail {
+    grid-column: 1;
+    grid-row: auto;
+  }
+
+  .plate-columns-layout > .panel-toggle {
+    flex-direction: row;
+    min-height: 34px;
+    border: 1px solid var(--sky-line);
+    border-left: 0;
+    border-right: 0;
+  }
+
+  .plate-columns-layout > .plate-stage { order: 1; }
+  .plate-columns-layout > .panel-toggle-left { order: 2; }
+  .plate-columns-layout > .plate-sheet { order: 3; }
+  .plate-columns-layout > .panel-toggle-right { order: 4; }
+  .plate-columns-layout > .spectral-rail { order: 5; }
+
+  .plate-columns-layout.sheet-collapsed > .plate-sheet,
+  .plate-columns-layout.rail-collapsed > .spectral-rail {
+    display: none;
   }
 
   .plate-stage {
@@ -2307,7 +2484,7 @@ button:disabled {
   left: 50%;
   transform: translateX(-50%);
   width: min(560px, calc(100% - 40px));
-  padding: 10px 14px;
+  padding: 10px 40px 10px 14px;
   background: rgba(20, 20, 20, 0.92);
   border: 1px solid rgba(255, 178, 122, 0.5);
   border-radius: var(--radius-md);
@@ -2320,6 +2497,70 @@ button:disabled {
 .plate-lvf-warning strong {
   color: #ffb27a;
 }
+
+.plate-fallback-notice {
+  position: relative;
+  margin: 12px 16px 0;
+  padding: 10px 40px 10px 14px;
+  border: 1px solid #ff8a7a;
+  border-left-width: 4px;
+  border-radius: var(--radius-md);
+  background: #2b1d1b;
+  color: #f4f4f5; /* 14.8:1 on #2b1d1b */
+  font-size: 13px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.plate-fallback-notice p {
+  margin: 4px 0 0;
+}
+
+.plate-fallback-notice strong {
+  color: #ffb4a8; /* 9.5:1 on #2b1d1b */
+}
+
+.plate-fallback-chip {
+  align-self: flex-start;
+  margin: 10px 16px 0;
+  padding: 4px 10px;
+  border: 1px solid #ff8a7a;
+  border-radius: 999px;
+  background: #2b1d1b;
+  color: #ffb4a8;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.plate-fallback-chip:hover,
+.plate-fallback-chip:focus-visible {
+  background: #3a2623;
+}
+
+.notice-close-btn {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  width: 26px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: inherit;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.notice-close-btn:hover,
+.notice-close-btn:focus-visible {
+  border-color: currentColor;
+  background: rgba(255, 255, 255, 0.08);
+}
+
 
 .plate-cutout-missing {
   display: flex;
@@ -3900,6 +4141,7 @@ p.name-suggestion-error {
 .spectral-subheading-coords { margin-top: 18px; margin-bottom: 8px; padding-top: 14px; border-top: 1px solid var(--sky-line); }
 .spectral-subheading-search { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--sky-line); }
 /* Featured objects: a native disclosure, collapsed by default, on a lightly shaded card. */
+.plate-disclosure,
 .spectral-featured {
   padding: 10px 12px;
   border: 1px solid var(--sky-line);
@@ -3909,15 +4151,18 @@ p.name-suggestion-error {
   interpolate-size: allow-keywords;
 }
 /* Eased open/close where ::details-content is supported; older browsers just toggle. */
+.plate-disclosure::details-content,
 .spectral-featured::details-content {
   block-size: 0;
   opacity: 0;
   overflow: hidden;
   transition: block-size 220ms ease, opacity 220ms ease, content-visibility 220ms allow-discrete;
 }
+.plate-disclosure[open]::details-content,
 .spectral-featured[open]::details-content { block-size: auto; opacity: 1; }
 .spectral-featured .spectral-catalog { padding-top: 10px; }
 /* The list also fades and slides in on open, in every browser. */
+.plate-disclosure[open] .provenance-content,
 .spectral-featured[open] .spectral-catalog { animation: spectral-featured-reveal 220ms ease-out; }
 @keyframes spectral-featured-reveal {
   from { opacity: 0; transform: translateY(-6px); }
@@ -3925,17 +4170,26 @@ p.name-suggestion-error {
 }
 .spectral-featured > summary .spectral-subheading-note { margin-bottom: 0; }
 @media (prefers-reduced-motion: reduce) {
+  .plate-disclosure::details-content, .plate-disclosure-toggle,
   .spectral-featured::details-content, .spectral-featured-toggle { transition: none; }
+  .plate-disclosure[open] .provenance-content,
   .spectral-featured[open] .spectral-catalog { animation: none; }
 }
+.plate-disclosure > summary,
 .spectral-featured > summary { display: grid; grid-template-columns: 1fr auto; column-gap: 8px; align-items: center; cursor: pointer; list-style: none; }
+.plate-disclosure > summary::-webkit-details-marker,
 .spectral-featured > summary::-webkit-details-marker { display: none; }
 .spectral-featured > summary .spectral-subheading-note { display: block; grid-column: 1; }
+.plate-disclosure > summary:focus-visible,
 .spectral-featured > summary:focus-visible { outline: 2px solid var(--sky-ink); outline-offset: 3px; border-radius: 4px; }
 /* Chevron at the right end: down while collapsed, turned up when open. */
+.plate-disclosure-toggle,
 .spectral-featured-toggle { grid-column: 2; grid-row: 1 / span 2; display: inline-flex; color: var(--sky-muted); transition: transform 120ms ease; }
+.plate-disclosure-toggle .sky-icon,
 .spectral-featured-toggle .sky-icon { width: 16px; height: 16px; }
+.plate-disclosure > summary:hover .plate-disclosure-toggle,
 .spectral-featured > summary:hover .spectral-featured-toggle { color: var(--sky-ink); }
+.plate-disclosure[open] .plate-disclosure-toggle,
 .spectral-featured[open] .spectral-featured-toggle { transform: rotate(180deg); }
 .spectral-catalog button { align-items: center; text-align: left; }
 .spectral-catalog-names { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
@@ -4016,6 +4270,173 @@ p.name-suggestion-error {
   .assistant-panel {
     transition: none;
   }
+}
+
+/* Live job progress inside the plate stage */
+.skeleton-box.progress-box {
+  width: min(460px, calc(100% - 40px));
+  height: auto;
+  padding: 18px 20px;
+  animation: none;
+}
+
+.stage-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: #f4f4f5;
+  font-size: 13px;
+}
+
+.stage-progress-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.stage-progress-stage {
+  font-weight: 600;
+}
+
+.stage-progress-pct {
+  color: #d4d4d8;
+}
+
+.stage-progress-activity {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 6px;
+  padding-top: 10px;
+  border-top: 1px solid #333338;
+  color: #d4d4d8; /* 11.5:1 on #1c1c1f */
+  font-size: 12px;
+}
+
+.stage-progress-activity.overdue {
+  color: #ffb4a8;
+}
+
+.stage-progress-track {
+  position: relative;
+  height: 6px;
+  border-radius: 3px;
+  background: #333338;
+  overflow: hidden;
+}
+
+.stage-progress-fill {
+  height: 100%;
+  width: 100%;
+  transform-origin: left center;
+  background: linear-gradient(90deg, var(--sky-accent), var(--sky-warm));
+  transition: transform 0.25s linear;
+}
+
+.stage-progress-track.indeterminate .stage-progress-fill {
+  width: 35%;
+  animation: stage-progress-slide 1.2s ease-in-out infinite;
+}
+
+@keyframes stage-progress-slide {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(290%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stage-progress-fill { transition: none; }
+  .stage-progress-track.indeterminate .stage-progress-fill {
+    animation: none;
+    width: 100%;
+    opacity: 0.5;
+  }
+}
+
+.stage-progress-total {
+  color: #a1a1aa; /* 6.6:1 on #1c1c1f */
+}
+
+.viewport-status {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  z-index: 20;
+  pointer-events: none;
+}
+
+.stage-status-chip {
+  display: inline-block;
+  padding: 3px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: var(--radius-sm);
+  background: rgba(0, 0, 0, 0.75);
+  color: #f4f4f5;
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
+.stage-status-chip.ready {
+  border-color: #6ee7a8;
+  color: #b7f5d0;
+}
+
+.stage-status-chip.failed {
+  border-color: #ff8a7a;
+  color: #ffb4a8;
+}
+
+/* Dark plate sidebars: the plate record and spectral rail share the dark
+   chrome of the ribbon and stage. Tokens are redefined only inside them. */
+.plate-sheet,
+.spectral-rail {
+  --plate-paper: #1c1c1f;
+  --plate-panel: #18181b;
+  --plate-raised: #222226;
+  --plate-ink: #f4f4f5;        /* 16.1:1 on #18181b */
+  --plate-muted: #b4b4bc;      /* 8.6:1 on #18181b */
+  --plate-faint: #8e8e98;      /* 5.5:1 on #18181b */
+  --plate-rule: #2a2a2f;
+  --plate-rule-strong: #3f3f46;
+  /* Titles, badges and selection use the app accent (mustard), not red. */
+  --plate-rust: var(--signal); /* #f5b041: 9.4:1 on #18181b */
+  --plate-rust-soft: rgba(245, 176, 65, 0.12);
+  --plate-teal: #f4f4f5;
+  --plate-teal-soft: rgba(244, 244, 245, 0.08);
+  color: var(--plate-ink);
+  color-scheme: dark;                 /* native controls and scrollbars */
+  scrollbar-color: #3f3f46 #18181b;   /* inherited by inner scroll areas */
+}
+
+.plate-sheet .sheet-notice-box {
+  background: #2b2417;
+  color: #f4e6d8;              /* 12.5:1 on #2b2417 */
+}
+
+.spectral-rail .channel-rail-item:hover:not(:disabled) {
+  background: #26262b;
+}
+
+.spectral-rail .channel-rail-item.selected {
+  background: #2f2f35;
+}
+
+.spectral-rail .pixel-readout-card {
+  background: #1c1c1f;
+}
+
+.plate-sheet .flag-chip,
+.spectral-rail .flag-chip {
+  background: #2f2f35;
+}
+
+/* Inside the dark panels the accent is mustard; errors stay red, and text on
+   a mustard badge is dark. */
+.spectral-rail .rail-source.error {
+  color: #ff8a7a; /* 7.7:1 on #18181b */
+}
+
+.spectral-rail .pinned-badge {
+  color: #18181b; /* 9.4:1 on #f5b041 */
 }
 
 /* Fallback when one workspace fails to render (WorkspaceErrorBoundary). */
@@ -4161,4 +4582,27 @@ p.name-suggestion-error {
     scrollbar-width: thin;
     scrollbar-color: var(--sky-line-strong) transparent;
   }
+}
+
+/* Plate "Provenance & Manifest": title and note laid out like the Spectral Lab
+   featured-objects summary (the disclosure itself shares .spectral-featured). */
+.plate-disclosure .plate-disclosure-title {
+  grid-column: 1;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--sky-ink);
+}
+
+.plate-disclosure .plate-disclosure-note {
+  grid-column: 1;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--sky-faint); /* 5.5:1 on #18181b */
+}
+
+.plate-disclosure .provenance-content {
+  margin-top: 0;
+  padding-top: 10px;
 }

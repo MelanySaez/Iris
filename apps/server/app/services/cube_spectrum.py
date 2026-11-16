@@ -38,6 +38,7 @@ from app.core.config import (
     CUBE_CACHE_TTL_SECONDS,
     CUBE_FETCH_TIMEOUT,
     CUBE_ORDER,
+    CUBE_S3_BASE_URL,
     CUBE_SPECTRUM_CACHE_DIR,
     MAX_RANGE_RESPONSE_BYTES,
 )
@@ -102,6 +103,17 @@ def tile_for(ra_deg: float, dec_deg: float, order: int = CUBE_ORDER) -> int:
 def tile_url(npix: int, order: int = CUBE_ORDER) -> str:
     directory = (npix // 10000) * 10000
     return f"{CUBE_BASE_URL}/Norder{order}/Dir{directory}/Npix{npix}/Npix{npix}_cube.fits"
+
+
+def s3_tile_url(npix: int, order: int = CUBE_ORDER) -> str:
+    """Anonymous S3 HTTPS URL of the same tile (no ``Npix{n}/`` sub-directory)."""
+    directory = (npix // 10000) * 10000
+    return f"{CUBE_S3_BASE_URL}/Norder{order}/Dir{directory}/Npix{npix}_cube.fits"
+
+
+def tile_url_for(npix: int, source: str = "irsa") -> str:
+    """Tile URL on IRSA HTTP (default) or on the public S3 mirror."""
+    return s3_tile_url(npix) if source == "s3" else tile_url(npix)
 
 
 def celestial_wcs(header: fits.Header) -> WCS:
@@ -261,9 +273,9 @@ def read_ranges(
     return values
 
 
-def discover_layout(client: httpx.Client, npix: int) -> CubeLayout:
+def discover_layout(client: httpx.Client, npix: int, source: str = "irsa") -> CubeLayout:
     """Walk the tile's HDU headers with range requests and record their offsets."""
-    url = tile_url(npix)
+    url = tile_url_for(npix, source)
     offset = 0
     primary: fits.Header | None = None
     headers: dict[str, tuple[fits.Header, int]] = {}
@@ -391,21 +403,24 @@ def _write_json_cache(path: Path, data: Any) -> None:
         tmp.unlink(missing_ok=True)
 
 
-def _layout_path(npix: int) -> Path:
-    return CUBE_CACHE_DIR / f"layout-{CUBE_ORDER}-{npix}.json"
+def _layout_path(npix: int, source: str = "irsa") -> Path:
+    prefix = "layout-s3" if source == "s3" else "layout"
+    return CUBE_CACHE_DIR / f"{prefix}-{CUBE_ORDER}-{npix}.json"
 
 
-def invalidate_tile(npix: int) -> None:
+def invalidate_tile(npix: int, source: str = "irsa") -> None:
     """Drop the cached layout and every cached spectrum of a republished tile."""
     with _tile_lock(npix):
-        _layout_path(npix).unlink(missing_ok=True)
+        _layout_path(npix, source).unlink(missing_ok=True)
+        if source == "s3":
+            return
         for path in CUBE_SPECTRUM_CACHE_DIR.glob(f"{CUBE_ORDER}-{npix}-*.json"):
             path.unlink(missing_ok=True)
 
 
-def get_layout(client: httpx.Client, npix: int) -> CubeLayout:
+def get_layout(client: httpx.Client, npix: int, source: str = "irsa") -> CubeLayout:
     """Return the cached layout for a tile, discovering it on first use."""
-    path = _layout_path(npix)
+    path = _layout_path(npix, source)
     with _tile_lock(npix):
         cached = _read_json_cache(path)
         if cached is not None:
@@ -413,7 +428,11 @@ def get_layout(client: httpx.Client, npix: int) -> CubeLayout:
                 return CubeLayout.from_json(cached)
             except (TypeError, KeyError):
                 logger.warning("Discarding incompatible cube layout cache %s", path)
-        layout = discover_layout(client, npix)
+        layout = (
+            discover_layout(client, npix)
+            if source == "irsa"
+            else discover_layout(client, npix, source)
+        )
         _write_json_cache(path, layout.to_json())
         return layout
 

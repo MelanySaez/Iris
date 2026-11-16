@@ -114,6 +114,11 @@ class SelectionRecorder:
             self.on_finished(job)
 
     def on_discovered(self, job: JobState, discovery: dict[str, Any]) -> None:
+        # The All-Sky Cube fallback describes synthetic per-detector products,
+        # not discovered observations: storing them would claim coverage that
+        # IRSA never confirmed (and their source is outside the stored domain).
+        if discovery.get("coverage_state") == "cube_fallback":
+            return
         self.store.record_discovery(job.request, discovery)
 
     def on_finished(self, job: JobState) -> None:

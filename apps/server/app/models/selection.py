@@ -50,13 +50,13 @@ class SkyRegion(Base):
         ),
         CheckConstraint("ra_deg >= 0 AND ra_deg < 360", name="sky_region_ra_range"),
         CheckConstraint("dec_deg BETWEEN -90 AND 90", name="sky_region_dec_range"),
-        CheckConstraint("size_arcmin BETWEEN 1 AND 60", name="sky_region_size_range"),
+        CheckConstraint("size_arcmin BETWEEN 1 AND 180", name="sky_region_size_range"),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, Identity(always=True), primary_key=True)
     ra_deg: Mapped[Decimal] = mapped_column(Numeric(8, 5))
     dec_deg: Mapped[Decimal] = mapped_column(Numeric(7, 5))
-    size_arcmin: Mapped[Decimal] = mapped_column(Numeric(5, 3))
+    size_arcmin: Mapped[Decimal] = mapped_column(Numeric(6, 3))
     coverage: Mapped[str] = mapped_column(coverage_enum, server_default="unknown")
     checked_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
@@ -78,7 +78,9 @@ class SpectralProduct(Base):
         CheckConstraint(
             "detector BETWEEN 1 AND 6", name="spectral_product_detector_range"
         ),
-        CheckConstraint("source IN ('local', 'remote')", name="spectral_product_source"),
+        CheckConstraint(
+            "source IN ('local', 'remote', 's3', 'mixed')", name="spectral_product_source"
+        ),
         Index("spectral_product_detector_date", "detector", "date_mjd"),
     )
 
