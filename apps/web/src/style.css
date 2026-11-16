@@ -4293,3 +4293,50 @@ p.name-suggestion-error {
   border-color: #ff8a7a;
   color: #ffb4a8;
 }
+
+/* Dark plate sidebars: the plate record and spectral rail share the dark
+   chrome of the ribbon and stage. Tokens are redefined only inside them. */
+.plate-sheet,
+.spectral-rail {
+  --plate-paper: #1c1c1f;
+  --plate-panel: #18181b;
+  --plate-raised: #222226;
+  --plate-ink: #f4f4f5;        /* 16.1:1 on #18181b */
+  --plate-muted: #b4b4bc;      /* 8.6:1 on #18181b */
+  --plate-faint: #8e8e98;      /* 5.5:1 on #18181b */
+  --plate-rule: #2a2a2f;
+  --plate-rule-strong: #3f3f46;
+  --plate-rust: #ff8a7a;       /* 7.7:1 on #18181b */
+  --plate-rust-soft: rgba(255, 138, 122, 0.12);
+  --plate-teal: #f4f4f5;
+  --plate-teal-soft: rgba(244, 244, 245, 0.08);
+  color: var(--plate-ink);
+  color-scheme: dark;                 /* native controls and scrollbars */
+  scrollbar-color: #3f3f46 #18181b;   /* inherited by inner scroll areas */
+}
+
+.plate-sheet .sheet-notice-box {
+  background: #2b2417;
+  color: #f4e6d8;              /* 12.5:1 on #2b2417 */
+}
+
+.plate-sheet .sheet-provenance-details {
+  background: var(--plate-raised);
+}
+
+.spectral-rail .channel-rail-item:hover:not(:disabled) {
+  background: #26262b;
+}
+
+.spectral-rail .channel-rail-item.selected {
+  background: #2f2f35;
+}
+
+.spectral-rail .pixel-readout-card {
+  background: #1c1c1f;
+}
+
+.plate-sheet .flag-chip,
+.spectral-rail .flag-chip {
+  background: #2f2f35;
+}
