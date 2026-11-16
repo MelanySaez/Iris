@@ -8,6 +8,7 @@ const SOURCE_LABELS: Record<DataSource, string> = {
   s3: 'S3',
   mixed: 'MIXED',
   cube: 'DR1 All-Sky Cube (S3)',
+  upload: 'Uploaded FITS',
 };
 
 /** Human-readable name of the service a frame or cutout came from. */
@@ -52,4 +53,16 @@ export function CubeFallbackNotice({ job }: { job: JobSnapshot }) {
     </p>
     <p>The cube has no VARIANCE layer, and wavelengths are nominal channel centres, not calibrated values.</p>
   </div>;
+}
+
+/** States which of the user's files this plate shows and what it covers. */
+export function UploadNotice({ job }: { job: JobSnapshot }) {
+  const upload = job.upload;
+  if (!upload) return null;
+  const what = upload.format === 'dr1_cube_tile'
+    ? 'DR1 All-Sky Cube tile · one image per channel, no epochs, no VARIANCE'
+    : `SPHEREx Level-2 image · detector D${upload.detector}, one observation`;
+  return <p className="plate-upload-notice" role="note">
+    <strong>Your file:</strong> {upload.filename} · {what} · {upload.extent_arcmin.toFixed(1)}′ across.
+  </p>;
 }

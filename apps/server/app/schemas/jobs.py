@@ -56,7 +56,7 @@ class CutoutMetadata(BaseModel):
     epoch: int
     obs_id: str
     date_iso: str
-    source: Literal["remote", "s3", "mixed", "cube"]
+    source: Literal["remote", "s3", "mixed", "cube", "upload"]
     channel: int | None = None
     calibrated: bool = False
     wavelength_status: str = "wcs_wave_approximate"
@@ -82,7 +82,7 @@ class FrameDescriptor(BaseModel):
     epoch: int
     obs_id: str
     date_iso: str
-    source: Literal["remote", "s3", "mixed", "cube"]
+    source: Literal["remote", "s3", "mixed", "cube", "upload"]
     calibrated: bool = False
     wavelength_status: str = "wcs_wave_approximate"
     provenance: list[dict[str, Any]] = Field(default_factory=list)
@@ -122,6 +122,8 @@ class JobSnapshot(BaseModel):
     cutouts: list[CutoutMetadata] = Field(default_factory=list)
     animation_reason: str | None = None
     activity: dict[str, Any] | None = None
+    # Set when the plate was opened from the user's own FITS file.
+    upload: dict[str, Any] | None = None
     discovery: dict[str, Any] = Field(default_factory=dict)
     cache: dict[str, bool] = Field(default_factory=lambda: {"hit": False})
     wavelength_status: str = "wcs_wave_approximate"
@@ -150,7 +152,7 @@ class ManifestCutout(BaseModel):
     detector: int
     epoch: int
     obs_id: str
-    source: Literal["remote", "s3", "mixed", "cube"]
+    source: Literal["remote", "s3", "mixed", "cube", "upload"]
     channel: int | None = None
     calibrated: bool = False
     wavelength_status: str = "wcs_wave_approximate"

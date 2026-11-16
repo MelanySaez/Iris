@@ -4,7 +4,8 @@ export type AppRoute =
   | { type: 'landing' }
   | { type: 'sky' }
   | { type: 'records' }
-  | { type: 'plate'; jobId: string }
+  /** jobId null: Plate without a job, where the user can open their own FITS. */
+  | { type: 'plate'; jobId: string | null }
   | { type: 'spectral' };
 
 export function parseHash(hash: string): AppRoute {
@@ -18,11 +19,9 @@ export function parseHash(hash: string): AppRoute {
   if (clean === 'records') {
     return { type: 'records' };
   }
-  if (clean.startsWith('plate/')) {
-    const jobId = clean.slice('plate/'.length).trim();
-    if (jobId) {
-      return { type: 'plate', jobId: decodeURIComponent(jobId) };
-    }
+  if (clean === 'plate' || clean.startsWith('plate/')) {
+    const jobId = clean.slice('plate'.length).replace(/^\//, '').trim();
+    return { type: 'plate', jobId: jobId ? decodeURIComponent(jobId) : null };
   }
   return { type: 'sky' };
 }
@@ -32,7 +31,7 @@ export function routeToHash(route: AppRoute): string {
     return '#/';
   }
   if (route.type === 'plate') {
-    return `#/plate/${encodeURIComponent(route.jobId)}`;
+    return route.jobId ? `#/plate/${encodeURIComponent(route.jobId)}` : '#/plate';
   }
   if (route.type === 'spectral') {
     return '#/spectral';

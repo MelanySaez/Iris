@@ -136,6 +136,38 @@ All endpoints are mounted under `/api`:
 - `GET /api/selections/{id}`: One saved selection with its discovered spectral products and, for ready jobs, the provenance manifest.
 - `DELETE /api/selections/{id}`: Delete one saved selection (204). Shared region data is kept. All selection endpoints answer 503 when `DATABASE_URL` is unset and 403 while the browser has not accepted cookies (consent cookie not `necessary` or `all`).
 
+## User FITS uploads
+
+Plate can open a local file without a Sky job. The browser sends the file to
+`POST /api/uploads?filename=my-spherex.fits` as the raw request body with
+`Content-Type: application/octet-stream` (no multipart form). A successful
+request returns a ready `JobSnapshot`, usable with the existing frame, pixel
+and manifest endpoints.
+
+```bash
+curl --fail-with-body -X POST \
+  'http://127.0.0.1:8000/api/uploads?filename=my-spherex.fits' \
+  -H 'Content-Type: application/octet-stream' \
+  --data-binary @my-spherex.fits
+```
+
+| Format | Required content | Available products |
+|--------|------------------|--------------------|
+| SPHEREx Level-2 image/cutout | 2-D `IMAGE`, `VARIANCE`, `FLAGS`; key-W `WCS-WAVE` lookup and detector metadata | The detector's 17 channels, image, variance, flags and approximate per-pixel wavelengths |
+| DR1 All-Sky Cube tile (`Npix…_cube.fits`) | 3-D `IMAGE`, `FLAGS`, `NHITS`; `SPECTRAL_CHANNELS` table and celestial WCS | One cutout per channel, image, flags and hit counts; nominal wavelengths; no variance or epochs |
+
+The size limit is 350 MB (350,000,000 bytes); oversized requests return **413**.
+Empty, unreadable or unsupported FITS files return **422** with a reason,
+including missing extensions or layers whose dimensions do not match `IMAGE`.
+The filename is a display label,
+not a server path. Files are stored under `data/cache/uploads/<sha256>.fits`;
+job IDs use `upload-` plus the first 20 hash characters. Uploading the same
+bytes reopens the cached plate, retaining its original filename label while it
+is ready in memory. Derived arrays and ready snapshots use the existing cache.
+Uploads are not selection Records and do not require cookie consent or a
+selection database. Cached files are held on the backend; this is not a local-only
+browser viewer or permanent file storage.
+
 ## Provenance & Scientific Limitations
 
 - **Visualization-Grade Wavelengths**: Per-pixel wavelength and bandwidth maps are derived from the FITS `WCS-WAVE` table. Calibrated science-grade `CWAVE`/`CBAND` products are not available in this release. Every payload touching spectral data carries `wavelength_status: "wcs_wave_approximate"` and `calibrated: false`.
@@ -143,7 +175,7 @@ All endpoints are mounted under `/api`:
 - **Multi-Product Mosaics**: Regions exceeding 30 arcmin or requiring multi-file mosaic assembly report `multi_product_mosaic: "pending"`. The service never synthesizes artificial data.
 - **Honest Failure States**: A TAP failure is reported as `coverage: "unknown"` and as an explicit discovery error on the job, never as "no coverage".
 - **Cache-Only Recovery**: A ready job snapshot stores the exact source `uri` per cutout, so frames and pixel probes reload from the derived disk cache after an LRU eviction or restart. The backend never re-downloads from a reconstructed or guessed URL; an evicted entry returns 404 with a "re-run the job" message.
-- **Security**: Client input is restricted to celestial coordinates, region sizes, channel indices, and product selections. Client-supplied filesystem paths or arbitrary URLs are rejected.
+- **Security**: Region requests accept celestial coordinates, region sizes, channel indices, and product selections. FITS uploads accept bounded file bytes. Client-supplied filesystem paths or arbitrary URLs are rejected.
 
 ## Cache Layout
 
@@ -155,6 +187,7 @@ data/
     ├── hips-properties.json            # 7-day cached HiPS cube properties
     ├── discovery/<sha1>.json           # 6-hour cached IRSA TAP discovery results
     ├── cutouts/<sha1>.fits             # Atomically streamed remote cutout FITS files
+    ├── uploads/<sha256>.fits           # User-uploaded SPHEREx FITS files
     ├── derived/
     │   ├── <sha1>.npz                  # Float32/int32 extracted arrays (compressed)
     │   └── <sha1>.meta.json            # Cutout footprint, dates, units, and flag bits

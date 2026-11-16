@@ -13,6 +13,7 @@ from app.api.routes import (
     regions,
     selections,
     spectrum,
+    uploads,
 )
 
 router = APIRouter()
@@ -27,5 +28,6 @@ for route_module in (
     regions,
     selections,
     spectrum,
+    uploads,
 ):
     router.include_router(route_module.router)

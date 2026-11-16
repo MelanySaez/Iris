@@ -67,13 +67,10 @@ export function TopBar({ currentRoute, activeJobId, onNavigate, onStartTour }: T
           className={`switch-btn ${isPlate ? 'active' : ''}`}
           aria-pressed={isPlate}
           data-assistant-target="workspace-plate"
-          disabled={!activeJobId}
-          title={activeJobId ? `Switch to Spectral Plate ${activeJobId}` : 'Select a region in Sky to open Plate'}
-          onClick={() => {
-            if (activeJobId) {
-              onNavigate({ type: 'plate', jobId: activeJobId });
-            }
-          }}
+          title={activeJobId
+            ? `Switch to Spectral Plate ${activeJobId}`
+            : 'Open Plate: load your own SPHEREx FITS or select a region in Sky'}
+          onClick={() => onNavigate({ type: 'plate', jobId: activeJobId })}
         >
           Plate
         </button>

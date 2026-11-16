@@ -65,3 +65,23 @@ describe('TopBar assistant targets', () => {
     }
   });
 });
+
+describe('TopBar Plate tab', () => {
+  afterEach(() => cleanup());
+
+  it('opens Plate without a Sky selection, to load the user FITS', () => {
+    const onNavigate = vi.fn();
+    render(<TopBar currentRoute={{ type: 'sky' }} activeJobId={null} onNavigate={onNavigate} />);
+    const plate = screen.getByRole('button', { name: 'Plate' });
+    expect(plate.hasAttribute('disabled')).toBe(false);
+    fireEvent.click(plate);
+    expect(onNavigate).toHaveBeenCalledWith({ type: 'plate', jobId: null });
+  });
+
+  it('still opens the current job when there is one', () => {
+    const onNavigate = vi.fn();
+    render(<TopBar currentRoute={{ type: 'sky' }} activeJobId="job-7" onNavigate={onNavigate} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Plate' }));
+    expect(onNavigate).toHaveBeenCalledWith({ type: 'plate', jobId: 'job-7' });
+  });
+});

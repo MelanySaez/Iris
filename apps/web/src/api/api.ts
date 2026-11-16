@@ -141,6 +141,40 @@ export const api = {
     });
   },
 
+  /**
+   * Open the user's own SPHEREx FITS as a plate. The file is the raw request
+   * body; ``onProgress(sent, total)`` reports the upload as it goes.
+   */
+  uploadFits(file: File, onProgress?: (sent: number, total: number) => void): Promise<JobSnapshot> {
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', `/api/uploads?filename=${encodeURIComponent(file.name)}`);
+      xhr.setRequestHeader('Content-Type', 'application/octet-stream');
+      xhr.setRequestHeader('Accept', 'application/json');
+      xhr.upload.onprogress = (event) => {
+        if (event.lengthComputable) onProgress?.(event.loaded, event.total);
+      };
+      xhr.onload = () => {
+        let body: unknown = null;
+        try {
+          body = JSON.parse(xhr.responseText);
+        } catch {
+          body = null;
+        }
+        if (xhr.status >= 200 && xhr.status < 300) {
+          resolve(body as JobSnapshot);
+          return;
+        }
+        const detail = body && typeof body === 'object' && typeof (body as { detail?: unknown }).detail === 'string'
+          ? (body as { detail: string }).detail
+          : undefined;
+        reject(new ApiError(`Upload failed (${xhr.status})`, xhr.status, detail));
+      };
+      xhr.onerror = () => reject(new ApiError('Upload failed: the server could not be reached', 0));
+      xhr.send(file);
+    });
+  },
+
   async getJob(id: string): Promise<JobSnapshot> {
     return request<JobSnapshot>(`/api/jobs/${encodeURIComponent(id)}`);
   },

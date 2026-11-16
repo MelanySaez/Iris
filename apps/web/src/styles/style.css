@@ -4618,3 +4618,49 @@ p.name-suggestion-error {
   margin-top: 0;
   padding-top: 10px;
 }
+
+/* Plate without a job: open the user's own SPHEREx FITS. */
+.plate-fits-loader {
+  max-width: 40rem;
+  margin: 8vh auto 0;
+  padding: 1.5rem;
+  border: 1px dashed var(--sky-line-strong);
+  border-radius: var(--radius-md);
+  background: var(--sky-surface);
+  color: var(--sky-ink);
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+.plate-fits-loader.dragging { border-color: var(--signal); }
+.plate-fits-lead, .plate-fits-note { color: var(--sky-muted); margin: 0; }
+.plate-fits-pick {
+  align-self: flex-start;
+  padding: 0.5rem 0.9rem;
+  border: 1px solid var(--signal);
+  border-radius: var(--radius-sm);
+  color: var(--signal);
+  cursor: pointer;
+}
+.plate-fits-pick input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.plate-fits-pick:focus-within { outline: 2px solid var(--signal); outline-offset: 2px; }
+.plate-fits-pick.disabled { opacity: 0.5; cursor: progress; }
+.plate-fits-progress { display: flex; flex-direction: column; gap: 6px; color: var(--sky-muted); }
+.plate-fits-error { margin: 0; color: #ff8a7a; }
+.plate-fits-formats h3 { margin: 0.5rem 0 0.25rem; font-size: 0.95rem; }
+.plate-fits-formats ul { margin: 0; padding-left: 1.1rem; color: var(--sky-muted); }
+.plate-fits-sky {
+  align-self: flex-start;
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--sky-ink);
+  text-decoration: underline;
+  cursor: pointer;
+}
+.plate-upload-notice {
+  margin: 10px 16px 0;
+  font-size: 12px;
+  color: #d4d4d8;
+}
+.plate-upload-notice strong { color: var(--signal); }

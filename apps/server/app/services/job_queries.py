@@ -87,9 +87,9 @@ def render_frame_png(
     target_prod = product if product in ("image", "variance") else "image"
     if cutout.metadata.get("calibrated"):
         percentile_key = (channel, -1, target_prod)
-    elif cutout.metadata.get("source") == "cube":
-        # Cube cutouts are per channel: a per-detector key would share one
-        # stretch across every channel of the detector.
+    elif cutout.metadata.get("channel") is not None:
+        # Per-channel cutouts (cube fallback, uploaded cube tiles): a
+        # per-detector key would share one stretch across the detector.
         percentile_key = ("cube", channel, target_prod)
     else:
         percentile_key = (det, epoch, target_prod)
