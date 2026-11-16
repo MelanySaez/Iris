@@ -94,6 +94,48 @@ describe('SkyWorkspace right-click pinning', () => {
     else Reflect.deleteProperty(navigator, 'serviceWorker');
   });
 
+  it('keeps the map controls working while the region tool is active', async () => {
+    const setFoV = vi.fn();
+    Object.assign(viewer, { setFoV });
+    const { container } = render(
+      <SkyWorkspace
+        activeJob={null}
+        onStartJob={async () => {}}
+        onOpenPlate={() => {}}
+        onViewSpectrum={() => {}}
+        onRetryJob={() => {}}
+      />,
+    );
+    await waitFor(() => expect(viewer.addCatalog).toHaveBeenCalled());
+    const shell = container.querySelector('.aladin-shell') as HTMLElement;
+    vi.spyOn(shell, 'getBoundingClientRect').mockReturnValue({
+      left: 0, top: 0, right: 800, bottom: 400, width: 800, height: 400, x: 0, y: 0,
+      toJSON: () => ({}),
+    } as DOMRect);
+    Object.assign(shell, { setPointerCapture: vi.fn() });
+    const canvas = document.createElement('canvas');
+    container.querySelector('#aladin-view')?.append(canvas);
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Select Region' }).hasAttribute('disabled')).toBe(false));
+    fireEvent.click(screen.getByRole('button', { name: 'Select Region' }));
+    expect(screen.getByRole('button', { name: 'Select Region' }).getAttribute('aria-pressed')).toBe('true');
+
+    // Pressing a dock button must not start a selection rectangle.
+    const zoomIn = screen.getByRole('button', { name: 'Zoom in' });
+    fireEvent.pointerDown(zoomIn, { clientX: 700, clientY: 30 });
+    fireEvent.pointerMove(shell, { clientX: 600, clientY: 120 });
+    fireEvent.pointerUp(zoomIn, { clientX: 700, clientY: 30 });
+    fireEvent.click(zoomIn);
+    expect(container.querySelector('.selection-box-overlay')).toBeNull();
+    expect(setFoV).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('button', { name: 'Select Region' }).getAttribute('aria-pressed')).toBe('true');
+
+    // Dragging on the map itself still draws the rectangle.
+    fireEvent.pointerDown(canvas, { clientX: 100, clientY: 100 });
+    fireEvent.pointerMove(shell, { clientX: 220, clientY: 180 });
+    expect(container.querySelector('.selection-box-overlay')).not.toBeNull();
+  });
+
   it('pins the clicked sky coordinate during capture before Aladin stops native propagation', async () => {
     const { container } = render(
       <SkyWorkspace
