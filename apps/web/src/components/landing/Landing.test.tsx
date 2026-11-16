@@ -1,7 +1,67 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Landing } from './Landing';
+
+/** Minimal IntersectionObserver stand-in that lets a test decide what is on screen. */
+class FakeObserver {
+  static instances: FakeObserver[] = [];
+  observed = new Set<Element>();
+  constructor(private readonly callback: IntersectionObserverCallback) {
+    FakeObserver.instances.push(this);
+  }
+  observe(el: Element) { this.observed.add(el); }
+  unobserve(el: Element) { this.observed.delete(el); }
+  disconnect() { this.observed.clear(); }
+  show(el: Element) {
+    this.callback([{ target: el, isIntersecting: true } as unknown as IntersectionObserverEntry], this as unknown as IntersectionObserver);
+  }
+}
+
+describe('Landing scroll reveal', () => {
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+    FakeObserver.instances = [];
+  });
+
+  it('hides the sections below the hero until they scroll into view, once', () => {
+    vi.stubGlobal('IntersectionObserver', FakeObserver);
+    const { container } = render(<Landing onExplore={vi.fn()} onTour={vi.fn()} />);
+    expect(container.querySelector('.landing')?.classList.contains('landing-reveal-ready')).toBe(true);
+
+    const team = screen.getByRole('region', { name: 'The team' });
+    const card = within(team).getAllByRole('listitem')[0];
+    expect(card.hasAttribute('data-reveal')).toBe(true);
+    expect(card.getAttribute('data-revealed')).toBeNull();
+
+    const observer = FakeObserver.instances[0];
+    expect(observer.observed.has(card)).toBe(true);
+    act(() => observer.show(card));
+    expect(card.getAttribute('data-revealed')).toBe('true');
+    expect(observer.observed.has(card)).toBe(false); // revealed once, then left alone
+  });
+
+  it('staggers the cards of one group', () => {
+    vi.stubGlobal('IntersectionObserver', FakeObserver);
+    render(<Landing onExplore={vi.fn()} onTour={vi.fn()} />);
+    const cards = within(screen.getByRole('region', { name: 'The team' })).getAllByRole('listitem');
+    expect(cards.map((c) => c.style.getPropertyValue('--reveal-index'))).toEqual(['0', '1', '2', '3']);
+  });
+
+  it('shows everything at once when the browser cannot observe scrolling', () => {
+    vi.stubGlobal('IntersectionObserver', undefined);
+    const { container } = render(<Landing onExplore={vi.fn()} onTour={vi.fn()} />);
+    expect(container.querySelector('.landing')?.classList.contains('landing-reveal-ready')).toBe(false);
+  });
+
+  it('shows everything at once when reduced motion is requested', () => {
+    vi.stubGlobal('IntersectionObserver', FakeObserver);
+    vi.stubGlobal('matchMedia', (query: string) => ({ matches: query.includes('reduce'), addEventListener() {}, removeEventListener() {} }));
+    const { container } = render(<Landing onExplore={vi.fn()} onTour={vi.fn()} />);
+    expect(container.querySelector('.landing')?.classList.contains('landing-reveal-ready')).toBe(false);
+  });
+});
 
 describe('Landing', () => {
   afterEach(() => cleanup());

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type RefObject } from 'react';
 import { IrisLogo } from '../IrisLogo';
 import { prefersReducedMotion, Starfield, type StarfieldHandle } from './Starfield';
 
@@ -66,6 +66,42 @@ const TEAM = [
   { name: 'Gabriel Alejandro Mantilla Clavijo', github: 'Gavimantilla' },
 ] as const;
 
+/**
+ * Marks an element to fade and rise into place the first time it scrolls into
+ * view; `index` staggers the items of one group (see useScrollReveal).
+ */
+const reveal = (index = 0) => ({
+  'data-reveal': '',
+  style: { '--reveal-index': String(index) } as CSSProperties,
+});
+
+/**
+ * Reveals every `[data-reveal]` element inside the landing as it enters the
+ * viewport, once. Returns false (everything stays visible) when the browser
+ * cannot observe intersections or the visitor prefers reduced motion.
+ */
+function useScrollReveal(rootRef: RefObject<HTMLDivElement | null>): boolean {
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root || typeof IntersectionObserver === 'undefined' || prefersReducedMotion()) return undefined;
+    const observer = new IntersectionObserver(
+      (entries, obs) => {
+        for (const entry of entries) {
+          if (!entry.isIntersecting) continue;
+          entry.target.setAttribute('data-revealed', 'true');
+          obs.unobserve(entry.target);
+        }
+      },
+      { root, rootMargin: '0px 0px -8% 0px', threshold: 0.12 },
+    );
+    root.querySelectorAll('[data-reveal]').forEach((el) => observer.observe(el));
+    setReady(true);
+    return () => observer.disconnect();
+  }, [rootRef]);
+  return ready;
+}
+
 const RESOURCES = [
   { label: 'SPHEREx mission', note: 'NASA', href: 'https://science.nasa.gov/mission/spherex/' },
   { label: 'SPHEREx at IRSA', note: 'Data and tools', href: 'https://irsa.ipac.caltech.edu/Missions/spherex.html' },
@@ -122,13 +158,15 @@ export function Landing({ onExplore, onTour, leaving = false, onExited }: Landin
     };
   }, []);
 
+  const revealReady = useScrollReveal(rootRef);
+
   const scrollTo = (id: string) => {
     rootRef.current?.querySelector(`#${id}`)?.scrollIntoView({ behavior: 'smooth' });
   };
 
   return (
     <div
-      className={`landing${warping ? ' landing-warping' : ''}${leaving ? ' landing-leaving' : ''}`}
+      className={`landing${revealReady ? ' landing-reveal-ready' : ''}${warping ? ' landing-warping' : ''}${leaving ? ' landing-leaving' : ''}`}
       ref={rootRef}
       aria-hidden={leaving || undefined}
     >
@@ -184,10 +222,10 @@ export function Landing({ onExplore, onTour, leaving = false, onExited }: Landin
       </section>
 
       <section id="landing-context" className="landing-context" aria-labelledby="landing-context-title">
-        <h2 id="landing-context-title">A little context before you explore</h2>
+        <h2 id="landing-context-title" {...reveal()}>A little context before you explore</h2>
         <div className="landing-context-grid">
           {CONTEXT.map((item, index) => (
-            <article key={item.question}>
+            <article key={item.question} {...reveal(index % 2)}>
               <span className="landing-index">{String(index + 1).padStart(2, '0')}</span>
               <div>
                 <h3>{item.question}</h3>
@@ -205,10 +243,10 @@ export function Landing({ onExplore, onTour, leaving = false, onExited }: Landin
           ))}
         </div>
         <section className="landing-catalog-strip" aria-labelledby="landing-catalogs-title">
-          <h3 id="landing-catalogs-title">Catalog layers on the map</h3>
+          <h3 id="landing-catalogs-title" {...reveal()}>Catalog layers on the map</h3>
           <ul>
-            {CATALOG_LAYERS.map((catalog) => (
-              <li key={catalog.name}>
+            {CATALOG_LAYERS.map((catalog, index) => (
+              <li key={catalog.name} {...reveal(index)}>
                 {catalog.href ? (
                   <a href={catalog.href} {...external}>
                     <strong>{catalog.name}</strong>
@@ -224,7 +262,7 @@ export function Landing({ onExplore, onTour, leaving = false, onExited }: Landin
             ))}
           </ul>
         </section>
-        <button type="button" className="landing-cta landing-cta-end" onClick={() => enterSky()}>
+        <button type="button" className="landing-cta landing-cta-end" onClick={() => enterSky()} {...reveal()}>
           Open the viewer
           <svg viewBox="0 0 16 16" aria-hidden="true">
             <path d="M4 12 12 4M6 4h6v6" />
@@ -233,11 +271,11 @@ export function Landing({ onExplore, onTour, leaving = false, onExited }: Landin
       </section>
 
       <section id="landing-team" className="landing-team" aria-labelledby="landing-team-title">
-        <h2 id="landing-team-title">The team</h2>
-        <p className="landing-team-lede">The people who built Iris for NASA Space Apps 2026.</p>
+        <h2 id="landing-team-title" {...reveal()}>The team</h2>
+        <p className="landing-team-lede" {...reveal(1)}>The people who built Iris for NASA Space Apps 2026.</p>
         <ul>
-          {TEAM.map((member) => (
-            <li key={member.github}>
+          {TEAM.map((member, index) => (
+            <li key={member.github} {...reveal(index)}>
               <a href={`https://github.com/${member.github}`} {...external}>
                 <span className="landing-team-name">{member.name}</span>
                 <span className="landing-team-handle">@{member.github}</span>
@@ -248,10 +286,10 @@ export function Landing({ onExplore, onTour, leaving = false, onExited }: Landin
       </section>
 
       <footer id="landing-resources" className="landing-footer">
-        <h2>Official resources</h2>
+        <h2 {...reveal()}>Official resources</h2>
         <ul>
-          {RESOURCES.map((resource) => (
-            <li key={resource.href}>
+          {RESOURCES.map((resource, index) => (
+            <li key={resource.href} {...reveal(index)}>
               <a href={resource.href} {...external}>
                 {resource.label}
               </a>
