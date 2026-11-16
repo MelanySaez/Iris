@@ -1,5 +1,5 @@
-import { formatDec, formatRa } from '../../format';
-import type { RegionRequest } from '../../types';
+import { formatDec, formatRa } from '../../utils/format';
+import type { RegionRequest } from '../../types/types';
 
 interface RegionConfirmBarProps {
   region: RegionRequest;

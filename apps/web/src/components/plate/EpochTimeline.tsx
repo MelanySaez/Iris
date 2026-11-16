@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { formatDateIso } from '../../format';
-import type { JobEvent, JobFrame } from '../../types';
+import { formatDateIso } from '../../utils/format';
+import type { JobEvent, JobFrame } from '../../types/types';
 import { sourceLabel } from './SourceNotice';
 
 interface EpochTimelineProps {

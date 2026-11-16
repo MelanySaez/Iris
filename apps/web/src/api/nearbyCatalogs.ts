@@ -1,10 +1,12 @@
-import { FEATURED_OBJECTS, type FeaturedObject } from './catalogs';
+import { FEATURED_OBJECTS, type FeaturedObject } from '../services/catalogs';
 import { TocatsCatalogClient, type TocatsQueryResult } from './tocats';
 
 export const DEFAULT_NEARBY_RADIUS_DEG = 0.5;
 export const MAX_NEARBY_RADIUS_DEG = 5;
 export const MAX_NEARBY_RESULTS = 300;
-export const SIMBAD_TAP_URL = 'https://simbad.cds.unistra.fr/simbad/sim-tap/sync';
+// The CDS primary (simbad.cds.unistra.fr) has been down; the Harvard CfA mirror serves the
+// same SIMBAD TAP service with open CORS, so the browser can query it directly.
+export const SIMBAD_TAP_URL = 'https://simbad.cfa.harvard.edu/simbad/sim-tap/sync';
 
 export type NearbyCatalogId = 'featured' | 'simbad' | 'gaia' | 'catwise';
 
@@ -141,10 +143,14 @@ function parseSimbadResponse(payload: unknown): NearbyCatalogSource[] {
   return sources;
 }
 
-function simbadQuery(options: SearchNearbyCatalogsOptions, radiusDeg: number): string {
-  const adql = `SELECT TOP ${SIMBAD_RESULT_LIMIT} main_id, ra, dec, otype FROM basic `
-    + `WHERE 1=CONTAINS(POINT('ICRS', ra, dec), `
-    + `CIRCLE('ICRS', ${options.raDeg}, ${options.decDeg}, ${radiusDeg}))`;
+function simbadQuery(options: SearchNearbyCatalogsOptions, radiusDeg: number, orderBy?: string): string {
+  // The SIMBAD TAP service rejects circles larger than a hemisphere: ask for the whole sky instead.
+  const where = radiusDeg > 90
+    ? ''
+    : ` WHERE 1=CONTAINS(POINT('ICRS', ra, dec), CIRCLE('ICRS', ${options.raDeg}, ${options.decDeg}, ${radiusDeg}))`;
+  const adql = `SELECT TOP ${SIMBAD_RESULT_LIMIT} main_id, ra, dec, otype FROM basic`
+    + where
+    + (orderBy ? ` ORDER BY ${orderBy}` : '');
   const params = new URLSearchParams({ REQUEST: 'doQuery', LANG: 'ADQL', FORMAT: 'json', QUERY: adql });
   return `${SIMBAD_TAP_URL}?${params.toString()}`;
 }
@@ -153,14 +159,33 @@ async function querySimbad(
   options: SearchNearbyCatalogsOptions,
   radiusDeg: number,
   fetcher: typeof fetch,
+  orderBy?: string,
 ): Promise<NearbyCatalogSource[]> {
   throwIfAborted(options.signal);
-  const response = await fetcher(simbadQuery(options, radiusDeg), { signal: options.signal });
+  const response = await fetcher(simbadQuery(options, radiusDeg, orderBy), { signal: options.signal });
   throwIfAborted(options.signal);
   if (!response.ok) throw new Error(`SIMBAD TAP returned HTTP ${response.status}.`);
   const parsed = parseSimbadResponse(await response.json());
   throwIfAborted(options.signal);
   return parsed;
+}
+
+/**
+ * SIMBAD objects inside a cone (used by the Sky SIMBAD layer for the visible field),
+ * most-cited first: without an order, TOP 300 is whatever SIMBAD stores first and
+ * clusters in one corner of the view.
+ */
+export function querySimbadCone(
+  cone: { raDeg: number; decDeg: number; radiusDeg: number },
+  fetcher: typeof fetch = fetch,
+  signal?: AbortSignal,
+): Promise<NearbyCatalogSource[]> {
+  return querySimbad(
+    { raDeg: cone.raDeg, decDeg: cone.decDeg, visibleCatalogIds: ['simbad'], signal },
+    cone.radiusDeg,
+    fetcher,
+    'nbref DESC',
+  );
 }
 
 function fromTocats(catalogId: 'gaia' | 'catwise', result: TocatsQueryResult): NearbyCatalogSource[] {

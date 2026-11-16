@@ -1,4 +1,4 @@
-import type { RegionRequest } from './types';
+import type { RegionRequest } from '../types/types';
 
 export const MIN_REGION_SIZE_ARCMIN = 1;
 export const MAX_REGION_SIZE_ARCMIN = 180;

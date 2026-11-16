@@ -1,4 +1,4 @@
-import type { JobActivity } from '../../types';
+import type { JobActivity } from '../../types/types';
 
 export interface ActivityView {
   title: string;

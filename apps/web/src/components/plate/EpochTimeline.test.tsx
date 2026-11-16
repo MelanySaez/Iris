@@ -2,7 +2,7 @@
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { JobFrame } from '../../types';
+import type { JobFrame } from '../../types/types';
 import { EpochTimeline, ProviderTrace } from './EpochTimeline';
 
 function frames(channel = 44): JobFrame[] {

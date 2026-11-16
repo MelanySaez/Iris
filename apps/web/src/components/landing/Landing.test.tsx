@@ -1,7 +1,67 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Landing } from './Landing';
+
+/** Minimal IntersectionObserver stand-in that lets a test decide what is on screen. */
+class FakeObserver {
+  static instances: FakeObserver[] = [];
+  observed = new Set<Element>();
+  constructor(private readonly callback: IntersectionObserverCallback) {
+    FakeObserver.instances.push(this);
+  }
+  observe(el: Element) { this.observed.add(el); }
+  unobserve(el: Element) { this.observed.delete(el); }
+  disconnect() { this.observed.clear(); }
+  show(el: Element) {
+    this.callback([{ target: el, isIntersecting: true } as unknown as IntersectionObserverEntry], this as unknown as IntersectionObserver);
+  }
+}
+
+describe('Landing scroll reveal', () => {
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+    FakeObserver.instances = [];
+  });
+
+  it('hides the sections below the hero until they scroll into view, once', () => {
+    vi.stubGlobal('IntersectionObserver', FakeObserver);
+    const { container } = render(<Landing onExplore={vi.fn()} onTour={vi.fn()} />);
+    expect(container.querySelector('.landing')?.classList.contains('landing-reveal-ready')).toBe(true);
+
+    const team = screen.getByRole('region', { name: 'The team' });
+    const card = within(team).getAllByRole('listitem')[0];
+    expect(card.hasAttribute('data-reveal')).toBe(true);
+    expect(card.getAttribute('data-revealed')).toBeNull();
+
+    const observer = FakeObserver.instances[0];
+    expect(observer.observed.has(card)).toBe(true);
+    act(() => observer.show(card));
+    expect(card.getAttribute('data-revealed')).toBe('true');
+    expect(observer.observed.has(card)).toBe(false); // revealed once, then left alone
+  });
+
+  it('staggers the cards of one group', () => {
+    vi.stubGlobal('IntersectionObserver', FakeObserver);
+    render(<Landing onExplore={vi.fn()} onTour={vi.fn()} />);
+    const cards = within(screen.getByRole('region', { name: 'The team' })).getAllByRole('listitem');
+    expect(cards.map((c) => c.style.getPropertyValue('--reveal-index'))).toEqual(['0', '1', '2', '3']);
+  });
+
+  it('shows everything at once when the browser cannot observe scrolling', () => {
+    vi.stubGlobal('IntersectionObserver', undefined);
+    const { container } = render(<Landing onExplore={vi.fn()} onTour={vi.fn()} />);
+    expect(container.querySelector('.landing')?.classList.contains('landing-reveal-ready')).toBe(false);
+  });
+
+  it('shows everything at once when reduced motion is requested', () => {
+    vi.stubGlobal('IntersectionObserver', FakeObserver);
+    vi.stubGlobal('matchMedia', (query: string) => ({ matches: query.includes('reduce'), addEventListener() {}, removeEventListener() {} }));
+    const { container } = render(<Landing onExplore={vi.fn()} onTour={vi.fn()} />);
+    expect(container.querySelector('.landing')?.classList.contains('landing-reveal-ready')).toBe(false);
+  });
+});
 
 describe('Landing', () => {
   afterEach(() => cleanup());
@@ -38,12 +98,65 @@ describe('Landing', () => {
   it('answers the four context questions', () => {
     render(<Landing onExplore={vi.fn()} onTour={vi.fn()} />);
     const context = screen.getByRole('region', { name: 'A little context before you explore' });
-    expect(within(context).getAllByRole('heading', { level: 3 }).map((h) => h.textContent)).toEqual([
+    expect(within(context).getAllByRole('article').map((a) => within(a).getByRole('heading', { level: 3 }).textContent)).toEqual([
       'What is SPHEREx?',
       'Where does the data come from?',
       'What can I explore?',
       'What are astronomical catalogs?',
     ]);
+  });
+
+  it('names every catalog layer the map can show, below the four questions', () => {
+    render(<Landing onExplore={vi.fn()} onTour={vi.fn()} />);
+    const strip = screen.getByRole('region', { name: 'Catalog layers on the map' });
+    const names = within(strip).getAllByRole('listitem').map((li) => li.querySelector('strong')?.textContent);
+    expect(names).toEqual(['SIMBAD', 'Gaia DR3', 'CatWISE2020', 'Iris featured objects']);
+    const links = within(strip).getAllByRole('link');
+    expect(links.map((a) => a.getAttribute('href'))).toEqual([
+      'https://simbad.cds.unistra.fr/',
+      'https://www.cosmos.esa.int/web/gaia/dr3',
+      'https://catwise.github.io/',
+    ]);
+    for (const link of links) expect(link.getAttribute('target')).toBe('_blank');
+  });
+
+  it('leaves the catalog question without its own link', () => {
+    render(<Landing onExplore={vi.fn()} onTour={vi.fn()} />);
+    const card = screen.getByRole('heading', { name: 'What are astronomical catalogs?' }).closest('article') as HTMLElement;
+    expect(within(card).queryByRole('link')).toBeNull();
+  });
+
+  it('introduces the team with each member linking to their GitHub profile', () => {
+    render(<Landing onExplore={vi.fn()} onTour={vi.fn()} />);
+    const team = screen.getByRole('region', { name: 'The team' });
+    const links = within(team).getAllByRole('link');
+    expect(links.map((a) => a.textContent?.trim())).toEqual([
+      expect.stringContaining('Melany Marcela Saez Acuña'),
+      expect.stringContaining('Juan Diego Pérez Navarro'),
+      expect.stringContaining('Aarón Dalí López Fortich'),
+      expect.stringContaining('Gabriel Alejandro Mantilla Clavijo'),
+    ]);
+    expect(links.map((a) => a.getAttribute('href'))).toEqual([
+      'https://github.com/MelanySaez',
+      'https://github.com/dosquisd',
+      'https://github.com/AaronDLF',
+      'https://github.com/Gavimantilla',
+    ]);
+    for (const link of links) expect(link.getAttribute('target')).toBe('_blank');
+  });
+
+  it('shows each member as a plain card: name and GitHub handle, no picture', () => {
+    render(<Landing onExplore={vi.fn()} onTour={vi.fn()} />);
+    const team = screen.getByRole('region', { name: 'The team' });
+    expect(team.querySelector('img, .landing-team-avatar')).toBeNull();
+    const [first] = within(team).getAllByRole('link');
+    expect(first.textContent).toBe('Melany Marcela Saez Acuña@MelanySaez');
+  });
+
+  it('jumps to the team from the top navigation', () => {
+    render(<Landing onExplore={vi.fn()} onTour={vi.fn()} />);
+    const nav = screen.getByRole('navigation', { name: 'Landing' });
+    expect(within(nav).getAllByRole('button').map((b) => b.textContent)).toEqual(['About', 'Team', 'Resources']);
   });
 
   it('links to the official sources in a new tab and states it is not an official NASA app', () => {

@@ -31,7 +31,7 @@ Compose uses `apps/web` as the build context. The Node 24 build stage creates th
 
 ## Assistant
 
-The round button in the bottom-right corner opens the Planet X assistant (any OpenAI-compatible model, called by the backend; see `apps/server/README.md` → Contextual assistant). Ask about the app or give instructions such as “show M101 in RGB” or “open Records”. Each question carries the current interface state (workspace, channel, colour mode, selected region, map centre and zoom). The reply's actions run in the browser after a second validation (`src/assistant.ts`): opening a workspace, drawing a draft region in Sky (it never starts a job; press **Confirm region**), changing channel or colour mode. Each action shows under the reply, and the browser reports whether it ran. **Activity** lists the logged events of the conversation (model calls with tokens and latency, tools, cache hits, guardrails). Replies answered from the cache show **From cache**. **New** starts a new conversation. Without `ASSISTANT_API_KEY` and `ASSISTANT_MODEL` on the server the panel says the assistant is disabled.
+The round button in the bottom-right corner opens the Planet X assistant (any OpenAI-compatible model, called by the backend; see `apps/server/README.md` → Contextual assistant). Ask about the app or give instructions such as “show M101 in RGB” or “open Records”. Each question carries the current interface state (workspace, channel, colour mode, selected region, map centre and zoom). The reply's actions run in the browser after a second validation (`src/assistant.ts`): opening a workspace, drawing a draft region in Sky (it never starts a job; press **Confirm region**), changing channel or colour mode. Each action shows under the reply, and the browser reports whether it ran. A visual guide points at what each action changed (`src/components/assistant/AssistantGuide.tsx`): a pulsing ring around the field (workspace button, channel, colour mode) or a reticle closing on the centre of the map after a move, each with a short label; several actions play one after another, and with reduced motion the guide appears without animation. The launcher shows a robot head. **Activity** lists the logged events of the conversation (model calls with tokens and latency, tools, cache hits, guardrails). Replies answered from the cache show **From cache**. **New** starts a new conversation. Without `ASSISTANT_API_KEY` and `ASSISTANT_MODEL` on the server the panel says the assistant is disabled.
 
 ## Saved selections (Records)
 
@@ -64,7 +64,7 @@ The app opens on a landing page (`#/`): a full-screen star field, **Explore the 
 
 ## Guided tour
 
-A seven-step tour (React Joyride) walks through the viewer: welcome, **Find objects**, the map, the channel dock, the region tool, the workspace tabs and how to replay it. Start it from **Guided Tour** on the landing page or the **?** button in the top bar. It can be skipped at any step; finishing or skipping is remembered in `localStorage` (`iris_tour_seen`). Steps point at `data-tour` attributes, and a step whose anchor is not on screen (for example the rail on a phone) is left out.
+Each workspace has its own short guide (React Joyride), opened with the same **?** button in the top bar for the tab on screen: **Sky** (8 steps: welcome, Find objects, the map, the right-click nearby search, the channel dock, the region tool, the workspace tabs, and a note that every tab has its own guide), **Plate** (the plate, its record, the detector image controls, observation dates, channels, pixel readout), **Spectral Lab** (adding spectra, the comparison list, linear/log axis, the chart, hiding the panel) and **Records** (saved selections, cookies, the table, row actions). **Guided Tour** on the landing page starts the Sky guide. Each guide also starts by itself the first time a workspace is opened (including the arrival on Sky from the landing page), once the workspace has drawn what the guide points at; a plate that never finishes loading is retried on the next visit. A guide can be skipped at any step; finishing, skipping or closing it is remembered per workspace in `localStorage` (`iris_tour_seen:sky`, `:plate`, `:spectral`, `:records`; the older single `iris_tour_seen` flag counts as the Sky guide seen), and the **?** button replays it any time. Steps point at `data-tour` attributes, and a step whose anchor is not on screen (the rail on a phone, a Records table with no rows) is left out.
 
 ## Search by name or catalogue code
 
@@ -75,6 +75,10 @@ under the box (official name, type, position and source), above the matching
 featured objects. Click it, or press **Enter** to take the first suggestion
 right away. Partial names are not completed: SIMBAD only resolves full names or
 codes. If every resolver is down, use **Go to coordinates**.
+
+## SIMBAD map layer
+
+The **SIMBAD** layer in Map layers shows the SIMBAD objects in the visible field. The CDS SIMBAD services (the HiPS catalog and TAP) have been unavailable, so the layer queries the Harvard CfA SIMBAD mirror (`https://simbad.cfa.harvard.edu/simbad/sim-tap/sync`) once the map stops moving: the 300 most-cited objects in view (`ORDER BY nbref DESC`), so the full-sky view shows the best-known objects and zooming in reveals more. Views wider than a hemisphere query the whole sky (the service rejects larger circles). Clicking a marker shows the object's name and type. The nearby-catalogs search uses the same mirror.
 
 ## Sky RGB composite
 
@@ -91,8 +95,16 @@ the blank channels 50/51 are not offered. This is false colour built from the
 
 Open **Spectral Lab** in the top bar (`#/spectral`), or select and confirm a region in Sky
 and press **Visualize spectrum** to open the Lab with the spectrum at the centre of
-the selection already added. Add up to 8 spectra from the
-curated catalog or by typing RA/Dec in degrees; each is fetched from
+the selection already added. It is named after the searched object while the
+region centre is still on it (within one SPHEREx pixel, 6.2″); otherwise it shows
+the position in degrees (`RA°, Dec°`). Add up to 8 spectra from the
+five featured objects (Andromeda Galaxy, Eagle Nebula, Pleiades, Crab Nebula, Whirlpool Galaxy; SIMBAD positions, each with nearly all channels covered;
+collapsed by default, click **Featured objects** to expand them),
+by searching an object by name or catalogue code below them (**Search objects**, the
+same SIMBAD / NED lookup as Sky search: click a suggestion, or press **Enter** to take
+the first one), or by typing RA/Dec in degrees. A featured object shows as *added*
+once any plotted spectrum lies within one SPHEREx pixel (6.2″) of it, however it was
+added. Each spectrum is fetched from
 `GET /api/spectrum` and plotted as wavelength (µm) against surface brightness
 (MJy/sr) on one shared axis. Hover the chart for per-channel values and hit
 counts; switch the brightness axis between **Linear** and **Log** to compare

@@ -1,4 +1,4 @@
-import type { CubeSpectrumPoint } from './types';
+import type { CubeSpectrumPoint } from '../types/types';
 
 /**
  * Categorical series colours (dark mode), validated against the sky surface
@@ -62,21 +62,27 @@ export interface DerivedSpectrumPoint extends CubeSpectrumPoint {
   interpolated: boolean;
 }
 
+/** Longest gap filled by default: a fifth of the channels, never fewer than two. */
+export function defaultEstimateGap(channels: number): number {
+  return Math.max(2, Math.floor(channels / 5));
+}
+
 /**
- * Fill only short, interior runs of null flux bounded by finite observations.
- * Edge and long gaps remain missing; the API's available flag only mirrors
+ * Fill interior runs of null flux bounded by finite observations, including
+ * the blank channels between detectors. Runs longer than `maxGap` (by default
+ * a fifth of the channels, 20 of 102) and edge gaps remain missing; the API's available flag only mirrors
  * whether value is finite and cannot independently exclude a null. Output is
  * a fresh chart representation and never mutates the source measurements.
  */
 export function interpolateMissingFlux(
   points: CubeSpectrumPoint[],
-  maxGap = 2,
+  maxGap = defaultEstimateGap(points.length),
 ): DerivedSpectrumPoint[] {
   const result = points.map((point) => ({ ...point, interpolated: false }));
   const ordered = points
     .map((point, index) => ({ point, index }))
     .sort((a, b) => a.point.wavelength_um - b.point.wavelength_um);
-  const limit = Number.isFinite(maxGap) ? Math.max(0, Math.floor(maxGap)) : 2;
+  const limit = Number.isFinite(maxGap) ? Math.max(0, Math.floor(maxGap)) : 0;
 
   for (let i = 0; i < ordered.length;) {
     if (ordered[i].point.value !== null) {
@@ -112,17 +118,45 @@ export function interpolateMissingFlux(
 }
 
 /** Dashed chart-only links wherever a line segment touches an inferred point. */
+/** A run of consecutive estimated channels, in wavelength order. */
+export interface EstimatedRun {
+  points: DerivedSpectrumPoint[];
+}
+
+export function estimatedRuns(points: DerivedSpectrumPoint[]): EstimatedRun[] {
+  const ordered = [...points].sort((a, b) => a.wavelength_um - b.wavelength_um);
+  const runs: EstimatedRun[] = [];
+  let current: DerivedSpectrumPoint[] = [];
+  const close = () => {
+    if (!current.length) return;
+    runs.push({ points: current });
+    current = [];
+  };
+  for (const p of ordered) {
+    if (p.interpolated && p.value !== null) current.push(p);
+    else close();
+  }
+  close();
+  return runs;
+}
+
+/**
+ * Dashed segments for estimates that span two or more channels. A single
+ * estimated channel is drawn as a circle instead, so it gets no segments.
+ */
 export function interpolatedLineSegments(
   points: DerivedSpectrumPoint[],
   x: Scale,
   y: Scale,
 ): string[] {
   const ordered = [...points].sort((a, b) => a.wavelength_um - b.wavelength_um);
+  const lone = new Set(estimatedRuns(points).filter((r) => r.points.length === 1).map((r) => r.points[0]));
   const segments: string[] = [];
   for (let i = 1; i < ordered.length; i += 1) {
     const a = ordered[i - 1];
     const b = ordered[i];
     if ((!a.interpolated && !b.interpolated) || a.value === null || b.value === null) continue;
+    if (lone.has(a) || lone.has(b)) continue;
     const ay = y(a.value);
     const by = y(b.value);
     if (!Number.isFinite(ay) || !Number.isFinite(by)) continue;

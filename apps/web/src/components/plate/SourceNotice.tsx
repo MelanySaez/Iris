@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { JobFrame, JobSnapshot } from '../../types';
+import type { JobFrame, JobSnapshot } from '../../types/types';
 
 type DataSource = JobFrame['source'];
 

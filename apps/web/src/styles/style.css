@@ -187,9 +187,10 @@ button:disabled {
   flex: none;
 }
 
-.brand-logo .sky-icon {
-  width: 20px;
-  height: 20px;
+.brand-logo .iris-logo {
+  display: block;
+  width: 22px;
+  height: 22px;
 }
 
 .brand-name {
@@ -394,8 +395,6 @@ button:disabled {
   gap: 20px;
   padding: 16px;
   overflow-y: auto;
-  scrollbar-width: thin;
-  scrollbar-color: var(--sky-line-strong) transparent;
   z-index: 20;
 }
 
@@ -445,9 +444,14 @@ button:disabled {
 .search-icon {
   position: absolute;
   left: 10px;
-  font-size: 12px;
+  display: flex;
+  color: var(--sky-muted);
   pointer-events: none;
-  opacity: 0.6;
+}
+
+.search-icon .sky-icon {
+  width: 14px;
+  height: 14px;
 }
 
 .rail-input {
@@ -475,8 +479,6 @@ button:disabled {
   gap: 2px;
   max-height: 220px;
   overflow-y: auto;
-  scrollbar-width: thin;
-  scrollbar-color: var(--sky-line-strong) transparent;
 }
 
 .catalog-layers-section {
@@ -761,6 +763,9 @@ button:disabled {
 }
 
 /* Region Exceeds Banner */
+.region-banner-alert .banner-icon { display: flex; }
+.region-banner-alert .banner-icon .sky-icon { width: 16px; height: 16px; }
+
 .region-banner-alert {
   position: absolute;
   top: 16px;
@@ -2870,11 +2875,6 @@ button:disabled {
   stroke-width: 2;
 }
 
-.spectral-direct-label {
-  fill: var(--sky-ink);
-  font-size: 11px;
-}
-
 .spectral-tooltip {
   position: absolute;
   width: 208px;
@@ -2905,11 +2905,6 @@ button:disabled {
 
 .spectral-tooltip-value {
   font-family: var(--mono);
-  color: var(--sky-muted);
-}
-
-.spectral-table summary {
-  cursor: pointer;
   color: var(--sky-muted);
 }
 
@@ -3926,6 +3921,7 @@ p.name-suggestion-error {
 
 .landing-nav { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; justify-content: space-between; padding: 20px clamp(16px, 5vw, 64px); background: linear-gradient(#000 40%, transparent); }
 .landing-brand { display: inline-flex; align-items: center; gap: 10px; font-size: 20px; font-weight: 800; letter-spacing: -0.01em; }
+.landing-brand .iris-logo { width: 28px; height: 28px; }
 .landing-nav nav { display: flex; gap: 24px; }
 .landing-nav nav button { padding: 6px 0; font-family: var(--mono); font-size: 11px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--sky-muted); }
 .landing-nav nav button:hover { color: var(--sky-ink); }
@@ -3963,6 +3959,16 @@ p.name-suggestion-error {
 .landing-index { font-family: var(--mono); font-size: 22px; color: var(--sky-faint); }
 .landing-context h3 { margin: 2px 0 10px; font-size: 20px; font-weight: 700; letter-spacing: -0.01em; }
 .landing-context p { margin: 0; max-width: 52ch; line-height: 1.6; color: var(--sky-muted); }
+.landing-catalog-strip { margin-top: 8px; padding-top: 28px; border-top: 1px solid var(--sky-line-strong); }
+.landing-catalog-strip h3 { margin: 0 0 18px; font-family: var(--mono); font-size: 12px; font-weight: 500; letter-spacing: 0.22em; text-transform: uppercase; color: var(--sky-muted); }
+.landing-catalog-strip ul { margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+.landing-catalog-strip li { display: grid; align-content: start; gap: 6px; padding: 16px 18px; border: 1px solid var(--sky-line); border-radius: var(--radius-md); background: rgba(255, 255, 255, 0.02); }
+.landing-catalog-strip strong { font-size: 15px; font-weight: 700; color: var(--sky-ink); }
+.landing-catalog-strip a { display: inline-flex; align-items: center; gap: 6px; justify-self: start; color: var(--sky-ink); text-decoration: none; }
+.landing-catalog-strip a strong { text-decoration: underline; text-decoration-color: var(--sky-line-strong); text-underline-offset: 4px; transition: text-decoration-color 160ms ease; }
+.landing-catalog-strip a svg { width: 12px; height: 12px; fill: none; stroke: var(--sky-warm); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.landing-catalog-strip a:hover strong, .landing-catalog-strip a:focus-visible strong { text-decoration-color: var(--sky-warm); }
+.landing-catalog-strip span { font-size: 13.5px; line-height: 1.5; color: var(--sky-muted); }
 .landing-link { display: inline-flex; align-items: center; gap: 8px; margin-top: 14px; font-weight: 700; color: var(--sky-ink); text-decoration: none; }
 .landing-link svg { width: 18px; height: 18px; padding: 3px; border-radius: 50%; background: var(--signal); color: #18181b; stroke-width: 2.2; }
 .landing-link:hover { text-decoration: underline; text-underline-offset: 4px; }
@@ -3979,6 +3985,8 @@ p.name-suggestion-error {
 
 @media (max-width: 760px) {
   .landing-context-grid { grid-template-columns: 1fr; }
+  .landing-team ul { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .landing-catalog-strip ul { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .landing-footer ul { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .landing-hero-foot span { display: none; }
 }
@@ -4001,16 +4009,41 @@ p.name-suggestion-error {
 .landing-cta svg { transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1); }
 .landing-cta:hover svg { transform: translate(2px, -2px); }
 
-.landing-nav, .landing-hero, .landing-context, .landing-footer { transition: opacity 450ms ease-in, filter 450ms ease-in, transform 450ms ease-in; }
+.landing-team { padding: 24px clamp(16px, 8vw, 128px) 104px; background: #000; }
+.landing-team h2 { margin: 0 0 12px; font-size: clamp(28px, 3.4vw, 44px); font-weight: 800; letter-spacing: -0.025em; }
+.landing-team-lede { margin: 0 0 36px; color: var(--sky-muted); line-height: 1.6; }
+.landing-team ul { margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+.landing-team a { display: grid; justify-items: start; gap: 6px; height: 100%; padding: 20px; border: 1px solid var(--sky-line); border-radius: var(--radius-md); background: rgba(255, 255, 255, 0.02); color: var(--sky-ink); text-decoration: none; transition: border-color 160ms ease, background-color 160ms ease, transform 160ms ease; }
+.landing-team a:hover, .landing-team a:focus-visible { border-color: var(--sky-warm); background: rgba(245, 176, 65, 0.05); transform: translateY(-2px); }
+.landing-team-name { font-size: 15px; font-weight: 700; line-height: 1.35; }
+.landing-team-handle { font-family: var(--mono); font-size: 12.5px; color: var(--sky-faint); }
+.landing-team a:hover .landing-team-handle { color: var(--sky-warm); }
+
+.landing-nav, .landing-hero, .landing-context, .landing-team, .landing-footer { transition: opacity 450ms ease-in, filter 450ms ease-in, transform 450ms ease-in; }
 .landing-warping .landing-nav,
 .landing-warping .landing-hero,
 .landing-warping .landing-context,
+.landing-warping .landing-team,
 .landing-warping .landing-footer { opacity: 0; filter: blur(8px); transform: scale(1.04); pointer-events: none; }
 .landing-warping { cursor: progress; }
 
+/* Scroll reveal: below-the-fold elements rise into place once, as they enter the view.
+   Only active when the landing adds .landing-reveal-ready (JS on, motion allowed). */
+.landing-reveal-ready [data-reveal] {
+  opacity: 0;
+  transform: translateY(28px);
+  transition:
+    opacity 700ms cubic-bezier(0.16, 1, 0.3, 1),
+    transform 700ms cubic-bezier(0.16, 1, 0.3, 1);
+  transition-delay: calc(var(--reveal-index, 0) * 90ms);
+}
+.landing-reveal-ready [data-reveal][data-revealed='true'] { opacity: 1; transform: none; }
+
 @media (prefers-reduced-motion: reduce) {
   .landing-eyebrow, .landing-hero h1, .landing-lede, .landing-actions, .landing-hero-foot, .landing-nav { animation: none; }
-  .landing-nav, .landing-hero, .landing-context, .landing-footer { transition: none; }
+  .landing-nav, .landing-hero, .landing-context, .landing-team, .landing-footer { transition: none; }
+  .landing-team a { transition: none; }
+  .landing-team a:hover { transform: none; }
 }
 
 /* ==========================================================================
@@ -4101,6 +4134,60 @@ p.name-suggestion-error {
 .dock-preset-btn.active { background: var(--sky-ink); border-color: var(--sky-ink); color: #18181b; font-weight: 700; }
 .dock-preset-btn.active:hover { background: var(--sky-ink); }
 .dock-preset-btn:focus-visible { outline: 2px solid var(--sky-ink); outline-offset: 2px; }
+
+/* Spectral Lab — featured objects read as well-known targets, apart from the coordinates form. */
+.spectral-subheading { margin: 4px 0 0; font-size: 13px; font-weight: 700; color: var(--sky-ink); }
+.spectral-subheading-note { margin: 2px 0 10px; font-size: 11.5px; color: var(--sky-faint); }
+.spectral-subheading-coords { margin-top: 18px; margin-bottom: 8px; padding-top: 14px; border-top: 1px solid var(--sky-line); }
+.spectral-subheading-search { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--sky-line); }
+/* Featured objects: a native disclosure, collapsed by default, on a lightly shaded card. */
+.spectral-featured {
+  padding: 10px 12px;
+  border: 1px solid var(--sky-line);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.025);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  interpolate-size: allow-keywords;
+}
+/* Eased open/close where ::details-content is supported; older browsers just toggle. */
+.spectral-featured::details-content {
+  block-size: 0;
+  opacity: 0;
+  overflow: hidden;
+  transition: block-size 220ms ease, opacity 220ms ease, content-visibility 220ms allow-discrete;
+}
+.spectral-featured[open]::details-content { block-size: auto; opacity: 1; }
+.spectral-featured .spectral-catalog { padding-top: 10px; }
+/* The list also fades and slides in on open, in every browser. */
+.spectral-featured[open] .spectral-catalog { animation: spectral-featured-reveal 220ms ease-out; }
+@keyframes spectral-featured-reveal {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: none; }
+}
+.spectral-featured > summary .spectral-subheading-note { margin-bottom: 0; }
+@media (prefers-reduced-motion: reduce) {
+  .spectral-featured::details-content, .spectral-featured-toggle { transition: none; }
+  .spectral-featured[open] .spectral-catalog { animation: none; }
+}
+.spectral-featured > summary { display: grid; grid-template-columns: 1fr auto; column-gap: 8px; align-items: center; cursor: pointer; list-style: none; }
+.spectral-featured > summary::-webkit-details-marker { display: none; }
+.spectral-featured > summary .spectral-subheading-note { display: block; grid-column: 1; }
+.spectral-featured > summary:focus-visible { outline: 2px solid var(--sky-ink); outline-offset: 3px; border-radius: 4px; }
+/* Chevron at the right end: down while collapsed, turned up when open. */
+.spectral-featured-toggle { grid-column: 2; grid-row: 1 / span 2; display: inline-flex; color: var(--sky-muted); transition: transform 120ms ease; }
+.spectral-featured-toggle .sky-icon { width: 16px; height: 16px; }
+.spectral-featured > summary:hover .spectral-featured-toggle { color: var(--sky-ink); }
+.spectral-featured[open] .spectral-featured-toggle { transform: rotate(180deg); }
+.spectral-catalog button { align-items: center; text-align: left; }
+.spectral-catalog-names { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.spectral-catalog-title { font-size: 13px; font-weight: 700; color: var(--sky-ink); }
+.spectral-catalog-subtitle { font-size: 11px; color: var(--sky-faint); }
+.spectral-catalog-type { align-self: flex-start; padding-top: 2px; }
+/* Slightly smaller featured cards. */
+.spectral-catalog button { padding: 5px 9px; }
+.spectral-catalog-title { font-size: 12.5px; }
+.spectral-catalog-subtitle { font-size: 10.5px; }
+.spectral-catalog-type { font-size: 10.5px; }
 
 /* -- Cookie consent bar (Records are saved only after accepting) -------------- */
 
@@ -4341,4 +4428,149 @@ p.name-suggestion-error {
 
 .spectral-rail .pinned-badge {
   color: #18181b; /* 9.4:1 on #f5b041 */
+}
+
+/* Fallback when one workspace fails to render (WorkspaceErrorBoundary). */
+.workspace-error {
+  max-width: 34rem;
+  margin: 12vh auto 0;
+  padding: 1.5rem;
+  border: 1px solid var(--sky-line-strong);
+  border-radius: var(--radius-md);
+  background: var(--sky-surface);
+  color: var(--sky-ink);
+}
+.workspace-error h2 { margin: 0 0 0.5rem; font-size: 1.1rem; }
+.workspace-error p { margin: 0 0 0.75rem; color: var(--sky-muted); }
+.workspace-error-message {
+  font-family: var(--mono);
+  font-size: 0.85rem;
+  color: var(--sky-danger) !important;
+  overflow-wrap: anywhere;
+}
+.workspace-error-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+.workspace-error-actions button {
+  padding: 0.45rem 0.9rem;
+  border: 1px solid var(--sky-line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--sky-raised);
+  color: var(--sky-ink);
+  cursor: pointer;
+}
+.workspace-error-actions button:first-child { border-color: var(--sky-accent); color: var(--sky-accent); }
+.workspace-error-actions button:hover { background: var(--sky-hover); }
+
+/* -- Assistant visual guide: what each assistant action changed --------------- */
+/* Timings add up to GUIDE_DURATION_MS (1.8 s) in AssistantGuide.tsx. */
+
+.assistant-guide {
+  position: fixed;
+  inset: 0;
+  z-index: 85; /* above the map and docks, below the cookie bar */
+  pointer-events: none;
+}
+
+.assistant-guide-ring {
+  position: fixed;
+  box-sizing: border-box;
+  border: 2px solid var(--sky-warm);
+  border-radius: 10px;
+  box-shadow: 0 0 0 0 rgba(245, 176, 65, 0.55);
+  animation:
+    assistant-guide-in 0.25s ease-out both,
+    assistant-guide-pulse 0.9s ease-out 0.25s 2,
+    assistant-guide-out 0.3s ease-in 1.5s forwards;
+}
+
+.assistant-guide-reticle {
+  position: fixed;
+  width: 64px;
+  height: 64px;
+  color: var(--sky-warm);
+  transform: translate(-50%, -50%);
+  animation:
+    assistant-guide-close 0.6s cubic-bezier(0.22, 1, 0.36, 1) both,
+    assistant-guide-out 0.3s ease-in 1.5s forwards;
+}
+
+.assistant-guide-reticle svg {
+  width: 100%;
+  height: 100%;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 3;
+  stroke-linecap: round;
+}
+
+.assistant-guide-reticle circle {
+  fill: currentColor;
+}
+
+.assistant-guide-label {
+  position: fixed;
+  padding: 4px 10px;
+  border: 1px solid var(--sky-warm);
+  border-radius: 999px;
+  background: var(--sky-glass-bg);
+  color: var(--sky-ink);
+  font-size: 12px;
+  white-space: nowrap;
+  transform: translate(-50%, 0);
+  animation:
+    assistant-guide-in 0.25s ease-out both,
+    assistant-guide-out 0.3s ease-in 1.5s forwards;
+}
+
+.assistant-guide-label.above {
+  transform: translate(-50%, -100%);
+}
+
+@keyframes assistant-guide-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes assistant-guide-out {
+  to { opacity: 0; }
+}
+
+@keyframes assistant-guide-pulse {
+  from { box-shadow: 0 0 0 0 rgba(245, 176, 65, 0.55); }
+  to { box-shadow: 0 0 0 12px rgba(245, 176, 65, 0); }
+}
+
+@keyframes assistant-guide-close {
+  from { opacity: 0; transform: translate(-50%, -50%) scale(2.2); }
+  to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .assistant-guide-ring,
+  .assistant-guide-reticle,
+  .assistant-guide-label {
+    animation: none;
+  }
+}
+
+/* Scrollbars: a thin rounded thumb on a clear track, in the zinc greys of the
+   theme, brightening on hover. Chromium and Safari use the ::-webkit-scrollbar
+   rules (setting scrollbar-color would make Chromium ignore them); Firefox only
+   understands the standard properties. */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-corner { background: transparent; }
+::-webkit-scrollbar-thumb {
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background: var(--sky-line-strong) padding-box;
+}
+::-webkit-scrollbar-thumb:hover { background: #71717a padding-box; }
+::-webkit-scrollbar-thumb:active { background: var(--sky-muted) padding-box; }
+::-webkit-scrollbar-button { display: none; width: 0; height: 0; }
+
+@supports not selector(::-webkit-scrollbar) {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--sky-line-strong) transparent;
+  }
 }

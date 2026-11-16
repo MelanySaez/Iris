@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act, cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { JobSnapshot } from '../../types';
+import type { JobSnapshot } from '../../types/types';
 import { StageProgress, StageStatusChip } from './StageProgress';
 
 function job(overrides: Partial<JobSnapshot>): JobSnapshot {

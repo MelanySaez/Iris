@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { api, ApiError } from '../api';
-import type { JobSnapshot } from '../types';
+import { api, ApiError } from '../api/api';
+import type { JobSnapshot } from '../types/types';
 
 export function useJobPoller(
   jobId: string | null,

@@ -5,8 +5,9 @@ import { describe, expect, it, vi } from 'vitest';
 vi.mock('aladin-lite', () => ({ default: {} }));
 import { SkyWorkspace } from './SkyWorkspace';
 import { TopBar } from '../TopBar';
-import { HIPS_CATALOG_PROVIDERS, LOCAL_CATALOG_STYLE } from '../../catalogs';
-import { TOCATS_CATALOGS } from '../../tocats';
+import { AllSkyIcon } from '../SkyIcons';
+import { HIPS_CATALOG_PROVIDERS, LOCAL_CATALOG_STYLE } from '../../services/catalogs';
+import { TOCATS_CATALOGS } from '../../api/tocats';
 
 describe('Sky workspace sidebar', () => {
   it('presents position, object discovery, then map layers', () => {
@@ -57,11 +58,19 @@ describe('Sky workspace sidebar', () => {
 
     const controls = document.querySelector('[aria-label="Map controls"]');
     expect(controls?.querySelector('[title="Pan map"] svg')).not.toBeNull();
-    expect(controls?.querySelector('[title="Show all sky"] svg')).not.toBeNull();
+    expect(controls?.querySelector('[title="Zoom out to the full sky"] svg')).not.toBeNull();
     expect(Array.from(controls?.querySelectorAll('[aria-label="Zoom controls"] button') ?? [],
       (button) => [button.getAttribute('title'), button.getAttribute('aria-label')])).toEqual([
-      ['Zoom out', 'Zoom out'], ['Zoom in', 'Zoom in'], ['Show all sky', 'Show all sky'],
+      ['Zoom out', 'Zoom out'], ['Zoom in', 'Zoom in'], ['Zoom out to the full sky', 'Zoom out to the full sky'],
     ]);
+  });
+
+  it('draws the full-sky button as four outward arrows, not a globe', () => {
+    document.body.innerHTML = renderToStaticMarkup(<AllSkyIcon />);
+    const svg = document.querySelector('svg') as SVGElement;
+    expect(svg.querySelector('circle')).toBeNull();
+    const arrows = Array.from(svg.querySelectorAll('path'), (p) => p.getAttribute('d')).join(' ');
+    for (const corner of ['M4 4', 'M20 4', 'M4 20', 'M20 20']) expect(arrows).toContain(corner);
   });
 
   it('shows a vector planet rather than an emoji in the brand', () => {
@@ -90,6 +99,9 @@ describe('Sky workspace sidebar', () => {
     );
     for (const anchor of ['search', 'map', 'channels', 'region-tool']) {
       expect(document.querySelectorAll(`[data-tour="${anchor}"]`)).toHaveLength(1);
+    }
+    for (const target of ['map', 'channel', 'color-mode']) {
+      expect(document.querySelectorAll(`[data-assistant-target="${target}"]`)).toHaveLength(1);
     }
   });
 });

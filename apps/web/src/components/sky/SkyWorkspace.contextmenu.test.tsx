@@ -24,17 +24,17 @@ const { aladin, catalog, marker, viewer, viewportCallbacks } = vi.hoisted(() => 
 }));
 
 vi.mock('aladin-lite', () => ({ default: { init: Promise.resolve(), aladin, catalog, marker } }));
-vi.mock('../../catalogPopup', () => ({
+vi.mock('../../api/catalogPopup', () => ({
   installCatalogPopupControls: vi.fn((_root, _hide, adapter) => adapter.subscribeToViewportChanges(() => {})),
 }));
-vi.mock('../../serviceWorkerControl', () => ({ ensureServiceWorkerControl: vi.fn(async () => 'controlled') }));
+vi.mock('../../core/serviceWorkerControl', () => ({ ensureServiceWorkerControl: vi.fn(async () => 'controlled') }));
 
 import { SkyWorkspace } from './SkyWorkspace';
-import { App } from '../../App';
-import { api } from '../../api';
+import { App } from '../../app/App';
+import { api } from '../../api/api';
 vi.mock('../spectral/SpectralLab', () => ({ SpectralLab: () => <div>Spectral Lab</div> }));
-import { searchNearbyCatalogs } from '../../nearbyCatalogs';
-vi.mock('../../nearbyCatalogs', () => ({ DEFAULT_NEARBY_RADIUS_DEG: 0.5, searchNearbyCatalogs: vi.fn() }));
+import { searchNearbyCatalogs } from '../../api/nearbyCatalogs';
+vi.mock('../../api/nearbyCatalogs', () => ({ DEFAULT_NEARBY_RADIUS_DEG: 0.5, searchNearbyCatalogs: vi.fn() }));
 
 class TestMessageChannel {
   port1: { onmessage: ((event: { data: { ok: boolean } }) => void) | null } = { onmessage: null };

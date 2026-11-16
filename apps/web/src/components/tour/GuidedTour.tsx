@@ -1,21 +1,26 @@
 import { useMemo } from 'react';
 import { ACTIONS, Joyride, STATUS, type EventData } from 'react-joyride';
-import { TOUR_STEPS } from './tourSteps';
+import { TOURS, type TourId } from './tourSteps';
 
+/** Prefix of the per-workspace flags (`iris_tour_seen:sky`, …); alone it is the old single flag. */
 export const TOUR_SEEN_KEY = 'iris_tour_seen';
 
-/** True once the visitor finished or skipped the tour on this browser. */
-export function hasSeenTour(): boolean {
+const seenKey = (tour: TourId) => `${TOUR_SEEN_KEY}:${tour}`;
+
+/** True once the visitor finished, skipped or closed this workspace's tour on this browser. */
+export function hasSeenTour(tour: TourId): boolean {
   try {
-    return localStorage.getItem(TOUR_SEEN_KEY) === '1';
+    if (localStorage.getItem(seenKey(tour)) === '1') return true;
+    // Before tours were remembered per workspace, one flag covered the landing's Sky tour.
+    return tour === 'sky' && localStorage.getItem(TOUR_SEEN_KEY) === '1';
   } catch {
     return false;
   }
 }
 
-function rememberTour() {
+function rememberTour(tour: TourId) {
   try {
-    localStorage.setItem(TOUR_SEEN_KEY, '1');
+    localStorage.setItem(seenKey(tour), '1');
   } catch {
     // Private mode or blocked storage: the tour still works, it is just not remembered.
   }
@@ -28,18 +33,28 @@ function isOnScreen(selector: string): boolean {
   return Boolean(element && element.getClientRects().length > 0);
 }
 
+/**
+ * True once the workspace has drawn at least one element its tour points at, so a
+ * first-visit tour does not start over a page that is still loading (e.g. the plate).
+ */
+export function tourAnchorsReady(tour: TourId): boolean {
+  return TOURS[tour].some((step) => String(step.target) !== 'body' && isOnScreen(String(step.target)));
+}
+
 interface GuidedTourProps {
+  /** Which workspace's tour to run. */
+  tour: TourId;
   run: boolean;
   /** Called when the tour is finished or skipped. */
   onEnd: () => void;
 }
 
 /** React Joyride tour over the viewer, styled with the Iris palette. */
-export function GuidedTour({ run, onEnd }: GuidedTourProps) {
+export function GuidedTour({ tour, run, onEnd }: GuidedTourProps) {
   // Re-evaluated each time the tour starts, so it adapts to the current layout.
   const steps = useMemo(
-    () => (run ? TOUR_STEPS.filter((step) => isOnScreen(String(step.target))) : TOUR_STEPS),
-    [run],
+    () => (run ? TOURS[tour].filter((step) => isOnScreen(String(step.target))) : TOURS[tour]),
+    [run, tour],
   );
 
   const handleEvent = (data: EventData) => {
@@ -48,7 +63,7 @@ export function GuidedTour({ run, onEnd }: GuidedTourProps) {
     const ended =
       data.status === STATUS.FINISHED || data.status === STATUS.SKIPPED || data.action === ACTIONS.CLOSE;
     if (ended) {
-      rememberTour();
+      rememberTour(tour);
       onEnd();
     }
   };

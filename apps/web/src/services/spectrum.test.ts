@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { api, ApiError, CURATED_CATALOG_FALLBACK } from './api';
-import { parseHash, routeToHash } from './router';
+import { api, ApiError, CURATED_CATALOG_FALLBACK } from '../api/api';
+import { parseHash, routeToHash } from '../core/router';
 import {
   MAX_SPECTRA,
   SERIES_COLORS,
@@ -18,10 +18,11 @@ import {
   parseCoordinates,
   spectrumKey,
   interpolateMissingFlux,
+  estimatedRuns,
   zoomDomainAt,
   panDomain,
 } from './spectrum';
-import type { CubeSpectrumPoint } from './types';
+import type { CubeSpectrumPoint } from '../types/types';
 
 function point(channel: number, wavelength: number, value: number | null): CubeSpectrumPoint {
   return {
@@ -159,7 +160,7 @@ describe('interpolateMissingFlux', () => {
   it('linearly fills short interior null runs by wavelength without mutating raw points', () => {
     const raw = [point(0, 1, 10), { ...point(1, 2, null), available: true }, point(2, 4, 30)];
     const before = structuredClone(raw);
-    const result = interpolateMissingFlux(raw);
+    const result = interpolateMissingFlux(raw, 2);
     expect(result[0].value).toBe(10);
     expect(result[1].value).toBeCloseTo(50 / 3);
     expect(result[2].value).toBe(30);
@@ -176,12 +177,60 @@ describe('interpolateMissingFlux', () => {
       point(4, 4, 50), { ...point(5, 5, null), available: true },
       { ...point(6, 6, null), available: true }, { ...point(7, 7, null), available: true }, point(8, 8, 90),
     ];
-    const values = interpolateMissingFlux(raw).map((p) => p.value);
+    const values = interpolateMissingFlux(raw, 2).map((p) => p.value);
     expect(values[0]).toBeNull();
     expect(values[1]).toBe(10);
     expect(values[2]).toBeCloseTo(70 / 3);
     expect(values[3]).toBeCloseTo(110 / 3);
     expect(values.slice(4)).toEqual([50, null, null, null, 90]);
+  });
+
+  it('bridges the blank channels between two detectors with an estimate', () => {
+    // Channels 49 (D3) and 52 (D4) straddle the blank channels 50-51.
+    const raw = [
+      point(48, 2.40, 10), point(49, 2.42, 12),
+      { ...point(50, 2.44, null), available: false }, { ...point(51, 2.46, null), available: false },
+      point(52, 2.48, 18), point(53, 2.50, 20),
+    ];
+    const result = interpolateMissingFlux(raw, 2);
+    expect(result[2].value).toBeCloseTo(14);
+    expect(result[3].value).toBeCloseTo(16);
+    expect(result.filter((p) => p.interpolated).map((p) => p.channel)).toEqual([50, 51]);
+  });
+
+  it('by default fills gaps up to a fifth of the spectrum (20 of 102 channels) and no longer', () => {
+    const spectrum102 = (gapStart: number, gapLength: number) =>
+      Array.from({ length: 102 }, (_, c) =>
+        point(c, 0.75 + c * 0.04, c >= gapStart && c < gapStart + gapLength ? null : 100));
+    const filled = interpolateMissingFlux(spectrum102(10, 20));
+    expect(filled.filter((p) => p.interpolated)).toHaveLength(20);
+    expect(filled.every((p) => p.value === 100)).toBe(true);
+
+    const tooLong = interpolateMissingFlux(spectrum102(10, 21));
+    expect(tooLong.some((p) => p.interpolated)).toBe(false);
+    expect(tooLong.filter((p) => p.value === null)).toHaveLength(21);
+  });
+
+  it('leaves every gap empty when maxGap is 0', () => {
+    const raw = [point(0, 1, 10), { ...point(1, 2, null), available: true }, point(2, 3, 30)];
+    const result = interpolateMissingFlux(raw, 0);
+    expect(result[1].value).toBeNull();
+    expect(result[1].interpolated).toBe(false);
+  });
+});
+
+describe('estimatedRuns', () => {
+  it('groups consecutive estimates into runs', () => {
+    const raw = [
+      point(0, 1, 10), { ...point(1, 2, null), available: false }, point(2, 3, 30),
+      { ...point(3, 4, null), available: false }, { ...point(4, 5, null), available: false }, point(5, 6, 60),
+    ];
+    const runs = estimatedRuns(interpolateMissingFlux(raw, 2));
+    expect(runs.map((r) => r.points.map((p) => p.channel))).toEqual([[1], [3, 4]]);
+  });
+
+  it('returns nothing when no channel was estimated', () => {
+    expect(estimatedRuns(interpolateMissingFlux([point(0, 1, 10), point(1, 2, 20)]))).toEqual([]);
   });
 });
 

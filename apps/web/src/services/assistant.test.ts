@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { describeAssistantAction, validateAssistantAction } from './assistant';
+import { describeAssistantAction, guideCueFor, validateAssistantAction } from './assistant';
 
 describe('validateAssistantAction', () => {
   it('accepts 180-arcmin mosaics and rejects larger assistant regions', () => {
@@ -55,5 +55,33 @@ describe('describeAssistantAction', () => {
     expect(describeAssistantAction({ type: 'show_region', ra_deg: 10, dec_deg: -5, size_arcmin: 6 })).toBe(
       'Show region RA 10.000°, Dec -5.000°, 6′',
     );
+  });
+});
+
+describe('guideCueFor', () => {
+  it('points field actions at the control they change', () => {
+    expect(guideCueFor({ type: 'navigate', workspace: 'records' })).toEqual({
+      kind: 'field',
+      target: '[data-assistant-target="workspace-records"]',
+      label: 'Open Records',
+    });
+    expect(guideCueFor({ type: 'set_channel', channel: 44 })).toEqual({
+      kind: 'field',
+      target: '[data-assistant-target="channel"]',
+      label: 'Channel 44',
+    });
+    expect(guideCueFor({ type: 'set_color_mode', mode: 'rgb', rgb: [16, 32, 46] })).toEqual({
+      kind: 'field',
+      target: '[data-assistant-target="color-mode"]',
+      label: 'RGB composite 16/32/46',
+    });
+  });
+
+  it('marks a map move as a position at the centre of the map', () => {
+    expect(guideCueFor({ type: 'show_region', ra_deg: 210.8, dec_deg: 54.35, size_arcmin: 6 })).toEqual({
+      kind: 'position',
+      target: '[data-assistant-target="map"]',
+      label: 'Show region RA 210.800°, Dec 54.350°, 6′',
+    });
   });
 });

@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 // Browsers drop every rule after a CSS syntax error without failing the build,
 // so a bad merge silently unstyles whole workspaces. Guard the stylesheet here.
-const css = readFileSync(new URL('../src/style.css', import.meta.url), 'utf8');
+const css = readFileSync(new URL('../src/styles/style.css', import.meta.url), 'utf8');
 const code = css.replace(/\/\*[\s\S]*?\*\//g, '');
 
 describe('style.css', () => {
@@ -23,5 +23,25 @@ describe('style.css', () => {
 
   it('keeps the Records workspace styles', () => {
     expect(code).toMatch(/\.records-workspace\s*\{/);
+  });
+
+  it('shades the Spectral Lab featured objects panel and eases its disclosure', () => {
+    const rule = (selector) => {
+      const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      return code.match(new RegExp(`${escaped}\\s*\\{([^}]*)\\}`))?.[1] ?? '';
+    };
+    expect(rule('.spectral-featured')).toMatch(/background:/);
+    expect(rule('.spectral-featured')).toMatch(/box-shadow:/);
+    expect(rule('.spectral-featured::details-content')).toMatch(/transition:[^;]*block-size/);
+    expect(rule('.spectral-featured[open]::details-content')).toMatch(/block-size:\s*auto/);
+    // The list also fades in on open, which works even where ::details-content does not.
+    expect(rule('.spectral-featured[open] .spectral-catalog')).toMatch(/animation:\s*spectral-featured-reveal/);
+    expect(code).toMatch(/@keyframes spectral-featured-reveal\s*\{/);
+    expect(code).toMatch(
+      /@media \(prefers-reduced-motion: reduce\)\s*\{[^}]*\.spectral-featured::details-content[^}]*transition:\s*none/,
+    );
+    expect(code).toMatch(
+      /@media \(prefers-reduced-motion: reduce\)\s*\{[^@]*\.spectral-featured\[open\] \.spectral-catalog\s*\{\s*animation:\s*none/,
+    );
   });
 });

@@ -1,25 +1,28 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { api, ApiError } from './api';
-import { TopBar } from './components/TopBar';
-import { PlateWorkspace } from './components/plate/PlateWorkspace';
-import { RecordsWorkspace } from './components/records/RecordsWorkspace';
+import { api, ApiError } from '../api/api';
+import { TopBar } from '../components/TopBar';
+import { WorkspaceErrorBoundary } from '../components/WorkspaceErrorBoundary';
+import { PlateWorkspace } from '../components/plate/PlateWorkspace';
+import { RecordsWorkspace } from '../components/records/RecordsWorkspace';
 import {
   SkyWorkspace,
   type AssistantSkyCommand,
   type SelectionRestoreRequest,
   type SkyUiState,
-} from './components/sky/SkyWorkspace';
-import { AssistantWidget, type ActionResult } from './components/assistant/AssistantWidget';
-import { Landing } from './components/landing/Landing';
-import { GuidedTour } from './components/tour/GuidedTour';
-import { ConsentBar } from './components/consent/ConsentBar';
-import type { AssistantAction, AssistantUiContext } from './assistant';
-import { SpectralLab, type SpectrumRequest } from './components/spectral/SpectralLab';
-import type { SpectrumTarget } from './components/sky/SelectionActions';
-import { useJobPoller } from './hooks/useJobPoller';
-import { useRecordsConsent } from './hooks/useRecordsConsent';
-import { useRoute } from './router';
-import type { JobCreateRequest, RegionRequest } from './types';
+} from '../components/sky/SkyWorkspace';
+import { AssistantWidget, type ActionResult } from '../components/assistant/AssistantWidget';
+import { AssistantGuide, type GuideCueItem } from '../components/assistant/AssistantGuide';
+import { Landing } from '../components/landing/Landing';
+import { GuidedTour, hasSeenTour, tourAnchorsReady } from '../components/tour/GuidedTour';
+import { tourForRoute, type TourId } from '../components/tour/tourSteps';
+import { ConsentBar } from '../components/consent/ConsentBar';
+import { guideCueFor, type AssistantAction, type AssistantUiContext } from '../services/assistant';
+import { SpectralLab, type SpectrumRequest } from '../components/spectral/SpectralLab';
+import type { SpectrumTarget } from '../components/sky/SelectionActions';
+import { useJobPoller } from '../hooks/useJobPoller';
+import { useRecordsConsent } from '../hooks/useRecordsConsent';
+import { useRoute } from '../core/router';
+import type { JobCreateRequest, RegionRequest } from '../types/types';
 
 export function App() {
   const { route, navigate } = useRoute();
@@ -28,16 +31,21 @@ export function App() {
   // After "Explore the Sky" the landing stays on top while it fades into the viewer.
   const [landingExit, setLandingExit] = useState(false);
   const endLandingExit = useCallback(() => setLandingExit(false), []);
-  // Guided tour: runs over Sky. Starting it waits for the viewer to be on screen.
+  // Guided tours: one per workspace, started from the same "?" button for the tab on screen.
   const [tourRun, setTourRun] = useState(false);
+  const [tourId, setTourId] = useState<TourId>('sky');
   // A new key per start remounts Joyride, so every press begins a fresh tour
   // even if an earlier one was left half-way (paused by a tab change, closed, …).
   const [tourKey, setTourKey] = useState(0);
   const tourTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Tours already started this session (by "?", the landing or a first visit).
+  const toursOffered = useRef(new Set<TourId>());
   const startTour = useCallback(
-    (delayMs: number) => {
-      navigate('#/sky');
+    (tour: TourId, delayMs: number) => {
+      toursOffered.current.add(tour);
+      if (tour === 'sky') navigate('#/sky');
       if (tourTimer.current) clearTimeout(tourTimer.current);
+      setTourId(tour);
       setTourRun(false);
       setTourKey((key) => key + 1);
       tourTimer.current = setTimeout(() => setTourRun(true), delayMs);
@@ -48,6 +56,27 @@ export function App() {
     if (tourTimer.current) clearTimeout(tourTimer.current);
   }, []);
   const endTour = useCallback(() => setTourRun(false), []);
+
+  // The first visit to each workspace runs its tour once; "?" replays it any time. It waits
+  // until the workspace has drawn what the tour points at (a plate may still be loading)
+  // and gives up after ~10 s, to try again on the next visit.
+  useEffect(() => {
+    if (route.type === 'landing') return undefined;
+    const tour = tourForRoute(route.type);
+    if (hasSeenTour(tour) || toursOffered.current.has(tour)) return undefined;
+    let polls = 0;
+    const poll = setInterval(() => {
+      polls += 1;
+      if (tourAnchorsReady(tour)) {
+        clearInterval(poll);
+        // Sky waits for the arrival from the landing page to fade, like the landing's tour button.
+        startTour(tour, tour === 'sky' ? 1100 : 300);
+      } else if (polls >= 40) {
+        clearInterval(poll);
+      }
+    }, 250);
+    return () => clearInterval(poll);
+  }, [route.type, startTour]);
 
   // The viewer's own arrival (900 ms) outlasts the landing fade, so it has its own timer.
   const [appArriving, setAppArriving] = useState(false);
@@ -163,7 +192,21 @@ export function App() {
     };
   };
 
+  // Visual guide: each action the assistant runs points at what it changed.
+  const [guideCues, setGuideCues] = useState<GuideCueItem[]>([]);
+  const guideCueId = useRef(0);
+
   const handleAssistantAction = (action: AssistantAction): ActionResult => {
+    const result = runAssistantAction(action);
+    if (result.ok) {
+      guideCueId.current += 1;
+      const cue = { id: guideCueId.current, ...guideCueFor(action) };
+      setGuideCues((prev) => [...prev, cue]);
+    }
+    return result;
+  };
+
+  const runAssistantAction = (action: AssistantAction): ActionResult => {
     if (action.type === 'navigate') {
       if (action.workspace === 'plate') {
         if (!activeJobId) return { ok: false, detail: 'No active job to open in Plate' };
@@ -213,13 +256,13 @@ export function App() {
           onTour={() => {
             setLandingExit(true);
             setAppArriving(true);
-            startTour(1100); // after the viewer has come out of the dark
+            startTour('sky', 1100); // after the viewer has come out of the dark
           }}
           onExited={endLandingExit}
         />
       )}
-      <TopBar currentRoute={route} activeJobId={activeJobId} onNavigate={navigate} onStartTour={() => startTour(250)} />
-      <GuidedTour key={tourKey} run={tourRun && route.type === 'sky'} onEnd={endTour} />
+      <TopBar currentRoute={route} activeJobId={activeJobId} onNavigate={navigate} onStartTour={() => startTour(tourForRoute(route.type), 250)} />
+      <GuidedTour key={tourKey} tour={tourId} run={tourRun && route.type === tourId} onEnd={endTour} />
 
       {contractError && <p role="alert">{contractError}</p>}
       {jobCreateError && (
@@ -241,16 +284,18 @@ export function App() {
           className={`workspace-layer sky-layer ${isSky ? 'layer-active' : 'layer-hidden'}`}
           aria-hidden={!isSky}
         >
-          <SkyWorkspace
-            activeJob={activeJob}
-            onStartJob={handleStartJob}
-            onOpenPlate={handleOpenPlate}
-            onViewSpectrum={handleViewSpectrum}
-            restoreRequest={restoreRequest}
-            assistantCommands={assistantCommands}
-            onStateChange={handleSkyState}
-            onRetryJob={handleRetryJob}
-          />
+          <WorkspaceErrorBoundary workspace="Sky">
+            <SkyWorkspace
+              activeJob={activeJob}
+              onStartJob={handleStartJob}
+              onOpenPlate={handleOpenPlate}
+              onViewSpectrum={handleViewSpectrum}
+              restoreRequest={restoreRequest}
+              assistantCommands={assistantCommands}
+              onStateChange={handleSkyState}
+              onRetryJob={handleRetryJob}
+            />
+          </WorkspaceErrorBoundary>
         </div>
 
         {/* Spectral Lab - kept mounted so the comparison survives navigation */}
@@ -258,18 +303,22 @@ export function App() {
           className={`workspace-layer spectral-layer ${isSpectral ? 'layer-active' : 'layer-hidden'}`}
           aria-hidden={!isSpectral}
         >
-          <SpectralLab request={spectrumRequest} />
+          <WorkspaceErrorBoundary workspace="Spectral Lab">
+            <SpectralLab request={spectrumRequest} />
+          </WorkspaceErrorBoundary>
         </div>
 
         {isRecords && (
           <div className="workspace-layer records-layer layer-active" aria-hidden={false}>
-            <RecordsWorkspace
-              key={consent.recordsVersion}
-              onOpenPlate={handleOpenPlate}
-              onShowInSky={handleShowInSky}
-              recordsEnabled={consent.recordsEnabled}
-              onOpenCookieSettings={consent.openBar}
-            />
+            <WorkspaceErrorBoundary workspace="Records">
+              <RecordsWorkspace
+                key={consent.recordsVersion}
+                onOpenPlate={handleOpenPlate}
+                onShowInSky={handleShowInSky}
+                recordsEnabled={consent.recordsEnabled}
+                onOpenCookieSettings={consent.openBar}
+              />
+            </WorkspaceErrorBoundary>
           </div>
         )}
 
@@ -277,14 +326,16 @@ export function App() {
         {isPlate && (
           <div className="workspace-layer plate-layer layer-active" aria-hidden={false}>
             {activeJob ? (
-              <PlateWorkspace
-                job={activeJob}
-                pollError={pollError}
-                pollRetry={pollRetry}
-                onRetryPoll={retryPoll}
-                onBackToSky={() => navigate('#/sky')}
-                onRequestNewJob={handleStartJob}
-              />
+              <WorkspaceErrorBoundary workspace="Plate">
+                <PlateWorkspace
+                  job={activeJob}
+                  pollError={pollError}
+                  pollRetry={pollRetry}
+                  onRetryPoll={retryPoll}
+                  onBackToSky={() => navigate('#/sky')}
+                  onRequestNewJob={handleStartJob}
+                />
+              </WorkspaceErrorBoundary>
             ) : pollError ? (<div className="plate-loading-page" role="alert"><h2>Could not load the spectral job</h2><p>{pollError}</p><button type="button" onClick={retryPoll}>Try again</button></div>) : (
               <div className="plate-loading-page" role="status">
                 <div className="plate-paper-skeleton">
@@ -299,6 +350,7 @@ export function App() {
       </div>
 
       {!isLanding && <AssistantWidget getContext={getAssistantContext} onAction={handleAssistantAction} />}
+      {!isLanding && <AssistantGuide cues={guideCues} />}
       {consent.barOpen && (
         <ConsentBar onChoose={(level) => void consent.choose(level)} saving={consent.saving} error={consent.error} />
       )}

@@ -2,8 +2,8 @@ import {it,expect,vi,afterEach} from 'vitest';
 const lifecycle=vi.hoisted(()=>({effect:null as null|(()=>void|(()=>void))}));
 vi.mock('react',()=>({useEffect:(effect:()=>void)=>{lifecycle.effect=effect;}}));
 vi.mock('aladin-lite',()=>({default:{marker:(ra:number,dec:number,options:unknown)=>({ra,dec,options})}}));
-import {useTocatsCatalogViewport} from './hooks/useTocatsCatalogViewport';
-import {TocatsViewportCache,chooseTocatsDensityOrder} from './tocats';
+import {useTocatsCatalogViewport} from './useTocatsCatalogViewport';
+import {TocatsViewportCache,chooseTocatsDensityOrder} from '../api/tocats';
 function layer(){return {shown:true,show:vi.fn(function(this:any){this.shown=true}),hide:vi.fn(function(this:any){this.shown=false}),remove:vi.fn(),addSources:vi.fn()};}
 function setup(){
  vi.useFakeTimers(); vi.stubGlobal('window',{setTimeout,clearTimeout,requestAnimationFrame:(cb:any)=>setTimeout(cb,16),cancelAnimationFrame:clearTimeout});

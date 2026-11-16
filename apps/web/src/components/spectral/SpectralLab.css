@@ -35,8 +35,18 @@
 }
 
 .spectral-estimate-legend .spectral-interpolated-key {
-  border-top-style: dashed;
-  border-top-width: 3px;
+  height: 0.8rem;
+  border-top: 0;
+  background:
+    linear-gradient(currentColor, currentColor) center / 100% 0 no-repeat,
+    repeating-linear-gradient(90deg, currentColor 0 4px, transparent 4px 7px) center / 100% 3px no-repeat;
+}
+
+.spectral-estimate-legend .spectral-single-estimate-key {
+  width: 0.7rem;
+  height: 0.7rem;
+  border: 2px dashed currentColor;
+  border-radius: 50%;
 }
 
 .spectral-estimate-legend .spectral-observed-key::after {
@@ -49,9 +59,8 @@
   background: currentColor;
 }
 
-.spectral-lab.sidebar-collapsed .spectral-main {
-  width: 100%;
-}
+/* .spectral-main is flex: 1, so it follows the sidebar's width as it animates.
+   (A width: 100% here made it jump to full width before the sidebar had moved.) */
 
 .spectral-lab,
 .spectral-main,
@@ -63,16 +72,41 @@
 
 .spectral-sidebar {
   box-sizing: border-box;
-  transition: width 220ms cubic-bezier(0.16, 1, 0.3, 1), flex-basis 220ms cubic-bezier(0.16, 1, 0.3, 1), padding 220ms ease, opacity 160ms ease;
+  /* Opening: visible at once, then width and content ease in. */
+  transition:
+    width 300ms cubic-bezier(0.22, 1, 0.36, 1),
+    padding 300ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-right-width 300ms ease,
+    opacity 220ms ease,
+    visibility 0s linear 0s;
+}
+
+/* Content keeps its width while the panel narrows, so text never re-wraps mid-animation;
+   it drifts left and fades instead. */
+.spectral-sidebar > * {
+  min-width: 268px;
+  transition: opacity 200ms ease, transform 300ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .spectral-lab.sidebar-collapsed .spectral-sidebar {
+  /* Only width collapses: flex-basis would jump from auto to 0 without animating. */
   width: 0;
-  flex-basis: 0;
   padding-inline: 0;
-  border: 0;
+  border-right-width: 0;
   opacity: 0;
   visibility: hidden;
+  /* Closing: stay visible until the width has finished shrinking. */
+  transition:
+    width 300ms cubic-bezier(0.22, 1, 0.36, 1),
+    padding 300ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-right-width 300ms ease,
+    opacity 220ms ease 60ms,
+    visibility 0s linear 300ms;
+}
+
+.spectral-lab.sidebar-collapsed .spectral-sidebar > * {
+  opacity: 0;
+  transform: translateX(-16px);
 }
 
 .spectral-sidebar-toggle {
@@ -107,6 +141,32 @@
   stroke: currentColor;
   stroke-width: 1.8;
 }
+
+.spectral-sidebar-toggle { transition: background-color 150ms ease, color 150ms ease; }
+.spectral-sidebar-toggle svg { transition: transform 300ms cubic-bezier(0.22, 1, 0.36, 1); }
+.spectral-sidebar-toggle[aria-expanded="false"] svg { transform: rotate(180deg); }
+
+/* Spectra entering the comparison slide in; hiding one fades it. */
+@keyframes spectral-item-in { from { opacity: 0; transform: translateY(-4px); } }
+.spectral-legend li { animation: spectral-item-in 220ms cubic-bezier(0.22, 1, 0.36, 1); }
+.spectral-legend-text { transition: opacity 200ms ease; }
+.spectral-legend .spectral-swatch { transition: opacity 200ms ease, transform 200ms ease; }
+.spectral-legend li.is-hidden .spectral-swatch { opacity: 0.4; transform: scale(0.85); }
+
+/* Featured rows, axis toggles and zoom buttons ease their state changes. */
+.spectral-catalog button,
+.spectral-toggle,
+.spectral-icon-btn,
+.spectral-coords button {
+  transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease, opacity 200ms ease, transform 120ms ease;
+}
+.spectral-catalog button:active:not(:disabled),
+.spectral-toggle:active:not(:disabled),
+.spectral-coords button:active { transform: scale(0.98); }
+
+/* The chart area fades in when the first spectrum replaces the empty state. */
+@keyframes spectral-fade { from { opacity: 0; } }
+.spectral-chart { animation: spectral-fade 260ms ease; }
 
 .spectral-controls {
   display: flex;
@@ -175,5 +235,88 @@
 
 @media (prefers-reduced-motion: reduce) {
   .spectral-loading::before { animation: none; }
-  .spectral-sidebar { transition: none; }
+  .spectral-sidebar,
+  .spectral-lab.sidebar-collapsed .spectral-sidebar,
+  .spectral-sidebar > *,
+  .spectral-sidebar-toggle svg { transition: none; }
+  .spectral-legend li,
+  .spectral-chart { animation: none; }
+  .spectral-catalog button:active,
+  .spectral-toggle:active,
+  .spectral-coords button:active { transform: none; }
 }
+
+/* .spectral-main scrolls; without this its flex children shrink on short
+   windows and the chart's legend and notes spill over the data table. */
+.spectral-main > * { flex-shrink: 0; }
+
+/* Show estimates: an on/off switch, so it does not read as another axis button. */
+.spectral-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.2rem 0.1rem;
+  border: 0;
+  background: none;
+  color: var(--sky-muted);
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+.spectral-switch-track {
+  position: relative;
+  width: 2.1rem;
+  height: 1.2rem;
+  border: 1px solid var(--sky-line-strong);
+  border-radius: 999px;
+  background: var(--sky-bg);
+  transition: background-color 180ms ease, border-color 180ms ease;
+}
+.spectral-switch-thumb {
+  position: absolute;
+  top: 50%;
+  left: 0.15rem;
+  width: 0.8rem;
+  height: 0.8rem;
+  border-radius: 50%;
+  background: var(--sky-muted);
+  transform: translateY(-50%);
+  transition: transform 180ms ease, background-color 180ms ease;
+}
+.spectral-switch[aria-checked='true'] { color: var(--sky-ink); }
+.spectral-switch[aria-checked='true'] .spectral-switch-track {
+  border-color: var(--sky-accent);
+  background: var(--sky-accent-soft);
+}
+.spectral-switch[aria-checked='true'] .spectral-switch-thumb {
+  background: var(--sky-accent);
+  transform: translate(0.9rem, -50%);
+}
+.spectral-switch:hover .spectral-switch-track { border-color: var(--sky-accent); }
+.spectral-switch:focus-visible { outline: 2px solid var(--sky-accent); outline-offset: 3px; border-radius: var(--radius-sm); }
+
+.spectral-table-title {
+  margin: 0;
+  color: var(--sky-muted);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spectral-switch-track,
+  .spectral-switch-thumb { transition: none; }
+}
+
+/* The data table is always visible now: give it the chart's full width and frame. */
+.spectral-table-scroll {
+  border: 1px solid var(--sky-line);
+  border-radius: var(--radius-md);
+  background: var(--sky-surface);
+}
+.spectral-table table { width: 100%; }
+.spectral-table th:first-child,
+.spectral-table td:first-child { padding-left: 14px; }
+.spectral-table th:last-child,
+.spectral-table td:last-child { padding-right: 14px; }
+.spectral-table tbody tr:last-child td { border-bottom: 0; }
+.spectral-table tbody tr:hover td { background: var(--sky-hover); }

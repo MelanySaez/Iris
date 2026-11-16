@@ -13,7 +13,7 @@ import {
   type TocatsDensityCell,
   type TocatsRegion,
   type TocatsSourceRecord,
-} from '../tocats';
+} from '../api/tocats';
 
 export type TocatsLayerPhase = 'idle' | 'waiting' | 'loading' | 'available' | 'empty' | 'error';
 

@@ -8,14 +8,17 @@ call starts jobs, renames or deletes anything.
 from __future__ import annotations
 
 import json
+import math
 import unicodedata
 import uuid
 from contextvars import ContextVar
 from typing import Any
 
+from app.exceptions.domain import AppError
 from app.schemas.assistant import UI_ACTION_TYPES
 from app.services.assistant.guardrails import sanitize_untrusted
 from app.services.catalog import get_catalog
+from app.services.names import resolve_name
 from app.services.selections import current_selection_service
 
 # The browser asking (its owner cookie), set by the chat route for one request.
@@ -55,6 +58,33 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
         "strict": True,
         "input_schema": _schema(
             {"query": {"type": "string", "description": "Object name or keywords."}}
+        ),
+    },
+    {
+        "name": "show_object",
+        "description": (
+            "Show a named sky object in Sky in one step: looks it up in the Planet X "
+            "catalog, then in SIMBAD and NED (Andromeda, M31, NGC 224, Orion "
+            "Nebula...), and draws a draft region on it. Use it whenever the person "
+            "asks to see, find, locate or go to an object."
+        ),
+        "strict": True,
+        "input_schema": _schema(
+            {"name": {"type": "string", "description": "Object name or code."}}
+        ),
+    },
+    {
+        "name": "resolve_object_name",
+        "description": (
+            "Resolve any astronomical object name or catalogue code (e.g. Andromeda, "
+            "M31, NGC 224, Orion Nebula) to coordinates through SIMBAD and NED. "
+            "Returns ra_deg, dec_deg, the object size when known and a "
+            "suggested_size_arcmin that show_region accepts. Use it when "
+            "search_catalog has no match."
+        ),
+        "strict": True,
+        "input_schema": _schema(
+            {"name": {"type": "string", "description": "Object name or code."}}
         ),
     },
     {
@@ -120,7 +150,12 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
     },
 ]
 
-SERVER_TOOLS = {"search_catalog", "list_saved_selections"}
+SERVER_TOOLS = {
+    "search_catalog",
+    "show_object",
+    "resolve_object_name",
+    "list_saved_selections",
+}
 UI_TOOLS = set(UI_ACTION_TYPES)
 
 _FIELDS = {d["name"]: set(d["input_schema"]["properties"]) for d in TOOL_DEFINITIONS}
@@ -231,6 +266,72 @@ def search_catalog(tool_input: Any) -> dict[str, Any]:
     }
 
 
+# show_region accepts 1 to 60 arcmin; objects of unknown size get a small field.
+_REGION_MIN, _REGION_MAX, _REGION_DEFAULT = 1.0, 60.0, 6.0
+
+
+def resolve_object_name(tool_input: Any) -> dict[str, Any]:
+    name = _check_fields("resolve_object_name", tool_input)["name"]
+    if not isinstance(name, str) or not name.strip():
+        raise ToolInputError("name must be a non-empty string")
+    try:
+        found = resolve_name(name)
+    except AppError as exc:  # not found, invalid name or providers unavailable
+        raise ToolInputError(exc.detail) from None
+    size = found.get("size_arcmin")
+    if not isinstance(size, (int, float)) or not math.isfinite(size):
+        size = None  # unknown (also NaN or infinity, which JSON cannot carry)
+    suggested = _REGION_DEFAULT if size is None else size
+    return {
+        # Text from external catalogues: cleaned and clearly marked as data.
+        "name": sanitize_untrusted(str(found["name"]), 80),
+        "object_type": (
+            sanitize_untrusted(str(found["object_type"]), 40)
+            if found.get("object_type")
+            else None
+        ),
+        "ra_deg": float(found["ra_deg"]),
+        "dec_deg": float(found["dec_deg"]),
+        "size_arcmin": size,
+        "suggested_size_arcmin": float(min(max(suggested, _REGION_MIN), _REGION_MAX)),
+        "source": found.get("source"),
+    }
+
+
+def _catalog_object(name: str) -> dict[str, Any] | None:
+    """The curated object whose id or name contains every word of ``name``."""
+    words = _fold(name).split()
+    for obj in get_catalog()["objects"]:
+        haystack = _fold(f"{obj['id']} {obj['name']}")
+        if words and all(word in haystack for word in words):
+            return obj
+    return None
+
+
+def show_object(tool_input: Any) -> dict[str, Any]:
+    """Locate a named object (catalog first, then SIMBAD/NED) for show_region."""
+    name = _check_fields("show_object", tool_input)["name"]
+    if not isinstance(name, str) or not name.strip():
+        raise ToolInputError("name must be a non-empty string")
+    obj = _catalog_object(name)
+    if obj is not None:
+        return {
+            "name": obj["name"],
+            "ra_deg": float(obj["ra_deg"]),
+            "dec_deg": float(obj["dec_deg"]),
+            "size_arcmin": float(obj["default_size_arcmin"]),
+            "source": "catalog",
+        }
+    found = resolve_object_name({"name": name})
+    return {
+        "name": found["name"],
+        "ra_deg": found["ra_deg"],
+        "dec_deg": found["dec_deg"],
+        "size_arcmin": found["suggested_size_arcmin"],
+        "source": found["source"],
+    }
+
+
 def list_saved_selections(tool_input: Any) -> dict[str, Any]:
     limit = _check_fields("list_saved_selections", tool_input)["limit"]
     if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 10:
@@ -263,6 +364,8 @@ def list_saved_selections(tool_input: Any) -> dict[str, Any]:
 
 SERVER_EXECUTORS = {
     "search_catalog": search_catalog,
+    "resolve_object_name": resolve_object_name,
+    "show_object": show_object,
     "list_saved_selections": list_saved_selections,
 }
 

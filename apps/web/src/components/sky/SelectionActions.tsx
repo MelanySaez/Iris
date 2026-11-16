@@ -1,4 +1,5 @@
-import type { RegionRequest } from '../../types';
+import { spectrumLabel, type SpectrumOrigin } from '../../services/spectrumLabel';
+import type { RegionRequest } from '../../types/types';
 
 export interface SpectrumTarget {
   ra_deg: number;
@@ -8,6 +9,8 @@ export interface SpectrumTarget {
 
 interface SelectionActionsProps {
   selection: RegionRequest | null;
+  /** Object the region was created from, if any; names the spectrum while the centre is on it. */
+  origin?: SpectrumOrigin | null;
   /** The region has been confirmed (its spectral job is being prepared). */
   confirmed: boolean;
   activeJobId: string | null;
@@ -22,6 +25,7 @@ interface SelectionActionsProps {
  */
 export function SelectionActions({
   selection,
+  origin = null,
   confirmed,
   activeJobId,
   onOpenPlate,
@@ -39,7 +43,7 @@ export function SelectionActions({
           onViewSpectrum({
             ra_deg: selection.ra_deg,
             dec_deg: selection.dec_deg,
-            label: `Selection centre (${selection.ra_deg.toFixed(3)}°, ${selection.dec_deg.toFixed(3)}°)`,
+            label: spectrumLabel(selection, origin),
           })
         }
       >

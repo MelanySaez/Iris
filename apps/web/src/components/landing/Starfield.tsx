@@ -20,12 +20,15 @@ interface Meteor {
   life: number;
 }
 
-const STAR_COUNT = 900;
+const STAR_COUNT = 1100;
 const DEPTH = 1000;
 const CRUISE_SPEED = 0.03; // depth units per ms: a slow drift towards the viewer
 const WARP_MS = 900;
 /** Half-width of the star volume in depth units, so far stars fill the screen. */
 const SPREAD = DEPTH * 1.1;
+/** How far (px) the sky shifts as the pointer goes from the centre to an edge. */
+const POINTER_SHIFT_X = 120;
+const POINTER_SHIFT_Y = 80;
 
 /** Small deterministic generator so the sky is the same on every visit. */
 function seeded(seed: number) {
@@ -112,8 +115,8 @@ export function Starfield({ ref }: { ref?: Ref<StarfieldHandle> }) {
 
       pointer.x += (pointer.tx - pointer.x) * 0.05;
       pointer.y += (pointer.ty - pointer.y) * 0.05;
-      const cx = width / 2 - pointer.x * 30;
-      const cy = height / 2 - pointer.y * 20 - scroll * height * 0.25;
+      const cx = width / 2 - pointer.x * POINTER_SHIFT_X * 2;
+      const cy = height / 2 - pointer.y * POINTER_SHIFT_Y * 2 - scroll * height * 0.25;
       const focal = Math.max(width, height) * 0.6;
 
       ctx.fillStyle = warp ? `rgba(0, 0, 0, ${0.35})` : '#000';
@@ -131,7 +134,7 @@ export function Starfield({ ref }: { ref?: Ref<StarfieldHandle> }) {
           continue;
         }
         const near = 1 - star.z / DEPTH;
-        const alpha = 0.4 + near * 0.6;
+        const alpha = 0.55 + near * 0.45;
         const color = star.warm ? '245, 217, 168' : '233, 237, 245';
         if (boost > 2) {
           const pk = focal / prevZ;
@@ -144,7 +147,7 @@ export function Starfield({ ref }: { ref?: Ref<StarfieldHandle> }) {
         } else {
           ctx.fillStyle = `rgba(${color}, ${alpha})`;
           ctx.beginPath();
-          ctx.arc(x, y, 0.5 + near * near * 1.7, 0, Math.PI * 2);
+          ctx.arc(x, y, 0.7 + near * near * 1.9, 0, Math.PI * 2);
           ctx.fill();
         }
       }

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { api, ApiError } from '../../api';
+import { api, ApiError } from '../../api/api';
 import { PreparingPlateCard } from '../PreparingPlateCard';
 import { EpochTimeline, ProviderTrace } from './EpochTimeline';
 import { CubeFallbackNotice, isCubeFallback, sourceLabel } from './SourceNotice';
@@ -12,7 +12,7 @@ import {
   getNextAvailableChannel,
   isChannelAvailable,
   TOTAL_CHANNELS,
-} from '../../channels';
+} from '../../services/channels';
 import {
   formatAngle,
   formatDateIso,
@@ -20,7 +20,7 @@ import {
   formatFlux,
   formatRa,
   formatWavelength,
-} from '../../format';
+} from '../../utils/format';
 import type {
   ChannelsResponse,
   FrameRenderMode,
@@ -30,7 +30,7 @@ import type {
   PixelReadout,
   ProductType,
   StretchMode,
-} from '../../types';
+} from '../../types/types';
 
 interface PlateWorkspaceProps {
   job: JobSnapshot;
@@ -449,6 +449,7 @@ export function PlateWorkspace({
       >
         {/* Column 1: Plate Sheet (260 px, collapsible) */}
         <aside id="plate-sheet" className="plate-sheet" aria-label="Plate Metadata Sheet"
+          data-tour="plate-record"
           aria-hidden={!panels.sheetOpen} inert={!panels.sheetOpen}>
           <div className="sheet-header">
             <h2 className="sheet-title">Plate Record</h2>
@@ -606,7 +607,7 @@ export function PlateWorkspace({
         <main className="plate-stage" aria-label="Plate Viewport">
           <CubeFallbackNotice job={job} />
           {/* Controls Bar */}
-          <div className="stage-controls-bar">
+          <div className="stage-controls-bar" data-tour="plate-image">
             {/* Left: Product tabs (underlined text tabs) */}
             <div className="stage-product-tabs" role="tablist" aria-label="Cutout Products">
               <button
@@ -901,7 +902,7 @@ export function PlateWorkspace({
           </div>
 
           {/* Chronological, channel-specific comparison controls. */}
-          <div className="stage-epoch-strip">
+          <div className="stage-epoch-strip" data-tour="plate-epochs">
             <EpochTimeline jobId={job.id} channel={selectedChannel} frames={timelineFrames}
               ready={job.status === 'ready'} epoch={currentEpoch} onSelect={setEpochA}
               onPlaybackStart={() => setIsSplit(false)} reason={job.animation_reason} paused={isSplit} />
@@ -920,6 +921,7 @@ export function PlateWorkspace({
           aria-hidden={!panels.railOpen}
           inert={!panels.railOpen}
           className="spectral-rail"
+          data-tour="plate-channels"
           tabIndex={panels.railOpen ? 0 : -1}
           onKeyDown={handleRailKeyDown}
           aria-label="102-channel spectral rail"
@@ -992,7 +994,7 @@ export function PlateWorkspace({
           </div>
 
           {/* Live Pixel Readout Card */}
-          <div className="pixel-readout-card" aria-live="polite">
+          <div className="pixel-readout-card" aria-live="polite" data-tour="plate-readout">
             <div className="readout-header">
               <h3 className="readout-title">Pixel Readout</h3>
               {probeTarget ? (

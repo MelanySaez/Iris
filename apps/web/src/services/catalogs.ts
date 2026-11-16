@@ -1,4 +1,4 @@
-import featuredObjectsJson from './data/featured-objects.json';
+import featuredObjectsJson from '../data/featured-objects.json';
 
 export interface FeaturedObject {
   id: string;
@@ -25,9 +25,9 @@ export const HIPS_CATALOG_PROVIDERS = {
   simbad: {
     id: 'simbad',
     name: 'SIMBAD',
-    url: 'https://hipscat.cds.unistra.fr/HiPSCatService/Simbad',
     color: '#73d9f5',
-    sourceSize: 8,
+    // Same marker size as the Gaia and CatWISE layers, so SIMBAD objects are as easy to spot.
+    sourceSize: 12,
   },
 } as const;
 

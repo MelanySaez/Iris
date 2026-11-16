@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { JobSnapshot } from '../../types';
+import type { JobSnapshot } from '../../types/types';
 import { describeActivity } from './activity';
 
 const TERMINAL = new Set(['ready', 'failed']);

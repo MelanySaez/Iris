@@ -4,9 +4,9 @@ import {
   setChannelImageLayer,
   showRgbComposite,
   type RgbViewer,
-} from '../aladinView';
-import { channelVirtualHipsUrl, type SpectralChannel } from '../hips';
-import { RGB_PRESETS, presetChannels, validateRgb, type RgbChannels } from '../rgb';
+} from '../api/aladinView';
+import { channelVirtualHipsUrl, type SpectralChannel } from '../api/hips';
+import { RGB_PRESETS, presetChannels, validateRgb, type RgbChannels } from '../services/rgb';
 
 interface UseRgbCompositeOptions {
   viewerRef: { current: RgbViewer | null };

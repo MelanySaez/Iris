@@ -9,8 +9,16 @@ function Icon({ children }: { children: ReactNode }) {
   );
 }
 
-export function PlanetIcon() {
-  return <Icon><circle cx="12" cy="12" r="5.5" /><path d="M3 16c2.6 2.8 8.2 3.2 12.8 1.3 3.5-1.5 5.6-3.8 5.2-5.7" /><path d="M3 16c-.5-2.5 2.7-5.5 7-7.3" /></Icon>;
+export function SearchIcon() {
+  return <Icon><circle cx="10.5" cy="10.5" r="6" /><path d="m15 15 5 5" /></Icon>;
+}
+
+export function ChevronDownIcon() {
+  return <Icon><path d="m6 9 6 6 6-6" /></Icon>;
+}
+
+export function WarningIcon() {
+  return <Icon><path d="M12 4 21 19.5H3Z" /><path d="M12 10v4.2" /><path d="M12 17h.01" /></Icon>;
 }
 
 export function PanIcon() {
@@ -29,6 +37,14 @@ export function ZoomInIcon() {
   return <Icon><path d="M5 12h14M12 5v14" /></Icon>;
 }
 
+/** Full extent: four arrows pointing outwards ("zoom out to the whole sky"), not a globe. */
 export function AllSkyIcon() {
-  return <Icon><circle cx="12" cy="12" r="9" /><path d="M3 12h18M12 3c-2.8 2.5-4.2 5.5-4.2 9s1.4 6.5 4.2 9c2.8-2.5 4.2-5.5 4.2-9S14.8 5.5 12 3Z" /></Icon>;
+  return (
+    <Icon>
+      <path d="M9.5 9.5 4 4M4 4h4.5M4 4v4.5" />
+      <path d="M14.5 9.5 20 4M20 4h-4.5M20 4v4.5" />
+      <path d="M9.5 14.5 4 20M4 20h4.5M4 20v-4.5" />
+      <path d="M14.5 14.5 20 20M20 20h-4.5M20 20v-4.5" />
+    </Icon>
+  );
 }

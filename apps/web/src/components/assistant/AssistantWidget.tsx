@@ -1,13 +1,13 @@
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { api, ApiError, type AssistantLogEntry } from '../../api';
+import { api, ApiError, type AssistantLogEntry } from '../../api/api';
 import {
   describeAssistantAction,
   validateAssistantAction,
   type AssistantAction,
   type AssistantUiContext,
-} from '../../assistant';
+} from '../../services/assistant';
 
 /** Same limits the backend enforces. */
 const MAX_MESSAGE_CHARS = 2000;
@@ -193,9 +193,15 @@ export function AssistantWidget({ getContext, onAction }: AssistantWidgetProps) 
             <path d="M6 6l12 12M18 6L6 18" />
           </svg>
         ) : (
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M4 5h16v11H9l-5 4z" />
-            <path d="M8 9.5h8M8 12.5h5" />
+          // Robot head: antenna, rounded face, two eyes and a mouth, with side ears.
+          <svg viewBox="0 0 24 24" aria-hidden="true" data-icon="bot">
+            <path d="M12 3.5v3" />
+            <circle cx="12" cy="2.8" r="0.9" />
+            <rect x="4.5" y="6.5" width="15" height="12" rx="3.5" />
+            <path d="M2.5 11v3.5M21.5 11v3.5" />
+            <circle cx="9.2" cy="11.6" r="1.3" />
+            <circle cx="14.8" cy="11.6" r="1.3" />
+            <path d="M9.5 15.3h5" />
           </svg>
         )}
       </button>

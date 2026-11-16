@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 import { act, renderHook } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { RGB_OVERLAY_NAMES } from '../aladinView';
-import { channelVirtualHipsUrl, type SpectralChannel } from '../hips';
-import { RGB_PRESETS, presetChannels } from '../rgb';
+import { RGB_OVERLAY_NAMES } from '../api/aladinView';
+import { channelVirtualHipsUrl, type SpectralChannel } from '../api/hips';
+import { RGB_PRESETS, presetChannels } from '../services/rgb';
 import { NO_SINGLE_CHANNEL, useRgbComposite } from './useRgbComposite';
 
 const channels: SpectralChannel[] = Array.from({ length: 102 }, (_, index) => ({
