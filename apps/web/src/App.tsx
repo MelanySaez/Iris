@@ -13,7 +13,7 @@ import {
 import { AssistantWidget, type ActionResult } from './components/assistant/AssistantWidget';
 import { AssistantGuide, type GuideCueItem } from './components/assistant/AssistantGuide';
 import { Landing } from './components/landing/Landing';
-import { GuidedTour } from './components/tour/GuidedTour';
+import { GuidedTour, hasSeenTour, tourAnchorsReady } from './components/tour/GuidedTour';
 import { tourForRoute, type TourId } from './components/tour/tourSteps';
 import { ConsentBar } from './components/consent/ConsentBar';
 import { guideCueFor, type AssistantAction, type AssistantUiContext } from './assistant';
@@ -38,8 +38,11 @@ export function App() {
   // even if an earlier one was left half-way (paused by a tab change, closed, …).
   const [tourKey, setTourKey] = useState(0);
   const tourTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Tours already started this session (by "?", the landing or a first visit).
+  const toursOffered = useRef(new Set<TourId>());
   const startTour = useCallback(
     (tour: TourId, delayMs: number) => {
+      toursOffered.current.add(tour);
       if (tour === 'sky') navigate('#/sky');
       if (tourTimer.current) clearTimeout(tourTimer.current);
       setTourId(tour);
@@ -53,6 +56,27 @@ export function App() {
     if (tourTimer.current) clearTimeout(tourTimer.current);
   }, []);
   const endTour = useCallback(() => setTourRun(false), []);
+
+  // The first visit to each workspace runs its tour once; "?" replays it any time. It waits
+  // until the workspace has drawn what the tour points at (a plate may still be loading)
+  // and gives up after ~10 s, to try again on the next visit.
+  useEffect(() => {
+    if (route.type === 'landing') return undefined;
+    const tour = tourForRoute(route.type);
+    if (hasSeenTour(tour) || toursOffered.current.has(tour)) return undefined;
+    let polls = 0;
+    const poll = setInterval(() => {
+      polls += 1;
+      if (tourAnchorsReady(tour)) {
+        clearInterval(poll);
+        // Sky waits for the arrival from the landing page to fade, like the landing's tour button.
+        startTour(tour, tour === 'sky' ? 1100 : 300);
+      } else if (polls >= 40) {
+        clearInterval(poll);
+      }
+    }, 250);
+    return () => clearInterval(poll);
+  }, [route.type, startTour]);
 
   // The viewer's own arrival (900 ms) outlasts the landing fade, so it has its own timer.
   const [appArriving, setAppArriving] = useState(false);

@@ -2,20 +2,25 @@ import { useMemo } from 'react';
 import { ACTIONS, Joyride, STATUS, type EventData } from 'react-joyride';
 import { TOURS, type TourId } from './tourSteps';
 
+/** Prefix of the per-workspace flags (`iris_tour_seen:sky`, …); alone it is the old single flag. */
 export const TOUR_SEEN_KEY = 'iris_tour_seen';
 
-/** True once the visitor finished or skipped the tour on this browser. */
-export function hasSeenTour(): boolean {
+const seenKey = (tour: TourId) => `${TOUR_SEEN_KEY}:${tour}`;
+
+/** True once the visitor finished, skipped or closed this workspace's tour on this browser. */
+export function hasSeenTour(tour: TourId): boolean {
   try {
-    return localStorage.getItem(TOUR_SEEN_KEY) === '1';
+    if (localStorage.getItem(seenKey(tour)) === '1') return true;
+    // Before tours were remembered per workspace, one flag covered the landing's Sky tour.
+    return tour === 'sky' && localStorage.getItem(TOUR_SEEN_KEY) === '1';
   } catch {
     return false;
   }
 }
 
-function rememberTour() {
+function rememberTour(tour: TourId) {
   try {
-    localStorage.setItem(TOUR_SEEN_KEY, '1');
+    localStorage.setItem(seenKey(tour), '1');
   } catch {
     // Private mode or blocked storage: the tour still works, it is just not remembered.
   }
@@ -26,6 +31,14 @@ function isOnScreen(selector: string): boolean {
   if (selector === 'body') return true;
   const element = document.querySelector<HTMLElement>(selector);
   return Boolean(element && element.getClientRects().length > 0);
+}
+
+/**
+ * True once the workspace has drawn at least one element its tour points at, so a
+ * first-visit tour does not start over a page that is still loading (e.g. the plate).
+ */
+export function tourAnchorsReady(tour: TourId): boolean {
+  return TOURS[tour].some((step) => String(step.target) !== 'body' && isOnScreen(String(step.target)));
 }
 
 interface GuidedTourProps {
@@ -50,7 +63,7 @@ export function GuidedTour({ tour, run, onEnd }: GuidedTourProps) {
     const ended =
       data.status === STATUS.FINISHED || data.status === STATUS.SKIPPED || data.action === ACTIONS.CLOSE;
     if (ended) {
-      rememberTour();
+      rememberTour(tour);
       onEnd();
     }
   };
