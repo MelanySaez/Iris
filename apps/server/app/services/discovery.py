@@ -452,7 +452,8 @@ def resolve_region(
     )
     coverage_state = "complete" if complete else "incomplete"
     # query_irsa_tap's public two-tuple contract is retained. Its bounded error
-    # text is classified conservatively; parser/validation/4xx errors never fall back.
+    # text is classified conservatively: 4xx and invalid user input never fall back;
+    # a table-less TAP answer (TapServiceError) or a spent attempt budget does.
     unavailable = bool(
         warning
         and re.search(

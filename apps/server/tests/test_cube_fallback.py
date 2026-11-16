@@ -294,6 +294,11 @@ def synthetic_cube_cutout(ra, dec, size, channel, offset: float = 0.0):
     )
 
 
+def _fresh_ra(base: float) -> float:
+    """A region no earlier run has cached, so the job really runs (ids are hashes)."""
+    return base + (time.time_ns() % 10**9) / 1e12
+
+
 def _wait(client: TestClient, payload: dict) -> dict:
     resp = client.post("/api/jobs", json=payload)
     assert resp.status_code == 202
@@ -393,7 +398,7 @@ def test_cube_unavailable_keeps_coverage_unknown(monkeypatch, tmp_path):
 
 def test_cube_job_is_ready_without_epochs_or_variance():
     payload = {
-        "ra_deg": 41.125,
+        "ra_deg": _fresh_ra(41.125),
         "dec_deg": 12.5,
         "size_arcmin": 4.0,
         "channels": [20, 21],
@@ -415,7 +420,7 @@ def test_cube_job_is_ready_without_epochs_or_variance():
         ),
         patch(
             "app.services.jobs.build_cube_cutout",
-            side_effect=lambda ra, dec, size, ch: synthetic_cube_cutout(
+            side_effect=lambda ra, dec, size, ch, **kw: synthetic_cube_cutout(
                 ra, dec, size, ch, offsets[ch]
             ),
         ),
@@ -456,7 +461,7 @@ def test_cube_job_is_ready_without_epochs_or_variance():
 
 def test_unreadable_cube_fails_the_job_as_cube_unavailable():
     payload = {
-        "ra_deg": 43.125,
+        "ra_deg": _fresh_ra(43.125),
         "dec_deg": 12.5,
         "size_arcmin": 4.0,
         "channels": [20],
@@ -614,9 +619,11 @@ def test_deadline_exceeded_counts_as_an_outage(monkeypatch, tmp_path):
     assert result["coverage_state"] == "cube_fallback"
 
 
-def test_job_activity_tracks_the_running_attempt_and_retry_wait():
+def test_job_activity_tracks_the_running_attempt_and_retry_wait(monkeypatch):
     from app.schemas.jobs import JobRequest
     from app.services.jobs import JobState, job_manager
+
+    monkeypatch.setattr(job_manager, "_save_snapshot_to_disk", lambda job: None)
 
     job = JobState(
         id=f"activity-{time.time_ns()}",

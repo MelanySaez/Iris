@@ -167,9 +167,10 @@ class JobState:
         }
 
     def _activity_snapshot(self) -> dict[str, Any] | None:
-        if self.activity is None or self.status in ("ready", "failed"):
+        activity = self.activity  # one read: the worker may clear it meanwhile
+        if activity is None or self.status in ("ready", "failed"):
             return None
-        snapshot = dict(self.activity)
+        snapshot = dict(activity)
         started = snapshot.get("started_at")
         if isinstance(started, (int, float)):
             snapshot["elapsed_seconds"] = round(max(0.0, time.time() - started), 1)

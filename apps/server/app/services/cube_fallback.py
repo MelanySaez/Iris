@@ -286,13 +286,17 @@ def _build(
         on_progress(0, len(tile_ids))
     results = {}
     workers = max(1, min(CUBE_TILE_WORKERS, len(tile_ids)))
-    with ThreadPoolExecutor(max_workers=workers) as pool:
+    pool = ThreadPoolExecutor(max_workers=workers)
+    try:
         futures = [pool.submit(read_tile, npix) for npix in tile_ids]
         for done, future in enumerate(as_completed(futures), 1):
             npix, values, ok, prov = future.result()
             results[npix] = (values, ok, prov)
             if on_progress:
                 on_progress(done, len(tile_ids))
+    finally:
+        # On failure, drop the reads that have not started: the cutout fails anyway.
+        pool.shutdown(wait=True, cancel_futures=True)
 
     provenance = []
     for npix in tile_ids:  # apply in tile order, whatever order reads finished in
